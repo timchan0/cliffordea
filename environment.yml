@@ -1,0 +1,19 @@
+name: cliffordep
+channels:
+  - conda-forge
+dependencies:
+  - python
+  - setuptools
+  - ipykernel
+  - ipywidgets
+  - matplotlib
+  - pandas
+  - pytest
+  - scipy
+  - snakeviz
+  - statsmodels
+  - pip
+  - pip:
+      - ldpc
+      - pymatching
+      - stim
