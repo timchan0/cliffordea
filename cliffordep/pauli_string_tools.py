@@ -4,8 +4,40 @@ import cmath
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 import itertools
+from typing import Literal
 
 from stim import PauliString
+
+
+PUSH_THROUGH_Z: dict[int, tuple[str, ...]] = {
+    0: ('I',),
+    1: ('-X',),
+    2: ('-Y',),
+    3: ('Z',),
+}
+"""A map from each Pauli to the unnormalized superposition of Paulis
+after pushing through a Z gate.
+"""
+
+PUSH_THROUGH_S: dict[int, tuple[str, ...]] = {
+    0: ('I',),
+    1: ('Y',),
+    2: ('-X',),
+    3: ('Z',),
+}
+"""A map from each Pauli to the unnormalized superposition of Paulis
+after pushing through a S gate.
+"""
+
+PUSH_THROUGH_T: dict[int, tuple[str, ...]] = {
+    0: ('I',),
+    1: ('X', 'Y'),
+    2: ('-X', 'Y'),
+    3: ('Z',),
+}
+"""A map from each Pauli to the unnormalized superposition of Paulis
+after pushing through a T gate.
+"""
 
 
 def unsigned_str(pauli_string: str | PauliString):
@@ -13,27 +45,20 @@ def unsigned_str(pauli_string: str | PauliString):
     return str(pauli_string).replace('+', '').replace('-', '').replace('i', '')
 
 
-def push_through_t(pauli_string: PauliString):
-    """Push a Pauli string through a T gate on each qubit.
+def push_through_transversal(pauli_string: PauliString, gate: Literal['T', 'S', 'Z'] = 'T'):
+    """Push a Pauli string through the same gate on each qubit.
     
     Input:
     * `pauli_string` the initial `PauliString`.
+    * `gate` the gate to push through, either 'T', 'S', or 'Z'.
 
     Output:
     * A unitary Clifford string that results from
-    pushing the input through a T gate on each qubit.
+    pushing the input through a `gate` on each qubit.
     """
-    options: list[tuple[str, ...]] = []
+    map = PUSH_THROUGH_T if gate == 'T' else PUSH_THROUGH_S if gate == 'S' else PUSH_THROUGH_Z
     sign = pauli_string.sign
-    for pauli in pauli_string:
-        if pauli == 0:
-            options.append(('I',))
-        elif pauli == 1:
-            options.append(('X', 'Y'))
-        elif pauli == 2:
-            options.append(('-X', 'Y'))
-        else:  # pauli == 3
-            options.append(('Z',))
+    options: list[tuple[str, ...]] = [map[pauli] for pauli in pauli_string]
     return CliffordString([sign * _pauli_tuple_to_string(pauli)
         for pauli in itertools.product(*options)])
 
@@ -136,6 +161,7 @@ class CliffordString:
         * In `self.logical_amplitudes`, converts as much logical H_XY amplitude
         into logical identity amplitude as possible.
         """
+        # TODO: account for converting X - Y to Z
         new_amplitudes = defaultdict(complex, self.logical_amplitudes)
         logical_i = (False, False)
         logical_x = (False, True)

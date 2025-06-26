@@ -13,7 +13,7 @@ import stim
 from cliffordep.noiseless_circuit_tools import split_by_ticks
 from cliffordep.constants import DEPOLARIZE2_FAULTS
 from cliffordep.type_aliases import Fault, FaultSource, EffectMap
-from cliffordep.pauli_string_tools import unsigned_str, push_through_t
+from cliffordep.pauli_string_tools import unsigned_str, push_through_transversal
 
 
 def fault_count(source_name: str) -> int:
@@ -259,7 +259,7 @@ class CultivationCircuit:
         strings_leading_to_identity: dict[str, tuple[float, Counter[tuple[int, ...]]]] = {}
         strings_leading_to_error: dict[str, tuple[float, Counter[tuple[int, ...]]]] = {}
         for data_string, denominators in undetected_combinations.items():
-            clifford = push_through_t(stim.PauliString(data_string))
+            clifford = push_through_transversal(stim.PauliString(data_string))
             clifford.postselect_from_stabilizers(self.STABILIZER_GENERATORS)
             clifford.set_logical_amplitudes(self.LOGICAL_X, self.LOGICAL_Z)
             clifford.convert_hxy_to_identity()
@@ -493,7 +493,7 @@ def _get_product_effect_to_valid_segments(
         if valid_segments:
             result[product_effect] += valid_segments
     
-    # ###
+    # ### # TODO: store segments as frozensets to avoid duplicates
     # for segments in result.values():
     #     unique_segments: set[frozenset[FaultSource]] = set()
     #     for segment in segments:
