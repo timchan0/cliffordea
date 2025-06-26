@@ -1,12 +1,12 @@
 """Module for manipulating Pauli strings."""
 
-import cmath
-from collections import defaultdict
 from collections.abc import Iterable
 import itertools
 from typing import Literal
 
 from stim import PauliString
+import numpy as np
+from numpy import typing as npt
 
 
 PUSH_THROUGH_Z: dict[int, tuple[str, ...]] = {
@@ -70,15 +70,24 @@ def _pauli_tuple_to_string(pauli_tuple: tuple[str, ...]):
     return string
 
 
+SIGNATURE_TO_INDEX = {
+    (False, False): 0,
+    (False, True): 1,
+    (True, True): 2,
+    (True, False): 3,
+}
+"""A map from each logical signature
+i.e. 'anticommute with (logical X, logical Z)?',
+to the Pauli with that signature.
+"""
+
+
 class CliffordString:
     """An error in the form of a superposition of Pauli strings.
     
     Instance attributes:
     * `terms` a list of signed Pauli strings that make up the superposition.
     * `denominator_squared` the divisor of each term, squared.
-    * `logical_amplitudes` maps each logical signature (which logicals do not commute)
-    to the amplitude of the Clifford string with that signature.
-    These amplitudes are not normalized by the denominator.
     """
 
     def __add__(self, other: 'CliffordString'):
@@ -102,12 +111,12 @@ class CliffordString:
         """The probability of the surviving part of the Clifford string after any postselection.
         
         Require:
-        * `self.logical_amplitudes` has been set with `self.set_logical_amplitudes()`.
+        * `self.terms` are all distinct.
 
         Output:
         * The probability mass of the Clifford string whose value is in [0, 1].
         """
-        numerator = sum(a.real**2 + a.imag**2 for a in self.logical_amplitudes.values())
+        numerator = sum(abs(a.sign) for a in self.terms)
         return numerator / self.denominator_squared
 
     def postselect_from_stabilizers(self, stabilizer_generators: Iterable[PauliString]):
@@ -131,12 +140,12 @@ class CliffordString:
         """
         return True if all(term.commutes(other) for term in self.terms) else None
     
-    def set_logical_amplitudes(
+    def get_logical_amplitudes(
             self,
             logical_x: PauliString,
             logical_z: PauliString,
     ):
-        """Return the unnormalized amplitude of each logical class in the Clifford string.
+        """Return the normalized amplitude of each logical class in the Clifford string.
 
         Require:
         * `self.terms` contains only terms that commute with all stabilizers
@@ -146,108 +155,80 @@ class CliffordString:
         * `logical_x` a Pauli string representing a logical X operator.
         * `logical_z` ditto for Z.
 
-        Side effect:
-        * `self.logical_amplitudes` is updated according to `self.terms`.
+        Output:
+        * A 4-vector of normalized amplitudes for the I, X, Y, Z logical classes in the Clifford string.
         """
-        # TODO: return 4-vector instead of a dict
-        amplitudes: defaultdict[tuple[bool, ...], complex] = defaultdict(complex)
+        amplitudes = np.zeros(4, dtype=np.complex_)
         for term in self.terms:
-            signature = tuple(not term.commutes(logical) for logical in (logical_x, logical_z))
-            amplitudes[signature] += term.sign
-        self.logical_amplitudes = dict(amplitudes)
+            signature: tuple[bool, bool] = tuple(
+                not term.commutes(logical) for logical in (logical_x, logical_z)) # type: ignore
+            amplitudes[SIGNATURE_TO_INDEX[signature]] += term.sign
+        return LogicalVector(amplitudes / self.denominator_squared**0.5)
     
-    def convert_hxy_to_identity(self):
-        """Convert as much logical H_XY := (X + Y) / sqrt(2) as possible into logical identity.
-        
-        Require:
-        * The state this Clifford string acts on is the logical T state.
-        * logical signatures are 'anticommute with (logical X, logical Z)'.
-        * `self.logical_amplitudes` has been set with `self.set_logical_amplitudes()`.
 
-        Side effect:
-        * In `self.logical_amplitudes`, converts as much logical H_XY amplitude
-        into logical identity amplitude as possible.
-        """
-        # TODO: account for converting X - Y to Z
-        new_amplitudes = defaultdict(complex, self.logical_amplitudes)
-        logical_i = (False, False)
-        logical_x = (False, True)
-        logical_y = (True, True)
-        r_x, phi_x = cmath.polar(new_amplitudes[logical_x])
-        r_y, phi_y = cmath.polar(new_amplitudes[logical_y])
-        if all((r_x, r_y, phi_x==phi_y)):
-            subtractand = cmath.rect(min(r_x, r_y), phi_x)
-            new_amplitudes[logical_x] -= subtractand
-            new_amplitudes[logical_y] -= subtractand
-            new_amplitudes[logical_i] += subtractand * 2**0.5
-        self.logical_amplitudes = dict(new_amplitudes)
+ANY_ERROR = np.array([0, 1, 1, 1])
+IDENTITY = np.array([1, 0, 0, 0])
+"""Logical vector representing the logical I."""
+PAULI_Z = np.array([0, 0, 0, 1])
+"""Logical vector representing the logical Z."""
+IH_XY = np.array([0, 1, 1, 0]) / 2**0.5
+"""Logical vector representing the logical I * H_XY := (X + Y) / sqrt(2).
+This stabilizes the logical T state."""
+ZH_XY = 1j * np.array([0, -1, 1, 0]) / 2**0.5
+"""Logical vector representing the logical Z * H_XY := i (Y - X) / sqrt(2)."""
+
+
+class LogicalVector:
+    """A vector of amplitudes for each logical class.
     
+    Instance attributes:
+    * `amplitudes` a 4-vector of normalized amplitudes
+    for the I, X, Y, Z logical classes respectively.
+    """
+
+    def __init__(self, amplitudes: npt.NDArray[np.complex_]):
+        self.amplitudes = amplitudes
+
+    @property
+    def probability_mass(self):
+        """The probability of the surviving part of the logical vector after any postselection,
+        whose value is in [0, 1].
+        """
+        return float(np.vdot(self.amplitudes, self.amplitudes).real)
+
     @property
     def is_logical_error(self):
-        """Return whether `logical_amplitudes` represents a logical error."""
-        return any((abs(self.logical_amplitudes.get(signature, 0)) for signature in (
-            (False, True),
-            (True, True),
-            (True, False),
-        )))
-    
-    # BELOW ARE DEPRECATED METHODS
+        """Return whether `self` leads to a logical fidelity < 1."""
+        return bool(np.vdot(ANY_ERROR, self.amplitudes))
     
     @property
-    def logical_error_probability(self) -> float:
-        """Return the probability of any logical error due to the Clifford string.
+    def logical_error_probability(self):
+        """Return the probability of Z logical error.
 
         Require:
-        * `self.terms` contains only terms that commute with all stabilizers.
+        * The amplitudes of the X and Y logical classes are zero.
 
         Output:
-        * the probability the Clifford string leads to any logical error
-        i.e. the fraction that anticommutes with at least one logical operator.
+        * the probability the logical vector leads to Z logical error.
         This is a real number in the range [0, 1].
         """
-        numerator = 0
-        for signature, amplitude in self.logical_amplitudes.items():
-            if any(signature):
-                numerator += amplitude.real**2 + amplitude.imag**2
-        return numerator / self.denominator_squared
+        z_amplitude = self.amplitudes[3]
+        return float(z_amplitude.real**2 + z_amplitude.imag**2)
 
-    def factor_out_logical_h_xy(self):
-        """Try factor out a logical H_XY := (X + Y) / sqrt(2) from the right.
-
-        Require:
-        * `self.terms` an even sequence of Pauli strings for the distance-3 color code,
-        ordered such that the first plus the last term is divisible by the logical H_XY,
-        the second plus the second last term is divisible by the logical H_XY, etc.
+    def convert_hxy_to_identity(self, round_decimals: int = 12):
+        """Transfer all X and Y amplitude to I and Z using the fact that H_XY stabilizes the state.
         
-        Output:
-        * `self` right-divided by the appropriate logical H_XY.
-        * `pauli_indices` the indices of the qubits acted on by the appropriate logical H_XY.
+        Require:
+        * The state this logical vector acts on is the logical T state.
+
+        Side effect:
+        * Transfer all X and Y amplitude in `self.amplitudes` to I and Z amplitude.
         """
-        first, *_ = self.terms
-        if len(first) != 7:
-            raise ValueError(f"Expected 7 qubits, got {len(first)}.")
-        pauli_indices = first.pauli_indices(included_paulis='XY')
-        proposed_x = PauliString('X' if index in pauli_indices else 'I' for index in range(7))
-        proposed_y = PauliString('Y' if index in pauli_indices else 'I' for index in range(7))
-        factors: list[PauliString] = []
-        for k in range(len(self.terms)//2):
-            term_1 = self.terms[k]
-            term_2 = self.terms[-1-k]
-            factor_1 = term_1 * proposed_x
-            factor_2 = term_2 * proposed_y
-            factor_3 = term_1 * proposed_y
-            factor_4 = term_2 * proposed_x
-            if factor_1 == factor_2:
-                factor = factor_1
-            elif factor_3 == factor_4:
-                factor = factor_3
-            else:
-                raise ValueError(f"Cannot factor out H_XY from {term_1} {term_2}.")
-            factors.append(factor)
-        if len(pauli_indices) not in {3, 7}:
-            raise ValueError(f"Factored out {
-                '*'.join(f'X{i}' for i in pauli_indices)
-            } + {
-                '*'.join(f'Y{i}' for i in pauli_indices)
-            } but these terms are not logical X and Y respectively.")
-        return CliffordString(factors, self.denominator_squared/2), pauli_indices
+        i_component = np.vdot(IH_XY, self.amplitudes)
+        z_component = np.vdot(ZH_XY, self.amplitudes)
+        # TODO: assume these are zero
+        self.amplitudes -= i_component * IH_XY
+        self.amplitudes -= z_component * ZH_XY
+        self.amplitudes += i_component * IDENTITY
+        self.amplitudes += z_component * PAULI_Z
+        self.amplitudes = self.amplitudes.round(round_decimals)

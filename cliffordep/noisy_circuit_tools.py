@@ -261,13 +261,13 @@ class CultivationCircuit:
         for data_string, denominators in undetected_combinations.items():
             clifford = push_through_transversal(stim.PauliString(data_string))
             clifford.postselect_from_stabilizers(self.STABILIZER_GENERATORS)
-            clifford.set_logical_amplitudes(self.LOGICAL_X, self.LOGICAL_Z)
-            clifford.convert_hxy_to_identity()
-            if clifford.probability_mass:
-                if clifford.is_logical_error:
-                    strings_leading_to_error[data_string] = (clifford.probability_mass, denominators)
+            logical_vector = clifford.get_logical_amplitudes(self.LOGICAL_X, self.LOGICAL_Z)
+            logical_vector.convert_hxy_to_identity()
+            if logical_vector.probability_mass:
+                if logical_vector.is_logical_error:
+                    strings_leading_to_error[data_string] = (logical_vector.probability_mass, denominators)
                 else:
-                    strings_leading_to_identity[data_string] = (clifford.probability_mass, denominators)
+                    strings_leading_to_identity[data_string] = (logical_vector.probability_mass, denominators)
         if order is not None:
             print(f'For order {order}, {len(strings_leading_to_identity)} ({len(strings_leading_to_error)}) effects are stabilized and lead to identity (error).')
         return strings_leading_to_identity, strings_leading_to_error
