@@ -39,13 +39,19 @@ PUSH_THROUGH_T: dict[int, tuple[str, ...]] = {
 after pushing through a T gate.
 """
 
+PUSH_THROUGH_MAP: dict[Literal['T', 'S', 'Z'], dict[int, tuple[str, ...]]] = {
+    'T': PUSH_THROUGH_T,
+    'S': PUSH_THROUGH_S,
+    'Z': PUSH_THROUGH_Z,
+}
+
 
 def unsigned_str(pauli_string: str | PauliString):
     """Convert a stim.PauliString to a string without the global phase."""
     return str(pauli_string).replace('+', '').replace('-', '').replace('i', '')
 
 
-def push_through_transversal(pauli_string: PauliString, gate: Literal['T', 'S', 'Z'] = 'T'):
+def push_through_transversal(pauli_string: PauliString, gate: Literal['T', 'S', 'Z']):
     """Push a Pauli string through the same gate on each qubit.
     
     Input:
@@ -56,7 +62,7 @@ def push_through_transversal(pauli_string: PauliString, gate: Literal['T', 'S', 
     * A unitary Clifford string that results from
     pushing the input through a `gate` on each qubit.
     """
-    map = PUSH_THROUGH_T if gate == 'T' else PUSH_THROUGH_S if gate == 'S' else PUSH_THROUGH_Z
+    map = PUSH_THROUGH_MAP[gate]
     sign = pauli_string.sign
     options: list[tuple[str, ...]] = [map[pauli] for pauli in pauli_string]
     return CliffordString([sign * _pauli_tuple_to_string(pauli)
@@ -166,16 +172,37 @@ class CliffordString:
         return LogicalVector(amplitudes / self.denominator_squared**0.5)
     
 
+SQRT2 = 2**0.5
 ANY_ERROR = np.array([0, 1, 1, 1])
 IDENTITY = np.array([1, 0, 0, 0])
 """Logical vector representing the logical I."""
 PAULI_Z = np.array([0, 0, 0, 1])
 """Logical vector representing the logical Z."""
-IH_XY = np.array([0, 1, 1, 0]) / 2**0.5
+IH_XY = np.array([0, 1, 1, 0], dtype=np.complex_) / SQRT2
 """Logical vector representing the logical I * H_XY := (X + Y) / sqrt(2).
 This stabilizes the logical T state."""
-ZH_XY = 1j * np.array([0, -1, 1, 0]) / 2**0.5
+ZH_XY = 1j * np.array([0, -1, 1, 0], dtype=np.complex_) / SQRT2
 """Logical vector representing the logical Z * H_XY := i (Y - X) / sqrt(2)."""
+IY = np.array([0, 0, 1, 0], dtype=np.complex_)
+"""Logical vector representing the logical I * Y.
+This stabilizes the logical S state."""
+ZY = np.array([0, -1j, 0, 0], dtype=np.complex_)
+"""Logical vector representing the logical Z * Y := -iX."""
+InX = np.array([0, -1, 0, 0], dtype=np.complex_)
+"""Logical vector representing the logical I * (-X).
+This stabilizes the logical Z state := (1, -1) / sqrt(2)."""
+ZnX = np.array([0, 0, -1j, 0], dtype=np.complex_)
+"""Logical vector representing the logical Z * (-X) := -iY."""
+
+GATE_TO_IS_AND_ZS: dict[Literal['T', 'S', 'Z'], tuple[
+    npt.NDArray[np.complex_],
+    npt.NDArray[np.complex_],
+]] = {
+    'T': (IH_XY, ZH_XY),
+    'S': (IY, ZY),
+    'Z': (InX, ZnX),
+}
+"""A map from gate G to the operators (IS, ZS) such that S stabilizes G|+>."""
 
 
 class LogicalVector:
@@ -215,20 +242,28 @@ class LogicalVector:
         z_amplitude = self.amplitudes[3]
         return float(z_amplitude.real**2 + z_amplitude.imag**2)
 
-    def convert_hxy_to_identity(self, round_decimals: int = 12):
-        """Transfer all X and Y amplitude to I and Z using the fact that H_XY stabilizes the state.
+    def transfer_xy_to_iz(
+            self,
+            logical_state: Literal['T', 'S', 'Z'],
+            round_decimals: int = 12,
+    ):
+        """Transfer all X and Y amplitude to I and Z using knowledge of the logical state.
         
-        Require:
-        * The state this logical vector acts on is the logical T state.
+        E.g. if the logical state is T, use the fact that H_XY stabilizes the state.
+        
+        Input:
+        * `logical_state` the state this logical vector acts on.
+        * `round_decimals` the number of decimals to round all amplitudes to after transfer.
 
         Side effect:
         * Transfer all X and Y amplitude in `self.amplitudes` to I and Z amplitude.
         """
-        i_component = np.vdot(IH_XY, self.amplitudes)
-        z_component = np.vdot(ZH_XY, self.amplitudes)
+        I_stabilizer, Z_stabilizer = GATE_TO_IS_AND_ZS[logical_state]
+        i_component = np.vdot(I_stabilizer, self.amplitudes)
+        z_component = np.vdot(Z_stabilizer, self.amplitudes)
         # TODO: assume these are zero
-        self.amplitudes -= i_component * IH_XY
-        self.amplitudes -= z_component * ZH_XY
+        self.amplitudes -= i_component * I_stabilizer
+        self.amplitudes -= z_component * Z_stabilizer
         self.amplitudes += i_component * IDENTITY
         self.amplitudes += z_component * PAULI_Z
         self.amplitudes = self.amplitudes.round(round_decimals)

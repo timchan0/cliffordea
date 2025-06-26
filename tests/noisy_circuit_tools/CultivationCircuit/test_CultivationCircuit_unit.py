@@ -40,7 +40,7 @@ class TestUndetectedCombinationsOnD3DoubleCatCheck():
     """Tests on the `d3_double_cat_check` circuit."""
 
     def test_length_0_exact(self, noisy_d3_double_cat_check: CultivationCircuit, d3_double_cat_check_effect_maps: dict[tuple[bool, ...], EffectMap]):
-        result = noisy_d3_double_cat_check._undetected_combinations(d3_double_cat_check_effect_maps, length=0)
+        result = noisy_d3_double_cat_check._get_undetected_fault_combinations_for_length(d3_double_cat_check_effect_maps, length=0)
         trivial_effect = '_'*7
         assert len(result) == 1
         assert trivial_effect in result
@@ -52,7 +52,7 @@ class TestUndetectedCombinationsOnD3DoubleCatCheck():
         first_effect, *_ = first_effect_map.keys()
         goal['_'*len(first_effect)][()] += 1
 
-        result = noisy_d3_double_cat_check._undetected_combinations(d3_double_cat_check_effect_maps, length=0)
+        result = noisy_d3_double_cat_check._get_undetected_fault_combinations_for_length(d3_double_cat_check_effect_maps, length=0)
         assert result == dict(goal)
 
     def test_length_1(self, noisy_d3_double_cat_check: CultivationCircuit, d3_double_cat_check_effect_maps: dict[tuple[bool, ...], EffectMap]):
@@ -63,7 +63,7 @@ class TestUndetectedCombinationsOnD3DoubleCatCheck():
                     for (_, source_name, _), count in counter.items():
                         goal[effect][fault_count(source_name),] += count
 
-        result = noisy_d3_double_cat_check._undetected_combinations(d3_double_cat_check_effect_maps, length=1)
+        result = noisy_d3_double_cat_check._get_undetected_fault_combinations_for_length(d3_double_cat_check_effect_maps, length=1)
         assert result == dict(goal)
 
     def test_length_2(self, noisy_d3_double_cat_check: CultivationCircuit, d3_double_cat_check_effect_maps: dict[tuple[bool, ...], EffectMap]):
@@ -86,5 +86,5 @@ class TestUndetectedCombinationsOnD3DoubleCatCheck():
                 for candidate in candidates:
                     _update_undetected_combinations(goal, product_effect, candidate)
 
-        result = noisy_d3_double_cat_check._undetected_combinations(d3_double_cat_check_effect_maps, length=length)
+        result = noisy_d3_double_cat_check._get_undetected_fault_combinations_for_length(d3_double_cat_check_effect_maps, length=length)
         assert result == dict(goal)

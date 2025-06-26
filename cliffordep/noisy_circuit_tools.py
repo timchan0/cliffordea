@@ -5,6 +5,7 @@ from collections.abc import Iterable, Sequence
 import itertools
 from functools import cached_property
 import math
+from typing import Literal
 
 import numpy as np
 import numpy.typing as npt
@@ -47,7 +48,8 @@ class CultivationCircuit:
     * `LOGICAL_X` a Pauli string representing a logical X operator.
     * `LOGICAL_Z` ditto for Z.
     """
-    
+
+
     def __init__(
             self,
             noisy_circuit: stim.Circuit,
@@ -62,36 +64,57 @@ class CultivationCircuit:
         self.LOGICAL_X = logical_x
         self.LOGICAL_Z = logical_z
 
+
     @cached_property
     def noiseless_circuit(self):
         return self.noisy_circuit.without_noise()
 
-    def get_kept_strings(self, max_order: int, print_progress: bool = False) -> list[tuple[
+
+    def get_undetected_fault_combinations(self, max_order: int, print_progress: bool = False):
+        """Find all combinations of faults up to `max_order` that have trivial syndrome.
+
+        Input:
+        * `max_order` the maximum order of probability to consider event account for.
+        * `print_progress` whether to print progress.
+
+        Output:
+        * A list whose kth entry is a map
+        from each effect to a counter of k-tuples of denominators.
+        Each denominator represents a fault such that if all in the tuple occur,
+        the syndrome will be trivial.
+        """
+        effect_maps = self.group_faults_by_effect()
+        if print_progress:
+            print(f"Finished enumerating all faults. Found {len(effect_maps)} distinct syndromes.")
+        return [self._get_undetected_fault_combinations_for_length(
+            effect_maps, length, print_progress) for length in range(max_order + 1)]
+
+
+    def get_kept_strings(
+            self,
+            fault_combinations: list[dict[str, Counter[tuple[int, ...]]]],
+            cultivated_state: Literal['T', 'S', 'Z'] = 'T',
+            print_progress: bool = False,
+    ) -> list[tuple[
         dict[str, tuple[float, Counter[tuple[int, ...]]]],
         dict[str, tuple[float, Counter[tuple[int, ...]]]],
     ]]:
         """Return all the information needed to reconstruct the logical error probability for any noise level.
         
         Input:
-        * `max_order` the maximum order of probability to consider event account for.
-        * `print_progress` whether to print when the calculation for each order completes.
+        * `fault_combinations` the output of `get_undetected_fault_combinations`.
+        * `cultivated_state` the target logical state cultivated.
+        * `print_progress` whether to print progress.
 
         Output:
-        * A list of tuples, each containing:
-            - `strings_leading_to_identity` a map from each effect that leads to logical identity,
-            to the probability they are not rejected and a counter of ordered denominator tuples.
-            - `strings_leading_to_error` ditto for effects that lead to a logical error.
+        * A list of pairs, one for each order. Each pair contains:
+            - `identity_strings` a map from each effect that leads to logical identity to a pair containing:
+                - the probability they are not rejected,
+                - a counter of ordered denominator tuples.
+            - `error_strings` ditto for effects that lead to a logical error.
         """
-        effect_maps = self.group_faults_by_effect()
-        if print_progress:
-            print(f"Finished enumerating all faults. Found {len(effect_maps)} distinct syndromes.")
-        all_combos = self.get_undetected_combinations(
-            effect_maps=effect_maps,
-            max_length=max_order,
-            print_progress=print_progress,
-        )
-        return [self._get_kept_strings(combos, order if print_progress else None)
-                for order, combos in enumerate(all_combos)]
+        return [self._get_kept_strings(combinations_of_order, cultivated_state, order if print_progress else None)
+                for order, combinations_of_order in enumerate(fault_combinations)]
 
 
     def group_faults_by_effect(
@@ -237,7 +260,8 @@ class CultivationCircuit:
 
     def _get_kept_strings(
             self,
-            undetected_combinations: dict[str, Counter[tuple[int, ...]]],
+            combinations_of_order: dict[str, Counter[tuple[int, ...]]],
+            cultivated_state: Literal['T', 'S', 'Z'] = 'T',
             order: None | int = None,
     ) -> tuple[
         dict[str, tuple[float, Counter[tuple[int, ...]]]],
@@ -245,64 +269,48 @@ class CultivationCircuit:
     ]:
         """Group postselected effects by whether they lead to identity or error.
 
+        Helper for `get_kept_strings`.
+
         Input:
-        * `undetected_combinations` a map from each effect to a counter of tuples of denominators.
+        * `combinations_of_order` a map from each effect to a counter of tuples of denominators.
         Each denominator represents a fault such that if all in the tuple occur,
         the syndrome will be trivial.
-        * `order` an optional parameter used only to print summary information.
+        * `cultivated_state` the target logical state cultivated.
+        * `order` an optional parameter used only for printing progress.
 
         Output:
-        * `strings_leading_to_identity` a map from each effect that leads to logical identity,
+        * `identity_strings` a map from each effect that leads to logical identity,
         to the probability they are not rejected and a counter of ordered denominator tuples.
-        * `strings_leading_to_error` ditto for effects that lead to a logical error.
+        * `error_strings` ditto for effects that lead to a logical error.
         """
-        strings_leading_to_identity: dict[str, tuple[float, Counter[tuple[int, ...]]]] = {}
-        strings_leading_to_error: dict[str, tuple[float, Counter[tuple[int, ...]]]] = {}
-        for data_string, denominators in undetected_combinations.items():
-            clifford = push_through_transversal(stim.PauliString(data_string))
+        identity_strings: dict[str, tuple[float, Counter[tuple[int, ...]]]] = {}
+        error_strings: dict[str, tuple[float, Counter[tuple[int, ...]]]] = {}
+        for data_string, denominators in combinations_of_order.items():
+            clifford = push_through_transversal(stim.PauliString(data_string), gate=cultivated_state)
             clifford.postselect_from_stabilizers(self.STABILIZER_GENERATORS)
             logical_vector = clifford.get_logical_amplitudes(self.LOGICAL_X, self.LOGICAL_Z)
-            logical_vector.convert_hxy_to_identity()
+            # TODO: check if `transfer_xy_to_iz` is unitary. If so, swap with next line.
+            logical_vector.transfer_xy_to_iz(logical_state=cultivated_state)
             if logical_vector.probability_mass:
+                # TODO: use `logical_error_probability` instead of `is_logical_error`
                 if logical_vector.is_logical_error:
-                    strings_leading_to_error[data_string] = (logical_vector.probability_mass, denominators)
+                    error_strings[data_string] = (logical_vector.probability_mass, denominators)
                 else:
-                    strings_leading_to_identity[data_string] = (logical_vector.probability_mass, denominators)
+                    identity_strings[data_string] = (logical_vector.probability_mass, denominators)
         if order is not None:
-            print(f'For order {order}, {len(strings_leading_to_identity)} ({len(strings_leading_to_error)}) effects are stabilized and lead to identity (error).')
-        return strings_leading_to_identity, strings_leading_to_error
-
-
-    def get_undetected_combinations(
-            self,
-            effect_maps: dict[tuple[bool, ...], EffectMap],
-            max_length: int,
-            print_progress: bool = False,
-    ) -> list[dict[str, Counter[tuple[int, ...]]]]:
-        """Find all combinations of faults from `effect_maps` that have trivial syndrome.
-
-        Input:
-        * `effect_maps` the output of `CultivationCircuit.group_faults_by_effect`.
-        * `max_length` the maximum length of combinations to find.
-        * `print_progress` whether to print progress.
-
-        Output:
-        * A list whose kth entry is a map
-        from each effect to a counter of k-tuples of denominators.
-        Each denominator represents a fault such that if all in the tuple occur,
-        the syndrome will be trivial.
-        """
-        return [self._undetected_combinations(effect_maps, length, print_progress)
-                for length in range(max_length + 1)]
+            print(f'For order {order}, {len(identity_strings)} ({len(error_strings)}) effects are stabilized and lead to identity (error).')
+        return identity_strings, error_strings
     
     
-    def _undetected_combinations(
+    def _get_undetected_fault_combinations_for_length(
             self,
             effect_maps: dict[tuple[bool, ...], EffectMap],
             length: int,
-            print_progress: bool = False
+            print_progress: bool = False,
     ) -> dict[str, Counter[tuple[int, ...]]]:
         """Find all combinations of `length` faults from `effect_maps` that have trivial syndrome.
+        
+        Helper for `get_undetected_fault_combinations`.
         
         Input:
         * `effect_maps` the output of `CultivationCircuit.group_faults_by_effect`.

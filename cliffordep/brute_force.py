@@ -11,27 +11,16 @@ import stim
 
 from cliffordep.type_aliases import FaultSource, Fault
 from cliffordep.noisy_circuit_tools import fault_count, CultivationCircuit
-from cliffordep.pauli_string_tools import unsigned_str, push_through_transversal
+from cliffordep.pauli_string_tools import unsigned_str
 
 
 class BruteCultivationCircuit(CultivationCircuit):
     """A class representing a noisy stim circuit with brute-force methods to analyze faults.
 
     Extends `CultivationCircuit`.
-
-    Overridden methods:
-    * `get_kept_strings`.
     """
 
-    def get_kept_strings(self, max_order: int, print_progress: bool = False):
-        group = self.group_faults_by_source(restrict_to_data=True)
-        return [self._get_kept_strings_brute(group, order, print_progress) for order in range(max_order + 1)]
-
-
-    def group_faults_by_source(
-            self,
-            restrict_to_data: bool = True,
-    ) -> dict[
+    def group_faults_by_source(self, restrict_to_data: bool = True) -> dict[
         FaultSource,
         dict[Fault, tuple[npt.NDArray[np.bool_], str]]
     ]:
@@ -54,34 +43,6 @@ class BruteCultivationCircuit(CultivationCircuit):
                     effect = ''.join(effect[index] for index in self.DATA_INDICES)
                 _faults[source][fault] = (syndrome, effect)
         return dict(_faults)
-
-
-    def _get_kept_strings_brute(
-            self,
-            source_map: dict[FaultSource, dict[Fault, tuple[npt.NDArray[np.bool_], str]]],
-            order: int,
-            show_progress: bool = False,
-    ):
-        if show_progress:
-            print(f'Considering O(p^{order}) events:')
-        combinations = undetected_combinations(source_map, length=order)
-        if show_progress:
-            print(f'Found {len(combinations)} distinct undetected effects.')
-        strings_leading_to_identity: dict[str, tuple[float, Counter[tuple[int, ...]]]] = {}
-        strings_leading_to_error: dict[str, tuple[float, Counter[tuple[int, ...]]]] = {}
-        for data_string, denominators in combinations.items():
-            clifford = push_through_transversal(stim.PauliString(data_string))
-            clifford.postselect_from_stabilizers(self.STABILIZER_GENERATORS)
-            logical_vector = clifford.get_logical_amplitudes(self.LOGICAL_X, self.LOGICAL_Z)
-            logical_vector.convert_hxy_to_identity()
-            if logical_vector.probability_mass:
-                if logical_vector.is_logical_error:
-                    strings_leading_to_error[data_string] = (logical_vector.probability_mass, denominators)
-                else:
-                    strings_leading_to_identity[data_string] = (logical_vector.probability_mass, denominators)
-        if show_progress:
-            print(f'{len(strings_leading_to_identity)} ({len(strings_leading_to_error)}) of them are stabilized and lead to identity (error).')
-        return strings_leading_to_identity, strings_leading_to_error
 
 
 def undetected_combinations(

@@ -20,34 +20,36 @@ def test_empty(gate):
 
 class TestTGate:
 
+    GATE = "T"
+
     def test_x(self):
         ps = PauliString("X")
-        result = push_through_transversal(ps)
+        result = push_through_transversal(ps, gate=self.GATE)
         assert result.terms == [ps, PauliString("Y")]
 
     def test_y(self):
         ps = PauliString("Y")
-        result = push_through_transversal(ps)
+        result = push_through_transversal(ps, gate=self.GATE)
         assert result.terms == [PauliString("-X"), ps]
 
     def test_z(self):
         ps = PauliString("Z")
-        result = push_through_transversal(ps)
+        result = push_through_transversal(ps, gate=self.GATE)
         assert result.terms == [ps]
 
     def test_mixed(self):
         ps = PauliString("X_")
-        result = push_through_transversal(ps)
+        result = push_through_transversal(ps, gate=self.GATE)
         assert result.terms == [ps, PauliString("Y_")]
 
     def test_two_qubits(self):
         ps = PauliString("XY")
-        result = push_through_transversal(ps)
+        result = push_through_transversal(ps, gate=self.GATE)
         assert result.terms == [PauliString(s) for s in ["-XX", "XY", "-YX", "YY"]]
 
     def test_sign_preserved(self):
         ps = PauliString("-X")
-        result = push_through_transversal(ps)
+        result = push_through_transversal(ps, gate=self.GATE)
         assert result.terms == [PauliString("-X"), PauliString("-Y")]
 
 

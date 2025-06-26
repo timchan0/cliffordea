@@ -10,7 +10,7 @@ def error_rate_per_kept_shot(
             dict[str, tuple[float, Counter[tuple[int, ...]]]],
         ]],
         noise_level: float,
-        show_progress: bool = False,
+        print_progress: bool = False,
 ) -> float:
     identity_odds, error_odds = 0, 0
     for length, (identity_strings, error_strings) in enumerate(all_string_leads):
@@ -18,7 +18,7 @@ def error_rate_per_kept_shot(
         e_odds = _sum_odds(error_strings.values(), noise_level)
         identity_odds += i_odds
         error_odds += e_odds
-        if show_progress:
+        if print_progress:
             print(f'O(p^{length}) events:')
             print(f'Identity odds = {i_odds}')
             print(f'Error odds = {e_odds}')

@@ -18,6 +18,6 @@ class TestUndetectedCombinationsOnD3DoubleCatCheck():
         d3_double_cat_check_group_brute: dict[FaultSource, dict[Fault, tuple[npt.NDArray[np.bool_], str]]],
         length: int,
     ):
-        result_1 = noisy_d3_double_cat_check._undetected_combinations(d3_double_cat_check_effect_maps, length=length)
+        result_1 = noisy_d3_double_cat_check._get_undetected_fault_combinations_for_length(d3_double_cat_check_effect_maps, length=length)
         result_2 = brute_force.undetected_combinations(d3_double_cat_check_group_brute, length=length)
         assert result_1 == result_2
