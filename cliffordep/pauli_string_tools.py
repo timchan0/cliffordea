@@ -2,7 +2,7 @@
 
 import cmath
 from collections import defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 import itertools
 from typing import Literal
 
@@ -61,6 +61,13 @@ def push_through_transversal(pauli_string: PauliString, gate: Literal['T', 'S', 
     options: list[tuple[str, ...]] = [map[pauli] for pauli in pauli_string]
     return CliffordString([sign * _pauli_tuple_to_string(pauli)
         for pauli in itertools.product(*options)])
+
+
+def _pauli_tuple_to_string(pauli_tuple: tuple[str, ...]):
+    string = PauliString()
+    for pauli in pauli_tuple:
+        string += PauliString(pauli)
+    return string
 
 
 class CliffordString:
@@ -244,42 +251,3 @@ class CliffordString:
                 '*'.join(f'Y{i}' for i in pauli_indices)
             } but these terms are not logical X and Y respectively.")
         return CliffordString(factors, self.denominator_squared/2), pauli_indices
-
-
-def _pauli_tuple_to_string(pauli_tuple: tuple[str, ...]):
-    string = PauliString()
-    for pauli in pauli_tuple:
-        string += PauliString(pauli)
-    return string
-
-
-def factor_out_logical_h_xy(undetected_terms: Sequence[PauliString]):
-    """Factor out the correct logical H_XY from a sequence of undetected terms.
-
-    Input:
-    * `undetected_terms` an even sequence of pauli strings that commute with all stabilizers.
-    
-    Output:
-    * `factors` the undetected terms divided by the appropriate logical H_XY.
-    * `pauli_indices` the indices of the qubits acted on by the appropriate logical H_XY.
-    """
-    first_term, *_ = undetected_terms
-    pauli_indices = first_term.pauli_indices(included_paulis='XY')
-    proposed_x = PauliString('X' if index in pauli_indices else 'I' for index in range(7))
-    proposed_y = PauliString('Y' if index in pauli_indices else 'I' for index in range(7))
-    factors: list[PauliString] = []
-    for k in range(len(undetected_terms)//2):
-        term_1 = undetected_terms[k]
-        term_2 = undetected_terms[-1-k]
-        factor_1 = term_1 * proposed_x
-        factor_2 = term_2 * proposed_y
-        factor_3 = term_1 * proposed_y
-        factor_4 = term_2 * proposed_x
-        if factor_1 == factor_2:
-            factor = factor_1
-        elif factor_3 == factor_4:
-            factor = factor_3
-        else:
-            raise ValueError(f"Cannot factor out H_XY from {term_1} {term_2}.")
-        factors.append(factor)
-    return factors, pauli_indices
