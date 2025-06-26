@@ -113,6 +113,8 @@ class CultivationCircuit:
                 - a counter of ordered denominator tuples.
             - `error_strings` ditto for effects that lead to a logical error.
         """
+        if print_progress:
+            print(f"{cultivated_state} state cultivation:")
         return [self._get_kept_strings(combinations_of_order, cultivated_state, order if print_progress else None)
                 for order, combinations_of_order in enumerate(fault_combinations)]
 

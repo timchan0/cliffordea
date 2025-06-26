@@ -7,6 +7,12 @@ from cliffordep.noisy_circuit_tools import CultivationCircuit
 from cliffordep.type_aliases import EffectMap, FaultSource, Fault
 
 
+class TestGroupFaultsByEffect():
+
+    def test_sum_len_effect_maps(self, d3_double_cat_check_effect_maps: dict[tuple[bool, ...], EffectMap]):
+        assert sum(len(effect_map) for effect_map in d3_double_cat_check_effect_maps.values()) == 158
+
+
 class TestUndetectedCombinationsOnD3DoubleCatCheck():
     """Tests on the `d3_double_cat_check` circuit."""
 
