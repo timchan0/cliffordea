@@ -26,3 +26,7 @@ Install the package in editable mode and its dependencies using pip:
 ```bash
 pip install -e .
 ```
+
+## Usage
+
+See `demo_notebooks`.
