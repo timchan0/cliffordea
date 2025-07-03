@@ -43,7 +43,7 @@ PUSH_THROUGH_MAP: dict[Literal['T', 'S', 'Z'], dict[int, tuple[str, ...]]] = {
     'T': PUSH_THROUGH_T,
     'S': PUSH_THROUGH_S,
     'Z': PUSH_THROUGH_Z,
-}
+}  # TODO: test against PauliString.after
 
 
 def unsigned_str(pauli_string: str | PauliString):
@@ -164,7 +164,7 @@ class CliffordString:
         Output:
         * A 4-vector of normalized amplitudes for the I, X, Y, Z logical classes in the Clifford string.
         """
-        amplitudes = np.zeros(4, dtype=np.complex_)
+        amplitudes = np.zeros(4, dtype=np.complex128)
         for term in self.terms:
             signature: tuple[bool, bool] = tuple(
                 not term.commutes(logical) for logical in (logical_x, logical_z)) # type: ignore
@@ -178,25 +178,25 @@ IDENTITY = np.array([1, 0, 0, 0])
 """Logical vector representing the logical I."""
 PAULI_Z = np.array([0, 0, 0, 1])
 """Logical vector representing the logical Z."""
-IH_XY = np.array([0, 1, 1, 0], dtype=np.complex_) / SQRT2
+IH_XY = np.array([0, 1, 1, 0], dtype=np.complex128) / SQRT2
 """Logical vector representing the logical I * H_XY := (X + Y) / sqrt(2).
 This stabilizes the logical T state."""
-ZH_XY = 1j * np.array([0, -1, 1, 0], dtype=np.complex_) / SQRT2
+ZH_XY = 1j * np.array([0, -1, 1, 0], dtype=np.complex128) / SQRT2
 """Logical vector representing the logical Z * H_XY := i (Y - X) / sqrt(2)."""
-IY = np.array([0, 0, 1, 0], dtype=np.complex_)
+IY = np.array([0, 0, 1, 0], dtype=np.complex128)
 """Logical vector representing the logical I * Y.
 This stabilizes the logical S state."""
-ZY = np.array([0, -1j, 0, 0], dtype=np.complex_)
+ZY = np.array([0, -1j, 0, 0], dtype=np.complex128)
 """Logical vector representing the logical Z * Y := -iX."""
-InX = np.array([0, -1, 0, 0], dtype=np.complex_)
+InX = np.array([0, -1, 0, 0], dtype=np.complex128)
 """Logical vector representing the logical I * (-X).
 This stabilizes the logical Z state := (1, -1) / sqrt(2)."""
-ZnX = np.array([0, 0, -1j, 0], dtype=np.complex_)
+ZnX = np.array([0, 0, -1j, 0], dtype=np.complex128)
 """Logical vector representing the logical Z * (-X) := -iY."""
 
 GATE_TO_IS_AND_ZS: dict[Literal['T', 'S', 'Z'], tuple[
-    npt.NDArray[np.complex_],
-    npt.NDArray[np.complex_],
+    npt.NDArray[np.complex128],
+    npt.NDArray[np.complex128],
 ]] = {
     'T': (IH_XY, ZH_XY),
     'S': (IY, ZY),
@@ -213,7 +213,7 @@ class LogicalVector:
     for the I, X, Y, Z logical classes respectively.
     """
 
-    def __init__(self, amplitudes: npt.NDArray[np.complex_]):
+    def __init__(self, amplitudes: npt.NDArray[np.complex128]):
         self.amplitudes = amplitudes
 
     @property
@@ -258,6 +258,7 @@ class LogicalVector:
         Side effect:
         * Transfer all X and Y amplitude in `self.amplitudes` to I and Z amplitude.
         """
+        # TODO: speed up by casting as a matrix multiplication
         I_stabilizer, Z_stabilizer = GATE_TO_IS_AND_ZS[logical_state]
         i_component = np.vdot(I_stabilizer, self.amplitudes)
         z_component = np.vdot(Z_stabilizer, self.amplitudes)
