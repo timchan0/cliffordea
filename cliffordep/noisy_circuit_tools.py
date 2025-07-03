@@ -321,6 +321,7 @@ class CultivationCircuit:
 
         Output:
         * a map from each effect to a counter of `length`-tuples of denominators.
+        Each tuple is ordered in ascending order.
         Each denominator represents a fault such that if all in the tuple occur,
         the syndrome will be trivial.
         """
@@ -337,14 +338,14 @@ class CultivationCircuit:
             for syndrome_counter in trivial_syndrome_combos:
                 options = _syndrome_counter_to_options(effect_maps, syndrome_counter, data_qubit_count)
                 for segment_product in itertools.product(*(option.items() for option in options)):
+                    # TODO: iterate through segment_product once
                     product_effect = unsigned_str(math.prod(
                         (stim.PauliString(effect) for effect, _ in segment_product),
                         start=stim.PauliString(data_qubit_count)
                     ))
-                    nested_candidates = itertools.product(*(valid_segments for _, valid_segments in segment_product))
-                    for nested_candidate in nested_candidates:
-                        candidate = itertools.chain(*nested_candidate)
-                        _update_undetected_combinations(result, product_effect, candidate)
+                    candidates = itertools.product(*(valid_segments.items() for _, valid_segments in segment_product))                    
+                    for candidate in candidates:
+                        _process_candidate(result, product_effect, candidate)
         if print_progress:
             print(f"Done. They lead to {len(result)} distinct effects.")
         return dict(result)
@@ -453,39 +454,39 @@ def _syndrome_counter_to_options(
     Output:
     * `options` a list of options, one for each item in `syndrome_counter`
     e.g. `[option1, option2]`.
-    Each option is a map from effect to a list of valid segments with that effect.
-    e.g. `{effect1: [segment1, segment2], effect2: [segment3]}`
-    where `segment1 = [(source1, 1), (source2, 1)]`.
+    Each option is a map from effect to a counter of valid segments with that effect.
+    e.g. `{effect1: {segment1: 3, segment2: 1}, effect2: {segment3: 5}}`
+    where e.g. `segment1 = {source1, source2}`.
     """
-    options: list[dict[str, list[Sequence[tuple[FaultSource, int]]]]] = []
+    options: list[dict[str, Counter[frozenset[FaultSource]]]] = []
     for syndrome, count in syndrome_counter.items():
         effect_map = effect_maps[syndrome]
-        product_effects_to_valid_segments = _get_product_effect_to_valid_segments(
+        effects_to_valid_segments = _get_effect_to_valid_segments(
             effect_map, count, qubit_count)
-        options.append(product_effects_to_valid_segments)
+        options.append(effects_to_valid_segments)
     return options
 
 
-def _get_product_effect_to_valid_segments(
+def _get_effect_to_valid_segments(
     effect_map: EffectMap,
     length: int,
     qubit_count: int,
 ):
-    """Get a map from product effect to all valid segments of undetected fault combinations.
+    """Get a map from effect to the number of valid fault combinations with that resultant effect.
     
     Input:
     * `effect_map` maps each effect to a map from each fault source
     to the number of its faults that cause that syndrome and effect.
     E.g. `{effect1: {source1: 1, source2: 1, source3: 2}, effect2: {source4: 1}}`.
-    * `length` the length of valid segments to consider.
+    * `length` the length of valid fault combinations to consider.
 
     Output:
-    * a map from product effect to a list of valid segments.
-    Each valid segment is a sequence of pairs each containing:
-        - a unique fault source
-        - the number of its faults that can be used as part of the undetected combination.
+    * a map from effect to a counter of fault source combinations.
+    Each fault source combination is a set of unique fault sources.
+    Each count is the number of fault combinations from that fault source combination
+    with that resultant effect.
     """
-    result: defaultdict[str, list[Sequence[tuple[FaultSource, int]]]] = defaultdict(list)
+    result: defaultdict[str, Counter[frozenset[FaultSource]]] = defaultdict(Counter)
     effect_combos = itertools.combinations_with_replacement(effect_map.keys(), length)
     for effect_combo in effect_combos:
         # e.g. effect_combo = ('effect1', 'effect1', 'effect2')
@@ -496,24 +497,12 @@ def _get_product_effect_to_valid_segments(
             start=stim.PauliString(qubit_count),
         ))
         options = _effect_counter_to_options(effect_map, counter)
-        valid_segments: list[Sequence[tuple[FaultSource, int]]] = []
+        valid_segments: Counter[frozenset[FaultSource]] = Counter()
         for fault_product in itertools.product(*options):
-            flattened = list(itertools.chain(*fault_product))
+            flattened = itertools.chain(*fault_product)
             _process_candidate_segment(valid_segments, flattened)
         if valid_segments:
-            result[product_effect] += valid_segments
-    
-    # ### # TODO: store segments as frozensets to avoid duplicates
-    # for segments in result.values():
-    #     unique_segments: set[frozenset[FaultSource]] = set()
-    #     for segment in segments:
-    #         frozen_sources = frozenset(source for source, _ in segment)
-    #         if frozen_sources in unique_segments:
-    #             print(f"Duplicate segment found: {segment}")
-    #         else:
-    #             unique_segments.add(frozen_sources)
-    # ###
-    
+            result[product_effect].update(valid_segments)
     return dict(result)
 
 
@@ -533,7 +522,7 @@ def _effect_counter_to_options(effect_map: EffectMap, counter: Counter[str]):
     e.g. `[option1, option2]`.
     Each option is an iterable of source combinations
     e.g. `[((source1, 1), (source2, 1)), ((source1, 1), (source3, 2)), ((source2, 1), (source3, 2))]`.
-    Each source combination is a combination of `count` fault sources in `effect_map[effect]`.
+    Each source combination is a combination of `count` distinct fault sources in `effect_map[effect]`.
     """
     options: list[itertools.combinations[tuple[tuple[FaultSource, int], ...]]] = []
     for effect, count in counter.items():
@@ -541,65 +530,72 @@ def _effect_counter_to_options(effect_map: EffectMap, counter: Counter[str]):
         # without replacement because each item in effect_map[effect]
         # is a (fault source, fault count) pair and each error event must have distinct sources
         # e.g. effect_map[effect] = {'source1': 1, 'source2': 1, 'source3': 2}
+
+        # TODO: see if making `option` the following form is faster:
+        # `[({source1, source2}, 1), ({source1, source3}, 2), ({source2, source3}, 2)]`
         options.append(option)
     return options
 
 
 def _process_candidate_segment(
-        valid_segments: list[Sequence[tuple[FaultSource, int]]],
-        candidate: Sequence[tuple[FaultSource, int]],
+        valid_segments: Counter[frozenset[FaultSource]],
+        candidate: Iterable[tuple[FaultSource, int]],
 ):
     """Update `valid_segments` with a candidate segment of an undetected combination of faults.
 
     Input:
-    * `valid_segments` a list of valid segments.
-    Each (valid) segment is a sequence of pairs each containing:
-        - a (unique) fault source
-        - the number of its faults that can be used as part of the undetected combination.
-    * `candidate` the segment to consider adding
+    * `valid_segments` a counter of valid segments.
+    Each (valid) segment is a frozen set of (unique) fault sources.
+    Each count is the number of fault combinations from that fault source combination
+    that can be used as part of the undetected combination.
+    * `candidate` the segment to consider
     e.g. `[(source1, 1), (source2, 1), (source3, 2)]`.
 
     Side effect:
     * Update `valid_segments` with `candidate` if it is valid i.e. comprises distinct fault sources.
     """
-    # check for duplicate sources
     sources: set[FaultSource] = set()
-    for source, _ in candidate:
-        if source in sources:
+    counts: int = 1
+    for source, count in candidate:
+        if source in sources:  # check for duplicate sources
             return
         sources.add(source)
-    valid_segments.append(candidate)
+        counts *= count
+    valid_segments[frozenset(sources)] += counts
 
 
-def _update_undetected_combinations(
+def _process_candidate(
         undetected_combinations: defaultdict[str, Counter[tuple[int, ...]]],
         effect: str,
-        candidate: Iterable[tuple[FaultSource, int]],
+        candidate: Iterable[tuple[frozenset[FaultSource], int]],
 ):
     """Update `undetected_combinations` with a candidate undetected combination of faults.
     
     Input:
-    * `undetected_combinations` maps each effect to a counter of denominators for each combination.
+    * `undetected_combinations` the output of `CultivationCircuit._get_undetected_fault_combinations_for_length`.
     * `effect` the resultant (unsigned) Pauli string of the candidate combination.
-    * `candidate` a sequence (whose length equals that of the candidate combination)
-    of pairs each containing:
-        - a fault source
-        - count the number of its faults that can be used as part of the undetected combination.
+    * `candidate` an iterable of segments (whose total length equals that of the candidate combination).
+    Each segment is a pair containing:
+        - a frozenset of fault sources,
+        - the number of fault combinations that can be used as part of the undetected combination.
+    E.g. `((frozenset({source1, source2}), 1), (frozenset({source3}), 2))`
+    represents a candidate combination
+    of faults that has the resultant effect `effect` and is made up of two segments
+    where the first segment is made up of two distinct fault sources and the second segment is made
+    up of one fault source.
 
     Side effect:
     * Update `undetected_combinations` with the undetected combination of faults if it is valid
     i.e. comprises distinct fault sources.
     """
-    # check for duplicate sources
-    sources: set[FaultSource] = set()
+    current_sources: set[FaultSource] = set()
+    current_count: int = 1
     unsorted_denominators: list[int] = []
-    tot = 1
-    for source, count in candidate:
-        if source in sources:
+    for sources, count in candidate:
+        if not current_sources.isdisjoint(sources):  # check for duplicate sources
             return
-        _, name, _ = source
-        unsorted_denominators.append(fault_count(name))
-        tot *= count
-        sources.add(source)
+        current_sources.update(sources)
+        current_count *= count
+        unsorted_denominators.extend(fault_count(name) for _, name, _ in sources)
     denominators = tuple(sorted(unsorted_denominators))
-    undetected_combinations[effect][denominators] += tot
+    undetected_combinations[effect][denominators] += current_count
