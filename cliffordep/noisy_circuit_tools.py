@@ -338,12 +338,12 @@ class CultivationCircuit:
             for syndrome_counter in trivial_syndrome_combos:
                 options = _syndrome_counter_to_options(effect_maps, syndrome_counter, data_qubit_count)
                 for segment_product in itertools.product(*(option.items() for option in options)):
-                    # TODO: iterate through segment_product once
+                    # note: this is just as fast as iterating through `segment_product` once
                     product_effect = unsigned_str(math.prod(
                         (stim.PauliString(effect) for effect, _ in segment_product),
-                        start=stim.PauliString(data_qubit_count)
-                    ))
-                    candidates = itertools.product(*(valid_segments.items() for _, valid_segments in segment_product))                    
+                        start=stim.PauliString(data_qubit_count)))
+                    candidates = itertools.product(*(
+                        valid_segments.items() for _, valid_segments in segment_product))
                     for candidate in candidates:
                         _process_candidate(result, product_effect, candidate)
         if print_progress:
