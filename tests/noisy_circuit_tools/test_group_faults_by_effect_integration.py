@@ -1,4 +1,3 @@
-from collections import Counter
 import itertools
 
 import stim
@@ -6,7 +5,7 @@ import pytest
 
 import cliffordep
 from cliffordep.noisy_circuit_tools import _get_anticommuting_paulis, CultivationCircuit
-from cliffordep.type_aliases import FaultSource, EffectMap
+from cliffordep.type_aliases import EffectMap
 
 
 class TestD3DoubleCatCheck():
@@ -35,5 +34,5 @@ class TestD3DoubleCatCheck():
                 string_2 = stim.PauliString(resultant_pauli_2)
                 prod = string_1 * string_2
                 if not any(name=='MX' for _, name, _ in (faults_1|faults_2).keys()):
-                    for index in cliffordep.circuits.D3_DOUBLE_CAT_CHECK_ANCILLA_INDICES:
+                    for index in cliffordep.circuits.D3DoubleCatCheckA6.ANCILLA_INDICES:
                         assert prod[index] not in _get_anticommuting_paulis('MX')

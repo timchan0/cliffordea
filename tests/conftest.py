@@ -11,7 +11,7 @@ from cliffordep.type_aliases import Fault, FaultSource
 @pytest.fixture
 def noisy_d3_double_cat_check_circuit():
     """Noisy version of the distance-3 double cat check circuit."""
-    circuit = cliffordep.circuits.D3_DOUBLE_CAT_CHECK
+    circuit = cliffordep.circuits.D3DoubleCatCheckA6.INNER_CIRCUIT
     noisy_circuit = cliffordep.noise.uniformly_depolarize(circuit, noise_level=1e-3)
     # remove last layer of depolarizing noise
     noisy_circuit = noisy_circuit[:-1]
@@ -23,10 +23,10 @@ def noisy_d3_double_cat_check(noisy_d3_double_cat_check_circuit: stim.Circuit):
     """Noisy version of the distance-3 double cat check circuit."""
     return cliffordep.CultivationCircuit(
         noisy_d3_double_cat_check_circuit,
-        data_indices=cliffordep.circuits.D3_DOUBLE_CAT_CHECK_DATA_INDICES,
-        stabilizer_generators=cliffordep.circuits.D3_DOUBLE_CAT_CHECK_STABILIZER_GENERATORS,
-        logical_x=cliffordep.circuits.D3_DOUBLE_CAT_CHECK_LOGICAL_X,
-        logical_z=cliffordep.circuits.D3_DOUBLE_CAT_CHECK_LOGICAL_Z,
+        data_indices=cliffordep.circuits.D3DoubleCatCheckA6.DATA_INDICES,
+        stabilizer_generators=cliffordep.circuits.D3DoubleCatCheckA6.STABILIZER_GENERATORS,
+        logical_x=cliffordep.circuits.D3DoubleCatCheckA6.LOGICAL_X,
+        logical_z=cliffordep.circuits.D3DoubleCatCheckA6.LOGICAL_Z,
     )
 
 
@@ -43,8 +43,8 @@ def noisy_d3_double_cat_check_brute(noisy_d3_double_cat_check_circuit: stim.Circ
     """Noisy version of the distance-3 double cat check circuit for brute-force analysis."""
     return BruteCultivationCircuit(
         noisy_d3_double_cat_check_circuit,
-        data_indices=cliffordep.circuits.D3_DOUBLE_CAT_CHECK_DATA_INDICES,
-        stabilizer_generators=cliffordep.circuits.D3_DOUBLE_CAT_CHECK_STABILIZER_GENERATORS,
-        logical_x=cliffordep.circuits.D3_DOUBLE_CAT_CHECK_LOGICAL_X,
-        logical_z=cliffordep.circuits.D3_DOUBLE_CAT_CHECK_LOGICAL_Z,
+        data_indices=cliffordep.circuits.D3DoubleCatCheckA6.DATA_INDICES,
+        stabilizer_generators=cliffordep.circuits.D3DoubleCatCheckA6.STABILIZER_GENERATORS,
+        logical_x=cliffordep.circuits.D3DoubleCatCheckA6.LOGICAL_X,
+        logical_z=cliffordep.circuits.D3DoubleCatCheckA6.LOGICAL_Z,
     )
