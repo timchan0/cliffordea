@@ -7,16 +7,20 @@ A Python package to analyze the propagation of Clifford errors.
 ### Using Conda
 Create environment called `cliffordep`:
 
-`conda env create -f environment.yml`
+```bash
+conda env create -f environment.yml
+```
 
 Activate the environment:
 
-`conda activate cliffordep`
+```bash
+conda activate cliffordep
+```
 
-Install the `cliffordep` package in editable mode:
+Install the `cliffordep` package in editable mode (and its dependencies from pip):
 
 ```bash
-pip install -e . --no-build-isolation --no-deps
+python -m pip install -e . --no-build-isolation --no-deps
 ```
 
 ### Using Pip (Untested)

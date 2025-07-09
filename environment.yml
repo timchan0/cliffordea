@@ -3,7 +3,6 @@ channels:
   - conda-forge
 dependencies:
   - python
-  - setuptools
   - ipykernel
   - ipywidgets
   - matplotlib
@@ -12,6 +11,7 @@ dependencies:
   - scipy
   - snakeviz
   - statsmodels
+  - hatch
   - pip
   - pip:
       - ldpc
