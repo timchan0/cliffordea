@@ -76,9 +76,9 @@ def undetected_combinations(
                         (stim.PauliString(effect) for _, effect in pair),
                         start=stim.PauliString()
                     )
-                    fault_counts = tuple(sorted([
+                    fault_counts = tuple(sorted(
                         fault_count(source_name)
-                        for (_, source_name, _), _ in combo]))
+                        for (_, source_name, _), _ in combo))
                     result[unsigned_str(product_string)][fault_counts] += 1
     return dict(result)
 
