@@ -56,15 +56,15 @@ def undetected_combinations(
     * `length` the length of combinations to find.
 
     Output:
-    * a map from each effect to a counter of `length`-tuples of denominators.
-    Each denominator represents a fault such that if all in the tuple occur,
-    the syndrome will be trivial.
+    * a map from each effect to a counter of denominators.
+    Each denominator divides the noise level to equal
+    the probability an instance of that undetected combination occurs.
     """
-    result: defaultdict[str, Counter[tuple[int, ...]]] = defaultdict(Counter)
+    result: defaultdict[str, Counter[int]] = defaultdict(Counter)
     if length == 0:
         first_fault_dict, *_ = effect_maps.values()
         (_, first_effect), *_ = first_fault_dict.values()
-        result['_'*len(first_effect)][()] += 1
+        result['_'*len(first_effect)][1] += 1
     else:
         combos = itertools.combinations(effect_maps.items(), length)
         for combo in combos:
@@ -76,9 +76,9 @@ def undetected_combinations(
                         (stim.PauliString(effect) for _, effect in pair),
                         start=stim.PauliString()
                     )
-                    fault_counts = tuple(sorted(
+                    fault_counts = prod(
                         fault_count(source_name)
-                        for (_, source_name, _), _ in combo))
+                        for (_, source_name, _), _ in combo)
                     result[unsigned_str(product_string)][fault_counts] += 1
     return dict(result)
 

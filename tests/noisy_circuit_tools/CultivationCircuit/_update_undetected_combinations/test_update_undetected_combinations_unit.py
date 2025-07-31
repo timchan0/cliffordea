@@ -31,7 +31,7 @@ def test_2_source_types(dummy_fault_count, update_undetected_combinations):
         ]
         update_undetected_combinations(undetected_combinations, effect, candidate)
         assert undetected_combinations == defaultdict(Counter, {
-            effect: Counter({(1, 3): 2})
+            effect: Counter({3: 2})
         })
     finally:
         globals()['fault_count'] = orig_fault_count
@@ -50,7 +50,7 @@ def test_3_source_types(dummy_fault_count, update_undetected_combinations):
         ]
         update_undetected_combinations(undetected_combinations, effect, candidate)
         assert undetected_combinations == defaultdict(Counter, {
-            effect: Counter({(1, 3, 15): 10})
+            effect: Counter({3*15: 10})
         })
     finally:
         globals()['fault_count'] = orig_fault_count

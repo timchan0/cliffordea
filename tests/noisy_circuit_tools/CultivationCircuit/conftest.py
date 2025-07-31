@@ -1,5 +1,6 @@
 from collections import Counter, defaultdict
 from collections.abc import Iterable
+import math
 
 import pytest
 
@@ -12,7 +13,7 @@ def update_undetected_combinations():
     """Update `undetected_combinations` with a candidate undetected combination of faults.
 
     Input:
-    * `undetected_combinations` maps each effect to a counter of denominators for each combination.
+    * `undetected_combinations` maps each effect to a counter of denominators.
     * `effect` the resultant (unsigned) Pauli string of the candidate combination.
     * `candidate` a sequence (whose length equals that of the candidate combination)
     of pairs each containing:
@@ -24,7 +25,7 @@ def update_undetected_combinations():
     i.e. comprises distinct fault sources.
     """
     def f(
-        undetected_combinations: defaultdict[str, Counter[tuple[int, ...]]],
+        undetected_combinations: defaultdict[str, Counter[int]],
         effect: str,
         candidate: Iterable[tuple[FaultSource, int]],
 ):
@@ -39,6 +40,6 @@ def update_undetected_combinations():
             unsorted_denominators.append(fault_count(name))
             tot *= count
             sources.add(source)
-        denominators = tuple(sorted(unsorted_denominators))
+        denominators = math.prod(unsorted_denominators)
         undetected_combinations[effect][denominators] += tot
     return f

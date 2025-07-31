@@ -2,20 +2,20 @@ from collections import Counter
 from collections.abc import Iterable
 from typing import Literal
 
-from math import prod
-
 def error_rate_per_kept_shot(
         all_string_leads: list[tuple[
-            dict[str, tuple[float, Counter[tuple[int, ...]]]],
-            dict[str, tuple[float, Counter[tuple[int, ...]]]],
+            dict[str, tuple[float, Counter[int]]],
+            dict[str, tuple[float, Counter[int]]],
         ]],
         noise_level: float,
         print_progress: bool = False,
 ) -> float:
+    p_odds = noise_level / (1 - noise_level)
     identity_odds, error_odds = 0, 0
     for length, (identity_strings, error_strings) in enumerate(all_string_leads):
-        i_odds = _sum_odds(identity_strings.values(), noise_level)
-        e_odds = _sum_odds(error_strings.values(), noise_level)
+        single_odds = p_odds**length
+        i_odds = single_odds * _get_normalized_counts(identity_strings.values())
+        e_odds = single_odds * _get_normalized_counts(error_strings.values())
         identity_odds += i_odds
         error_odds += e_odds
         if print_progress:
@@ -24,24 +24,14 @@ def error_rate_per_kept_shot(
             print(f'Error odds = {e_odds}')
     return error_odds / (identity_odds + error_odds)
 
-def _sum_odds(
-        probability_counter_pairs: Iterable[tuple[float, Counter[tuple[int, ...]]]],
-        noise_level: float,
-) -> float:
+def _get_normalized_counts(probability_counter_pairs: Iterable[tuple[float, Counter[int]]]) -> float:
     return sum(
-        probability_kept * _counter_to_odds(counter, noise_level)
+        probability_kept * _counter_to_normalized_total(counter)
         for probability_kept, counter in probability_counter_pairs
     )
 
-def _counter_to_odds(
-        counter: Counter[tuple[int, ...]],
-        noise_level: float,
-) -> float:
-    ans = 0
-    for denominators, count in counter.items():
-        ans += count * (noise_level/(1-noise_level))**len(denominators) / prod(
-            denominator for denominator in denominators)
-    return ans
+def _counter_to_normalized_total(counter: Counter[int]) -> float:
+    return sum(count / denominator for denominator, count in counter.items())
 
 def parity_probability(parity: Literal[0, 1], probabilities: Iterable[float]):
     """Calculate the probability of an odd or even number of events occurring.

@@ -44,24 +44,24 @@ class TestUndetectedCombinationsOnD3DoubleCatCheck():
         trivial_effect = '_'*7
         assert len(result) == 1
         assert trivial_effect in result
-        assert result[trivial_effect] == Counter({(): 1})
+        assert result[trivial_effect] == Counter({1: 1})
 
     def test_length_0(self, noisy_d3_double_cat_check: CultivationCircuit, d3_double_cat_check_effect_maps: dict[tuple[bool, ...], EffectMap]):
-        goal: defaultdict[str, Counter[tuple[int, ...]]] = defaultdict(Counter)
+        goal: defaultdict[str, Counter[int]] = defaultdict(Counter)
         first_effect_map, *_ = d3_double_cat_check_effect_maps.values()
         first_effect, *_ = first_effect_map.keys()
-        goal['_'*len(first_effect)][()] += 1
+        goal['_'*len(first_effect)][1] += 1
 
         result = noisy_d3_double_cat_check._get_undetected_fault_combinations_for_length(d3_double_cat_check_effect_maps, length=0)
         assert result == dict(goal)
 
     def test_length_1(self, noisy_d3_double_cat_check: CultivationCircuit, d3_double_cat_check_effect_maps: dict[tuple[bool, ...], EffectMap]):
-        goal: defaultdict[str, Counter[tuple[int, ...]]] = defaultdict(Counter)
+        goal: defaultdict[str, Counter[int]] = defaultdict(Counter)
         for syndrome, effect_map in d3_double_cat_check_effect_maps.items():
             if not any(syndrome):
                 for effect, counter in effect_map.items():
                     for (_, source_name, _), count in counter.items():
-                        goal[effect][fault_count(source_name),] += count
+                        goal[effect][fault_count(source_name)] += count
 
         result = noisy_d3_double_cat_check._get_undetected_fault_combinations_for_length(d3_double_cat_check_effect_maps, length=1)
         assert result == dict(goal)
@@ -72,7 +72,7 @@ class TestUndetectedCombinationsOnD3DoubleCatCheck():
             d3_double_cat_check_effect_maps: dict[tuple[bool, ...], EffectMap],
             update_undetected_combinations,
     ):
-        goal: defaultdict[str, Counter[tuple[int, ...]]] = defaultdict(Counter)
+        goal: defaultdict[str, Counter[int]] = defaultdict(Counter)
         length = 2
         for effect_map in d3_double_cat_check_effect_maps.values():
 

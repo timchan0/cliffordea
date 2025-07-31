@@ -1,5 +1,6 @@
 from collections import defaultdict, Counter
 import itertools
+import math
 
 import stim
 
@@ -18,7 +19,7 @@ def test_1_effect(dummy_fault_count, update_undetected_combinations):
         update_undetected_combinations(undetected_combinations, effect, candidate_1)
         update_undetected_combinations(undetected_combinations, effect, candidate_2)
         assert undetected_combinations == defaultdict(Counter, {
-            effect: Counter({(1, 1): 7})
+            effect: Counter({1: 7})
         })
     finally:
         globals()['fault_count'] = orig_fault_count
@@ -40,8 +41,8 @@ def test_multiple_effects(dummy_fault_count, update_undetected_combinations):
         update_undetected_combinations(undetected_combinations, effect_2, candidate_2)
         update_undetected_combinations(undetected_combinations, effect_3, candidate_3)
         assert undetected_combinations == defaultdict(Counter, {
-            effect_1: Counter({(1, 1): 1}),
-            effect_2: Counter({(1, 15): 2}),
+            effect_1: Counter({1: 1}),
+            effect_2: Counter({15: 2}),
         })
     finally:
         globals()['fault_count'] = orig_fault_count
@@ -70,10 +71,10 @@ def test_length_2_candidates(dummy_fault_count, update_undetected_combinations):
             goal = defaultdict(Counter)
             (source_1, count_1), (source_2, count_2) = candidate
             if source_1 != source_2:
-                denominators = tuple(sorted([
+                denominators = math.prod((
                                 fault_count(source_1[1]),
                                 fault_count(source_2[1]),
-                            ]))
+                            ))
                 goal[effect][denominators] += count_1 * count_2
 
             assert undetected_combinations == goal
