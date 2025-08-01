@@ -57,7 +57,7 @@ def undetected_combinations(
 
     Output:
     * a map from each effect to a counter of denominators.
-    Each denominator divides the noise level to equal
+    Each denominator divides (noise level)^length to equal
     the probability an instance of that undetected combination occurs.
     """
     result: defaultdict[str, Counter[int]] = defaultdict(Counter)

@@ -74,14 +74,14 @@ class CultivationCircuit:
         """Find all combinations of faults up to `max_order` that have trivial syndrome.
 
         Input:
-        * `max_order` the maximum order of probability to consider event account for.
+        * `max_order` the maximum order of probability to consider.
         * `print_progress` whether to print progress.
 
         Output:
         * A list whose kth entry is a map
         from each effect to a counter of denominators.
-        Each denominator divides the noise level to equal
-        the probability an instance of that undetected combination occurs.
+        Each denominator divides (noise level)^k to equal
+        the probability an instance of that undetected combination of k faults occurs.
         """
         effect_maps = self.group_faults_by_effect()
         if print_progress:
@@ -227,7 +227,7 @@ class CultivationCircuit:
         """Group all possible faults in a noisy circuit by their source Stim gate.
 
         Output:
-        * A map from a `FaultSource` to a set `Fault`s.`
+        * A map from a `FaultSource` to a set `Fault`s.
         """
         _faults: defaultdict[FaultSource, set[Fault]] = defaultdict(set)
         for timeslice, layer in enumerate(split_by_ticks(self.noisy_circuit)):
@@ -275,7 +275,7 @@ class CultivationCircuit:
 
         Input:
         * `combinations_of_order` a map from each effect to a counter of denominators.
-        Each denominator divides the noise level to equal
+        Each denominator divides (noise level)^order to equal
         the probability an instance of that undetected combination occurs.
         * `cultivated_state` the target logical state cultivated.
         * `order` an optional parameter used only for printing progress.
@@ -321,7 +321,7 @@ class CultivationCircuit:
 
         Output:
         * a map from each effect to a counter of denominators.
-        Each denominator divides the noise level to equal
+        Each denominator divides (noise level)^length to equal
         the probability an instance of that undetected combination occurs.
         """
         data_qubit_count = len(self.DATA_INDICES)
