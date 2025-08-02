@@ -1,16 +1,13 @@
-import numpy as np
-import numpy.typing as npt
 import pytest
 
-from cliffordep import brute_force
-from cliffordep.noisy_circuit_tools import CultivationCircuit
-from cliffordep.type_aliases import EffectMap, FaultSource, Fault
+from cliffordep.brute_force import FaultSourceBruteForceCombinator
+from cliffordep.noisy_circuit_tools import FaultSourceCombinator
 
 
 class TestGroupFaultsByEffect():
 
-    def test_sum_len_effect_maps(self, d3_double_cat_check_effect_maps: dict[tuple[bool, ...], EffectMap]):
-        assert sum(len(effect_map) for effect_map in d3_double_cat_check_effect_maps.values()) == 158
+    def test_sum_len_faults(self, d3_double_cat_check_fault_source_combinator: FaultSourceCombinator):
+        assert sum(len(faults) for faults in d3_double_cat_check_fault_source_combinator.values()) == 158
 
 
 class TestUndetectedCombinationsOnD3DoubleCatCheck():
@@ -19,11 +16,10 @@ class TestUndetectedCombinationsOnD3DoubleCatCheck():
     @pytest.mark.parametrize("length", [0, 1, 2])
     def test_against_brute_force(
         self,
-        noisy_d3_double_cat_check: CultivationCircuit,
-        d3_double_cat_check_effect_maps: dict[tuple[bool, ...], EffectMap],
-        d3_double_cat_check_group_brute: dict[FaultSource, dict[Fault, tuple[npt.NDArray[np.bool_], str]]],
+        d3_double_cat_check_fault_source_combinator: FaultSourceCombinator,
+        d3_double_cat_check_brute: FaultSourceBruteForceCombinator,
         length: int,
     ):
-        result_1 = noisy_d3_double_cat_check._get_undetected_fault_combinations_for_length(d3_double_cat_check_effect_maps, length=length)
-        result_2 = brute_force.undetected_combinations(d3_double_cat_check_group_brute, length=length)
+        result_1 = d3_double_cat_check_fault_source_combinator._get_undetected_fault_combinations_for_length(length)
+        result_2 = d3_double_cat_check_brute._get_undetected_fault_combinations_for_length(length)
         assert result_1 == result_2

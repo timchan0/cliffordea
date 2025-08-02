@@ -1,11 +1,9 @@
-import numpy as np
-import numpy.typing as npt
 import pytest
 import stim
 
 import cliffordep
-from cliffordep.brute_force import BruteCultivationCircuit
-from cliffordep.type_aliases import Fault, FaultSource
+from cliffordep.noisy_circuit_tools import CultivationCircuit
+from cliffordep.brute_force import FaultSourceBruteForceCombinator
 
 
 @pytest.fixture
@@ -31,20 +29,6 @@ def noisy_d3_double_cat_check(noisy_d3_double_cat_check_circuit: stim.Circuit):
 
 
 @pytest.fixture
-def d3_double_cat_check_group_brute(noisy_d3_double_cat_check_brute: BruteCultivationCircuit) -> dict[
-    FaultSource, dict[Fault, tuple[npt.NDArray[np.bool_], str]]]:
-    """Output of `brute_force.group_faults_by_source` for the distance-3 double cat check circuit."""
-    effect_maps = noisy_d3_double_cat_check_brute.group_faults_by_source()
-    return effect_maps
-
-
-@pytest.fixture
-def noisy_d3_double_cat_check_brute(noisy_d3_double_cat_check_circuit: stim.Circuit):
-    """Noisy version of the distance-3 double cat check circuit for brute-force analysis."""
-    return BruteCultivationCircuit(
-        noisy_d3_double_cat_check_circuit,
-        data_indices=cliffordep.circuits.D3DoubleCatCheckA6.DATA_INDICES,
-        stabilizer_generators=cliffordep.circuits.D3DoubleCatCheckA6.STABILIZER_GENERATORS,
-        logical_x=cliffordep.circuits.D3DoubleCatCheckA6.LOGICAL_X,
-        logical_z=cliffordep.circuits.D3DoubleCatCheckA6.LOGICAL_Z,
-    )
+def d3_double_cat_check_brute(noisy_d3_double_cat_check: CultivationCircuit) -> FaultSourceBruteForceCombinator:
+    """Fault source brute-force combinator for the distance-3 double cat check circuit."""
+    return FaultSourceBruteForceCombinator(noisy_d3_double_cat_check)

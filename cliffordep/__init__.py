@@ -1,9 +1,9 @@
 from cliffordep.noiseless_circuit_tools import split_by_ticks, compose_slices, insert_fault
-from cliffordep.noisy_circuit_tools import restrict_to_data, CultivationCircuit
+from cliffordep.noisy_circuit_tools import restrict_to_data, CultivationCircuit, FaultSourceCombinator
+from cliffordep.brute_force import FaultSourceBruteForceCombinator
 from cliffordep.constants import DEPOLARIZE2_FAULTS
 from cliffordep.explained_error_tools import insert_circuit_error_locations, insert_explained_errors
 from cliffordep.pauli_string_tools import unsigned_str, push_through_transversal, CliffordString
-from cliffordep.probability_tools import error_rate_per_kept_shot
 from cliffordep import noise
 from cliffordep import circuits
 from cliffordep import brute_force

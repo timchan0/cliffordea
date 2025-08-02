@@ -1,17 +1,17 @@
 import numpy as np
 import pytest
 
-from cliffordep.brute_force import _any_defects
+from cliffordep.brute_force import FaultSourceBruteForceCombinator
 
 def test_1():
-    assert _any_defects([np.array([True, False, True])])
+    assert FaultSourceBruteForceCombinator._any_defects([np.array([True, False, True])])
 
 def test_2():
     syndromes = (
         np.array([True, False, False]),
         np.array([True, True, False]),
     )
-    assert _any_defects(syndromes)
+    assert FaultSourceBruteForceCombinator._any_defects(syndromes)
 
 def test_length_1():
     syndromes = (
@@ -19,7 +19,7 @@ def test_length_1():
         np.array([False]),
         np.array([False]),
     )
-    assert _any_defects(syndromes)
+    assert FaultSourceBruteForceCombinator._any_defects(syndromes)
 
 def test_all_false():
     syndromes = (
@@ -27,7 +27,7 @@ def test_all_false():
         np.array([False, False, False]),
         np.array([False, False, False]),
     )
-    assert not _any_defects(syndromes)
+    assert not FaultSourceBruteForceCombinator._any_defects(syndromes)
 
 def test_all_true():
     syndromes = (
@@ -35,7 +35,7 @@ def test_all_true():
         np.array([True, True, True]),
         np.array([True, True, True]),
     )
-    assert _any_defects(syndromes)
+    assert FaultSourceBruteForceCombinator._any_defects(syndromes)
 
 def test_mixed():
     syndromes = (
@@ -43,7 +43,7 @@ def test_mixed():
         np.array([False, True, True]),
         np.array([True, True, False]),
     )
-    assert not _any_defects(syndromes)
+    assert not FaultSourceBruteForceCombinator._any_defects(syndromes)
 
 def test_different_lengths():
     syndromes = (
@@ -51,4 +51,4 @@ def test_different_lengths():
         np.array([False, True, True]),
     )
     with pytest.raises(ValueError):
-        _any_defects(syndromes)
+        FaultSourceBruteForceCombinator._any_defects(syndromes)

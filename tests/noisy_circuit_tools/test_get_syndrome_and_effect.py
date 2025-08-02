@@ -20,7 +20,7 @@ class TestD3DoubleCatCheck:
             ungrouped: set[Fault],
             noisy_d3_double_cat_check: CultivationCircuit,
     ):
-        """Test the correctness of `group_faults_by_effect`
+        """Test the correctness of `group_faults_by_source`
         by comparing results with a `stim.FlipSimulator`.
         """
         sim = stim.FlipSimulator(
@@ -38,7 +38,7 @@ class TestD3DoubleCatCheck:
             fault: Fault,
     ):
 
-        syndrome, effect = circuit._get_syndrome_and_effect(fault)
+        syndrome, effect = circuit.get_syndrome_and_effect(fault)
         
         timeslice, name, targets = fault
         if name.startswith('M'):
@@ -90,7 +90,7 @@ def test_measurement_fault_gives_syndrome():
     circuit._measurement_to_detectors = {(0, 0): {0}}
     fault = (0, "MZ", (stim.GateTarget(0),))
     # For a 1-qubit, 1-detector circuit, measurement at (0, 0) flips detector 0
-    syndrome, effect = circuit._get_syndrome_and_effect(fault)
+    syndrome, effect = circuit.get_syndrome_and_effect(fault)
     assert np.array_equal(syndrome, np.array([True]))
     assert effect == "_"
 
@@ -109,7 +109,7 @@ def test_pauli_fault_gives_effect_and_syndrome():
     )
     # Fault: X_ERROR at timeslice 0, qubit 0 (after H)
     fault = (0, "X_ERROR", (stim.GateTarget(0),))
-    syndrome, effect = circuit._get_syndrome_and_effect(fault)
+    syndrome, effect = circuit.get_syndrome_and_effect(fault)
     # X anticommutes with MZ, so syndrome flips
     assert np.array_equal(syndrome, np.array([True]))
     assert effect == "X"
@@ -126,7 +126,7 @@ def test_no_syndrome_for_commuting_pauli():
     )
     # Fault: Z_ERROR at timeslice 0, qubit 0 (commutes with MZ)
     fault = (0, "Z_ERROR", (stim.GateTarget(0),))
-    syndrome, effect = circuit._get_syndrome_and_effect(fault)
+    syndrome, effect = circuit.get_syndrome_and_effect(fault)
     assert np.array_equal(syndrome, np.array([False]))
     assert effect == "Z"
 
@@ -141,13 +141,13 @@ def test_reset_removes_pauli():
         logical_z=stim.PauliString(),
     )
     fault = (0, "X_ERROR", (stim.GateTarget(0),))
-    _, effect = circuit._get_syndrome_and_effect(fault)
+    _, effect = circuit.get_syndrome_and_effect(fault)
     # After reset, effect should be identity
     assert effect == "_"
 
 def test_multiple_qubits_and_detectors(multi_qubit_detector_circuit: CultivationCircuit):
     fault = (0, "X_ERROR", (stim.GateTarget(1),))
-    syndrome, effect = multi_qubit_detector_circuit._get_syndrome_and_effect(fault)
+    syndrome, effect = multi_qubit_detector_circuit.get_syndrome_and_effect(fault)
     # X on qubit 1 after CX is X1
     assert effect == "_X"
     # Should only flip detector 1 if X on 1 anticommutes with MZ 1

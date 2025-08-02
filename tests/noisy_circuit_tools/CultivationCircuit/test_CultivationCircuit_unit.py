@@ -3,9 +3,8 @@ import itertools
 from collections import Counter, defaultdict
 import stim
 
-from cliffordep.noisy_circuit_tools import CultivationCircuit, fault_count
+from cliffordep.noisy_circuit_tools import CultivationCircuit, fault_count, FaultSourceCombinator
 from cliffordep.pauli_string_tools import unsigned_str
-from cliffordep.type_aliases import EffectMap
 
 
 class TestMeasurementToDetectors:
@@ -39,42 +38,41 @@ class TestNoiselessLayers:
 class TestUndetectedCombinationsOnD3DoubleCatCheck():
     """Tests on the `d3_double_cat_check` circuit."""
 
-    def test_length_0_exact(self, noisy_d3_double_cat_check: CultivationCircuit, d3_double_cat_check_effect_maps: dict[tuple[bool, ...], EffectMap]):
-        result = noisy_d3_double_cat_check._get_undetected_fault_combinations_for_length(d3_double_cat_check_effect_maps, length=0)
+    def test_length_0_exact(self, d3_double_cat_check_fault_source_combinator: FaultSourceCombinator):
+        result = d3_double_cat_check_fault_source_combinator._get_undetected_fault_combinations_for_length(0)
         trivial_effect = '_'*7
         assert len(result) == 1
         assert trivial_effect in result
         assert result[trivial_effect] == Counter({1: 1})
 
-    def test_length_0(self, noisy_d3_double_cat_check: CultivationCircuit, d3_double_cat_check_effect_maps: dict[tuple[bool, ...], EffectMap]):
+    def test_length_0(self, d3_double_cat_check_fault_source_combinator: FaultSourceCombinator):
         goal: defaultdict[str, Counter[int]] = defaultdict(Counter)
-        first_effect_map, *_ = d3_double_cat_check_effect_maps.values()
+        first_effect_map, *_ = d3_double_cat_check_fault_source_combinator.values()
         first_effect, *_ = first_effect_map.keys()
         goal['_'*len(first_effect)][1] += 1
 
-        result = noisy_d3_double_cat_check._get_undetected_fault_combinations_for_length(d3_double_cat_check_effect_maps, length=0)
+        result = d3_double_cat_check_fault_source_combinator._get_undetected_fault_combinations_for_length(0)
         assert result == dict(goal)
 
-    def test_length_1(self, noisy_d3_double_cat_check: CultivationCircuit, d3_double_cat_check_effect_maps: dict[tuple[bool, ...], EffectMap]):
+    def test_length_1(self, d3_double_cat_check_fault_source_combinator: FaultSourceCombinator):
         goal: defaultdict[str, Counter[int]] = defaultdict(Counter)
-        for syndrome, effect_map in d3_double_cat_check_effect_maps.items():
+        for syndrome, effect_map in d3_double_cat_check_fault_source_combinator.items():
             if not any(syndrome):
                 for effect, counter in effect_map.items():
                     for (_, source_name, _), count in counter.items():
                         goal[effect][fault_count(source_name)] += count
 
-        result = noisy_d3_double_cat_check._get_undetected_fault_combinations_for_length(d3_double_cat_check_effect_maps, length=1)
+        result = d3_double_cat_check_fault_source_combinator._get_undetected_fault_combinations_for_length(1)
         assert result == dict(goal)
 
     def test_length_2(
             self,
-            noisy_d3_double_cat_check: CultivationCircuit,
-            d3_double_cat_check_effect_maps: dict[tuple[bool, ...], EffectMap],
+            d3_double_cat_check_fault_source_combinator: FaultSourceCombinator,
             update_undetected_combinations,
     ):
         goal: defaultdict[str, Counter[int]] = defaultdict(Counter)
         length = 2
-        for effect_map in d3_double_cat_check_effect_maps.values():
+        for effect_map in d3_double_cat_check_fault_source_combinator.values():
 
             # consider pairs (i, j) where i != j
             pairs = itertools.combinations(effect_map.items(), length)
@@ -91,5 +89,5 @@ class TestUndetectedCombinationsOnD3DoubleCatCheck():
                 for candidate in candidates:
                     update_undetected_combinations(goal, product_effect, candidate)
 
-        result = noisy_d3_double_cat_check._get_undetected_fault_combinations_for_length(d3_double_cat_check_effect_maps, length=length)
+        result = d3_double_cat_check_fault_source_combinator._get_undetected_fault_combinations_for_length(length)
         assert result == dict(goal)
