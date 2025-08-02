@@ -1,7 +1,8 @@
 import pytest
 import stim
 
-from cliffordep.noisy_circuit_tools import CultivationCircuit, FaultSourceCombinator
+from cliffordep.combinators import FaultSourceCombinator
+from cliffordep.noisy_circuit_tools import CultivationCircuit
 
 
 @pytest.fixture

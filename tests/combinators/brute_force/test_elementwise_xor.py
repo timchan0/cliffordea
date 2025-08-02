@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from cliffordep.brute_force import FaultSourceBruteForceCombinator
+from cliffordep.combinators import FaultSourceBruteForceCombinator
 
 def test_1():
     assert FaultSourceBruteForceCombinator._any_defects([np.array([True, False, True])])

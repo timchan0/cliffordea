@@ -4,7 +4,8 @@ import stim
 import pytest
 
 import cliffordep
-from cliffordep.noisy_circuit_tools import CultivationCircuit, FaultSourceCombinator
+from cliffordep.combinators import FaultSourceCombinator
+from cliffordep.noisy_circuit_tools import CultivationCircuit
 
 
 class TestD3DoubleCatCheck():

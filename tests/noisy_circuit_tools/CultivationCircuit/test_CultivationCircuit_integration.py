@@ -1,7 +1,6 @@
 import pytest
 
-from cliffordep.brute_force import FaultSourceBruteForceCombinator
-from cliffordep.noisy_circuit_tools import FaultSourceCombinator
+from cliffordep.combinators import FaultSourceCombinator, FaultSourceBruteForceCombinator
 
 
 class TestGroupFaultsByEffect():

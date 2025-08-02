@@ -2,7 +2,7 @@ from collections import defaultdict, Counter
 
 import stim
 
-from cliffordep.noisy_circuit_tools import fault_count
+from cliffordep.combinators import fault_count
 
 def test_duplicate_source(dummy_fault_count, update_undetected_combinations):
     orig_fault_count = fault_count

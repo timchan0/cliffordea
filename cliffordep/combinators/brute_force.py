@@ -9,10 +9,11 @@ import numpy as np
 import numpy.typing as npt
 import stim
 
+from cliffordep.combinators._base import Combinator
 from cliffordep.type_aliases import FaultSource, Fault
-from cliffordep.noisy_circuit_tools import fault_count, CultivationCircuit
+from cliffordep.noisy_circuit_tools import CultivationCircuit
 from cliffordep.pauli_string_tools import unsigned_str
-from cliffordep.combinators import Combinator
+from cliffordep.combinators import fault_count
 
 
 class FaultSourceBruteForceCombinator(Combinator):

@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from cliffordep.noisy_circuit_tools import fault_count
+from cliffordep.combinators import fault_count
 from cliffordep.type_aliases import FaultSource
 
 

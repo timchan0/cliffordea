@@ -4,8 +4,7 @@ from math import prod
 
 import stim
 
-from cliffordep.noisy_circuit_tools import fault_count
-from cliffordep.brute_force import FaultSourceBruteForceCombinator
+from cliffordep.combinators import fault_count, FaultSourceBruteForceCombinator
 from cliffordep.pauli_string_tools import unsigned_str
 
 class TestD3DoubleCatCheck():

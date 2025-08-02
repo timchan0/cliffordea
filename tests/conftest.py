@@ -3,7 +3,7 @@ import stim
 
 import cliffordep
 from cliffordep.noisy_circuit_tools import CultivationCircuit
-from cliffordep.brute_force import FaultSourceBruteForceCombinator
+from cliffordep.combinators import FaultSourceBruteForceCombinator
 
 
 @pytest.fixture

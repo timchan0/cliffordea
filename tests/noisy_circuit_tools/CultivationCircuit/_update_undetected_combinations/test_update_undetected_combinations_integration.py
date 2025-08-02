@@ -4,7 +4,7 @@ import math
 
 import stim
 
-from cliffordep.noisy_circuit_tools import fault_count
+from cliffordep.combinators import fault_count
 
 
 def test_1_effect(dummy_fault_count, update_undetected_combinations):

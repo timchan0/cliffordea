@@ -1,14 +1,13 @@
 import abc
 from collections import Counter
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
-if TYPE_CHECKING:
-    from cliffordep.noisy_circuit_tools import CultivationCircuit
+from cliffordep.noisy_circuit_tools import CultivationCircuit
 
 
 class Combinator(abc.ABC):
     """Class to find all combinations of faults that lead to trivial syndrome.
-    
+
     Instance attributes:
     * `circuit` the `CultivationCircuit` to analyze.
     """
@@ -48,7 +47,7 @@ class Combinator(abc.ABC):
         """
         return [self._get_undetected_fault_combinations_for_length(
             length, print_progress) for length in range(max_order + 1)]
-    
+
 
     def get_kept_strings(
             self,
@@ -60,7 +59,7 @@ class Combinator(abc.ABC):
         dict[str, tuple[float, Counter[int]]],
     ]]:
         """Return all the information needed to reconstruct the logical error probability for any noise level.
-        
+
         Input:
         * `fault_combinations` the output of `get_undetected_fault_combinations`.
         * `cultivated_state` the target logical state cultivated.
@@ -81,7 +80,7 @@ class Combinator(abc.ABC):
                 order=order if print_progress else None,
             ) for order, combinations_of_order in enumerate(fault_combinations)]
         return result
-    
+
 
     def _get_kept_strings(
             self,
@@ -131,9 +130,9 @@ class Combinator(abc.ABC):
             print_progress: bool = False,
     ) -> dict[str, Counter[int]]:
         """Find all combinations of `length` faults that have trivial syndrome.
-        
+
         Helper for `self.get_undetected_fault_combinations()`.
-        
+
         Input:
         * `length` the length of combinations to find.
         * `print_progress` whether to print progress.
