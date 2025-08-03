@@ -1,6 +1,6 @@
 """Module for enumerating faults in noisy stim circuits."""
 
-from collections import defaultdict, Counter
+from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from functools import cached_property
 from typing import Literal
@@ -201,28 +201,13 @@ class CultivationCircuit:
         return logical_vector
 
 
-def restrict_to_data(
-        strings: dict[str, Counter[tuple[int, ...]]],
-        data_indices: Iterable[int],
-        min_weight: int = 0,
-):
-    """Restrict `strings` to only the data qubits and optionally filter by weight.
+    def restrict_to_data(self, effect: str):
+        """Restrict `effect` to only the data qubits.
 
-    Input:
-    * `strings` maps each Pauli string to a Counter of denominator tuples.
-    * `data_indices` a set of indices corresponding to the data qubits.
-    * `min_weight` the minimum weight on the data qubits of the Pauli strings to consider.
+        Input:
+        * `effect` an unsigned Pauli string.
 
-    Output:
-    * a map from each Pauli string,
-    restricted to the data qubits,
-    to a Counter of denominator tuples.
-    If `min_weight` is set,
-    only include Pauli strings with that weight or higher on the data qubits.
-    """
-    filtered: defaultdict[str, Counter[tuple[int, ...]]] = defaultdict(Counter)
-    for string, denominators in strings.items():
-        data_string = stim.PauliString(string[index] for index in data_indices)
-        if data_string.weight >= min_weight:
-            filtered[unsigned_str(data_string)].update(denominators)
-    return dict(filtered)
+        Output:
+        * The unsigned Pauli string restricted to the data qubits.
+        """
+        return ''.join(effect[index] for index in self.DATA_INDICES)

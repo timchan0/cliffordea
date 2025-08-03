@@ -9,9 +9,8 @@ class Combinator(abc.ABC):
     """Class to find all combinations of faults that lead to trivial syndrome.
 
     Instance attributes:
-    * `circuit` the `CultivationCircuit` to analyze.
+    * `circuit` the noisy circuit to analyze.
     """
-
 
     @abc.abstractmethod
     def __init__(
@@ -27,6 +26,12 @@ class Combinator(abc.ABC):
         """
         self.circuit = circuit
 
+
+class BaseFaultSourceCombinator(Combinator):
+    """Group all faults in a noisy circuit.
+    
+    Extends `Combinator`.
+    """
 
     def get_undetected_fault_combinations(
             self,

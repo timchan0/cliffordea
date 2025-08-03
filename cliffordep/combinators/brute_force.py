@@ -9,20 +9,22 @@ import numpy as np
 import numpy.typing as npt
 import stim
 
-from cliffordep.combinators._base import Combinator
+from cliffordep.combinators._base import BaseFaultSourceCombinator
 from cliffordep.type_aliases import FaultSource, Fault
 from cliffordep.noisy_circuit_tools import CultivationCircuit
 from cliffordep.pauli_string_tools import unsigned_str
 from cliffordep.combinators import fault_count
 
 
-class FaultSourceBruteForceCombinator(Combinator):
+class SlowFaultSourceCombinator(BaseFaultSourceCombinator):
     """Group all faults in a noisy circuit by their source Stim gate.
 
-    Extends `Combinator`.
+    Extends `BaseFaultSourceCombinator`.
+    Finds undetected fault combinations by brute force
+    i.e. iterating through all fault combinations
+    and recording which ones have trivial syndrome.
     
-    Instance attributes:
-    * `circuit` the noisy circuit to analyze.
+    Additional instance attributes:
     * `basis` a map from each fault source to another map
     from each of the faults it can produce to a pair containing:
         - `syndrome` a tuple of booleans representing the syndrome of the fault.
@@ -41,7 +43,7 @@ class FaultSourceBruteForceCombinator(Combinator):
             for fault in group:
                 syndrome, effect = circuit.get_syndrome_and_effect(fault)
                 if restrict_to_data:
-                    effect = ''.join(effect[index] for index in circuit.DATA_INDICES)
+                    effect = circuit.restrict_to_data(effect)
                 _basis[source][fault] = (syndrome, effect)
         self.basis = dict(_basis)
         if print_progress:

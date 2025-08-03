@@ -1,6 +1,6 @@
 import pytest
 
-from cliffordep.combinators import FaultSourceCombinator, FaultSourceBruteForceCombinator
+from cliffordep.combinators import FaultSourceCombinator, SlowFaultSourceCombinator
 
 
 class TestGroupFaultsByEffect():
@@ -16,7 +16,7 @@ class TestUndetectedCombinationsOnD3DoubleCatCheck():
     def test_against_brute_force(
         self,
         d3_double_cat_check_fault_source_combinator: FaultSourceCombinator,
-        d3_double_cat_check_brute: FaultSourceBruteForceCombinator,
+        d3_double_cat_check_brute: SlowFaultSourceCombinator,
         length: int,
     ):
         result_1 = d3_double_cat_check_fault_source_combinator._get_undetected_fault_combinations_for_length(length)

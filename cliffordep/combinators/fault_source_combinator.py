@@ -10,7 +10,7 @@ import stim
 from cliffordep.noisy_circuit_tools import CultivationCircuit
 from cliffordep.pauli_string_tools import unsigned_str
 from cliffordep.type_aliases import EffectMap, FaultSource
-from cliffordep.combinators._base import Combinator
+from cliffordep.combinators._base import BaseFaultSourceCombinator
 
 
 def get_trivial_syndrome_combinations(
@@ -55,13 +55,18 @@ def fault_count(source_name: str) -> int:
         raise ValueError(f"Unknown fault source: {source_name}")
 
 
-class FaultSourceCombinator(Combinator):
+class FaultSourceCombinator(BaseFaultSourceCombinator):
     """Group all possible faults in a noisy circuit by their syndrome then effect.
 
-    Extends `Combinator`.
+    Extends `BaseFaultSourceCombinator`.
+    Finds undetected fault combinations first by iterating through all
+    syndrome combinations and recording which ones are trivial.
+    Each syndrome corresponds to a set of fault sources,
+    so for each trivial syndrome combination,
+    this combinator finds all fault source combinations
+    that correspond to this syndrome combination.
 
-    Instance attributes:
-    * `circuit` the noisy circuit to analyze.
+    Additional instance attributes:
     * `basis` a map from each syndrome to an `EffectMap` containing at its lowest level
     faults that cause that syndrome.
     """
@@ -78,9 +83,9 @@ class FaultSourceCombinator(Combinator):
         for source, group in circuit.group_faults_by_source().items():
             for fault in group:
                 syndrome, effect = circuit.get_syndrome_and_effect(fault)
-                tuple_syndrome: tuple[bool] = tuple(syndrome)
+                tuple_syndrome = tuple(syndrome)
                 if restrict_to_data:
-                    effect = ''.join(effect[index] for index in circuit.DATA_INDICES)
+                    effect = circuit.restrict_to_data(effect)
                 _basis[tuple_syndrome][effect][source] += 1
         self.basis = {syndrome: dict(effect_map) for syndrome, effect_map in _basis.items()}
         if print_progress:
@@ -146,12 +151,12 @@ class FaultSourceCombinator(Combinator):
             trivial_syndrome_combos = get_trivial_syndrome_combinations(
                 self.keys(), length)
             for syndrome_counter in trivial_syndrome_combos:
-                options = self._syndrome_counter_to_options(syndrome_counter, len(self.circuit.DATA_INDICES))
+                options = self._syndrome_counter_to_options(syndrome_counter)
                 for segment_product in itertools.product(*(option.items() for option in options)):
                     # note: this is just as fast as iterating through `segment_product` once
+                    # segment_product never empty
                     product_effect = unsigned_str(math.prod(
-                        (stim.PauliString(effect) for effect, _ in segment_product),
-                        start=stim.PauliString(len(self.circuit.DATA_INDICES))))
+                        stim.PauliString(effect) for effect, _ in segment_product)) # type: ignore
                     candidates = itertools.product(*(
                         valid_segments.items() for _, valid_segments in segment_product))
                     for candidate in candidates:
@@ -161,11 +166,7 @@ class FaultSourceCombinator(Combinator):
         return dict(result)
 
 
-    def _syndrome_counter_to_options(
-            self,
-            syndrome_counter: Counter[tuple[bool, ...]],
-            qubit_count: int,
-    ):
+    def _syndrome_counter_to_options(self, syndrome_counter: Counter[tuple[bool, ...]]):
         """Get valid fault combination segments for each syndrome based on the counts in `syndrome_counter`.
 
         Input:
@@ -182,26 +183,20 @@ class FaultSourceCombinator(Combinator):
         """
         options: list[dict[str, Counter[frozenset[FaultSource]]]] = []
         for syndrome, count in syndrome_counter.items():
-            effect_map = self.basis[syndrome]
-            effects_to_valid_segments = self._get_effect_to_valid_segments(
-                effect_map, count, qubit_count)
+            effects_to_valid_segments = self._get_effect_to_valid_segments(syndrome, count)
             options.append(effects_to_valid_segments)
         return options
 
 
-    @classmethod
     def _get_effect_to_valid_segments(
-        cls,
-        effect_map: EffectMap,
+        self,
+        syndrome: tuple[bool, ...],
         length: int,
-        qubit_count: int,
     ):
         """Get a map from effect to the number of valid fault combinations with that resultant effect.
 
         Input:
-        * `effect_map` maps each effect to a map from each fault source
-        to the number of its faults that cause that syndrome and effect.
-        E.g. `{effect1: {source1: 1, source2: 1, source3: 2}, effect2: {source4: 1}}`.
+        * `syndrome` defines the set of faults to take combinations from.
         * `length` the length of valid fault combinations to consider.
 
         Output:
@@ -211,20 +206,22 @@ class FaultSourceCombinator(Combinator):
         with that resultant effect.
         """
         result: defaultdict[str, Counter[frozenset[FaultSource]]] = defaultdict(Counter)
+        effect_map = self.basis[syndrome]
         effect_combos = itertools.combinations_with_replacement(effect_map.keys(), length)
         for effect_combo in effect_combos:
-            # e.g. effect_combo = ('effect1', 'effect1', 'effect2')
+            # e.g. effect_combo = ('effect1', 'effect1', 'effect2') and is never empty
             counter = Counter(effect_combo)
             # e.g. counter = {'effect1': 2, 'effect2': 1}
+            first_effect, *_ = counter.keys()
             product_effect = unsigned_str(math.prod(
                 (stim.PauliString(effect) for effect, count in counter.items() if count % 2),
-                start=stim.PauliString(qubit_count),
+                start=stim.PauliString(len(first_effect)),
             ))
-            options = cls._effect_counter_to_options(effect_map, counter)
+            options = self._effect_counter_to_options(effect_map, counter)
             valid_segments: Counter[frozenset[FaultSource]] = Counter()
             for fault_product in itertools.product(*options):
                 flattened = itertools.chain(*fault_product)
-                cls._process_candidate_segment(valid_segments, flattened)
+                self._process_candidate_segment(valid_segments, flattened)
             if valid_segments:
                 result[product_effect].update(valid_segments)
         return dict(result)

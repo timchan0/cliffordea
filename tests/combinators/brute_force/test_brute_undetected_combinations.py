@@ -4,13 +4,13 @@ from math import prod
 
 import stim
 
-from cliffordep.combinators import fault_count, FaultSourceBruteForceCombinator
+from cliffordep.combinators import fault_count, SlowFaultSourceCombinator
 from cliffordep.pauli_string_tools import unsigned_str
 
 class TestD3DoubleCatCheck():
     """Tests on the `d3_double_cat_check` circuit."""
 
-    def test_length_0_exact(self, d3_double_cat_check_brute: FaultSourceBruteForceCombinator):
+    def test_length_0_exact(self, d3_double_cat_check_brute: SlowFaultSourceCombinator):
         result = d3_double_cat_check_brute._get_undetected_fault_combinations_for_length(0)
         trivial_effect = '_'*7
         assert len(result) == 1
@@ -19,7 +19,7 @@ class TestD3DoubleCatCheck():
     
     def test_length_0(
             self,
-            d3_double_cat_check_brute: FaultSourceBruteForceCombinator
+            d3_double_cat_check_brute: SlowFaultSourceCombinator
     ):
         goal: defaultdict[str, Counter[int]] = defaultdict(Counter)
         first_fault_dict, *_ = d3_double_cat_check_brute.basis.values()
@@ -31,7 +31,7 @@ class TestD3DoubleCatCheck():
 
     def test_length_1(
             self,
-            d3_double_cat_check_brute: FaultSourceBruteForceCombinator
+            d3_double_cat_check_brute: SlowFaultSourceCombinator
     ):
         goal: defaultdict[str, Counter[int]] = defaultdict(Counter)
         for (_, source_name, _), fault_dict_1 in d3_double_cat_check_brute.basis.items():
@@ -44,7 +44,7 @@ class TestD3DoubleCatCheck():
     
     def test_length_2(
             self,
-            d3_double_cat_check_brute: FaultSourceBruteForceCombinator
+            d3_double_cat_check_brute: SlowFaultSourceCombinator
     ):
         length = 2
         goal: defaultdict[str, Counter[int]] = defaultdict(Counter)
