@@ -103,38 +103,6 @@ class FaultSourceCombinator(BaseFaultSourceCombinator):
     def items(self): return self.basis.items()
 
 
-    @classmethod
-    def error_rate_per_kept_shot(
-            cls,
-            all_string_leads: list[tuple[
-                dict[str, tuple[float, Counter[int]]],
-                dict[str, tuple[float, Counter[int]]],
-            ]],
-            noise_level: float,
-            print_progress: bool = False,
-    ) -> float:
-        """Calculate the logical error rate per kept shot for a given noise level.
-
-        Input:
-        * `all_string_leads` the output of `get_kept_strings`.
-        * `noise_level` the noise level to analyze.
-        * `print_progress` whether to print progress.
-        """
-        p_odds = noise_level / (1 - noise_level)
-        identity_odds, error_odds = 0, 0
-        for length, (identity_strings, error_strings) in enumerate(all_string_leads):
-            single_odds = p_odds**length
-            i_odds = single_odds * cls._get_normalized_counts(identity_strings.values())
-            e_odds = single_odds * cls._get_normalized_counts(error_strings.values())
-            identity_odds += i_odds
-            error_odds += e_odds
-            if print_progress:
-                print(f'O(p^{length}) events:')
-                print(f'Identity odds = {i_odds}')
-                print(f'Error odds = {e_odds}')
-        return error_odds / (identity_odds + error_odds)
-
-
     def _get_undetected_fault_combinations_for_length(
             self,
             length: int,
@@ -322,15 +290,3 @@ class FaultSourceCombinator(BaseFaultSourceCombinator):
             current_count *= count
             denominators *= math.prod(fault_count(name) for _, name, _ in sources)
         undetected_combinations[effect][denominators] += current_count
-
-
-    @classmethod
-    def _get_normalized_counts(cls, probability_counter_pairs: Iterable[tuple[float, Counter[int]]]) -> float:
-        return sum(
-            probability_kept * cls._counter_to_normalized_total(counter)
-            for probability_kept, counter in probability_counter_pairs
-        )
-
-    @staticmethod
-    def _counter_to_normalized_total(counter: Counter[int]) -> float:
-        return sum(count / denominator for denominator, count in counter.items())

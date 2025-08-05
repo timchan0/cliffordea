@@ -1,2 +1,3 @@
 from cliffordep.combinators.fault_source_combinator import FaultSourceCombinator, fault_count
-from cliffordep.combinators.brute_force import SlowFaultSourceCombinator
+from cliffordep.combinators.slow_fault_source_combinator import SlowFaultSourceCombinator
+from cliffordep.combinators.error_mechanism_combinator import ErrorMechanismCombinator

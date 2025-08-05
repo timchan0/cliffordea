@@ -25,3 +25,11 @@ EffectMap = dict[str, Counter[FaultSource]]
 when propagated to the end of the circuit as an unsigned Pauli string)
 to a map from each fault source to the number of its faults that cause that effect.
 """
+
+MechanismBag = tuple[int, int, int]
+"""The probability of an error mechanism represented as
+a multiset of independent processes that contribute to the error mechanism.
+There are three types of processes, corresponding to the three counts in the tuple.
+The probability of each process depends on its class and the noise level in a nontrivial way.
+The probability of the error mechanism is the probability of an odd number of its processes occurring.
+"""

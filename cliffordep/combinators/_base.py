@@ -1,5 +1,6 @@
 import abc
 from collections import Counter
+from collections.abc import Iterable
 from typing import Literal
 
 from cliffordep.noisy_circuit_tools import CultivationCircuit
@@ -87,6 +88,39 @@ class BaseFaultSourceCombinator(Combinator):
         return result
 
 
+    @classmethod
+    def error_rate_per_kept_shot(
+            cls,
+            all_string_leads: list[tuple[
+                dict[str, tuple[float, Counter[int]]],
+                dict[str, tuple[float, Counter[int]]],
+            ]],
+            noise_level: float,
+            print_progress: bool = False,
+    ) -> float:
+        """Calculate the logical error rate per kept shot for a given noise level.
+
+        Input:
+        * `all_string_leads` the output of `get_kept_strings`.
+        * `noise_level` the noise level to analyze.
+        * `print_progress` whether to print progress.
+        """
+        p_odds = noise_level / (1 - noise_level)
+        identity_odds, error_odds = 0, 0
+        for length, (identity_strings, error_strings) in enumerate(all_string_leads):
+            single_odds = p_odds**length
+            i_odds = single_odds * cls._get_normalized_counts(identity_strings.values())
+            e_odds = single_odds * cls._get_normalized_counts(error_strings.values())
+            identity_odds += i_odds
+            error_odds += e_odds
+            if print_progress:
+                print(f'O(p^{length}) events:')
+                print(f'Identity odds = {i_odds}')
+                print(f'Error odds = {e_odds}')
+        return error_odds / (identity_odds + error_odds)
+
+
+    # TODO: define as overload method in `Combinator`
     def _get_kept_strings(
             self,
             combinations_of_order: dict[str, Counter[int]],
@@ -147,3 +181,15 @@ class BaseFaultSourceCombinator(Combinator):
         Each denominator divides (noise level)^length to equal
         the probability an instance of that undetected combination occurs.
         """
+
+
+    @classmethod
+    def _get_normalized_counts(cls, probability_counter_pairs: Iterable[tuple[float, Counter[int]]]) -> float:
+        return sum(
+            probability_kept * cls._counter_to_normalized_total(counter)
+            for probability_kept, counter in probability_counter_pairs
+        )
+
+    @staticmethod
+    def _counter_to_normalized_total(counter: Counter[int]) -> float:
+        return sum(count / denominator for denominator, count in counter.items())
