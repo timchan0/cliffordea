@@ -1,61 +1,70 @@
 """Module for manipulating Pauli strings."""
 
+import cmath
+from collections import defaultdict
 from collections.abc import Iterable
+from dataclasses import dataclass
 import itertools
 from typing import Literal
 
+import stim
 from stim import PauliString
 import numpy as np
 from numpy import typing as npt
 
 
-PUSH_THROUGH_Z: dict[int, tuple[str, ...]] = {
-    0: ('I',),
-    1: ('-X',),
-    2: ('-Y',),
-    3: ('Z',),
+PUSH_THROUGH_Z: dict[str, tuple[str, ...]] = {
+    '_': ('I',),
+    'X': ('-X',),
+    'Y': ('-Y',),
+    'Z': ('Z',),
 }
 """A map from each Pauli to the unnormalized superposition of Paulis
 after pushing through a Z gate.
 """
 
-PUSH_THROUGH_S: dict[int, tuple[str, ...]] = {
-    0: ('I',),
-    1: ('Y',),
-    2: ('-X',),
-    3: ('Z',),
+PUSH_THROUGH_S: dict[str, tuple[str, ...]] = {
+    '_': ('I',),
+    'X': ('Y',),
+    'Y': ('-X',),
+    'Z': ('Z',),
 }
 """A map from each Pauli to the unnormalized superposition of Paulis
 after pushing through a S gate.
 """
 
-PUSH_THROUGH_T: dict[int, tuple[str, ...]] = {
-    0: ('I',),
-    1: ('X', 'Y'),
-    2: ('-X', 'Y'),
-    3: ('Z',),
+PUSH_THROUGH_T: dict[str, tuple[str, ...]] = {
+    '_': ('I',),
+    'X': ('X', 'Y'),
+    'Y': ('-X', 'Y'),
+    'Z': ('Z',),
 }
 """A map from each Pauli to the unnormalized superposition of Paulis
 after pushing through a T gate.
 """
 
-PUSH_THROUGH_MAP: dict[Literal['T', 'S', 'Z'], dict[int, tuple[str, ...]]] = {
+PUSH_THROUGH_MAP: dict[Literal['T', 'S', 'Z'], dict[str, tuple[str, ...]]] = {
     'T': PUSH_THROUGH_T,
     'S': PUSH_THROUGH_S,
     'Z': PUSH_THROUGH_Z,
 }  # TODO: test against PauliString.after
 
 
-def unsigned_str(pauli_string: str | PauliString):
+def forget_sign(pauli_string: PauliString):
     """Convert a stim.PauliString to a string without the global phase."""
     return str(pauli_string).replace('+', '').replace('-', '').replace('i', '')
 
 
-def push_through_transversal(pauli_string: PauliString, gate: Literal['T', 'S', 'Z']):
-    """Push a Pauli string through the same gate on each qubit.
+def split_sign(pauli_string: PauliString):
+    """Split a Pauli string into its sign and the unsigned part."""
+    return pauli_string.sign, forget_sign(pauli_string)
+
+
+def push_through_transversal(pauli_string: str, gate: Literal['T', 'S', 'Z']):
+    """Push an _unsigned_ Pauli string through the same gate on each qubit.
     
     Input:
-    * `pauli_string` the initial `PauliString`.
+    * `pauli_string` the unsigned Pauli string.
     * `gate` the gate to push through, either 'T', 'S', or 'Z'.
 
     Output:
@@ -63,17 +72,29 @@ def push_through_transversal(pauli_string: PauliString, gate: Literal['T', 'S', 
     pushing the input through a `gate` on each qubit.
     """
     map = PUSH_THROUGH_MAP[gate]
-    sign = pauli_string.sign
     options: list[tuple[str, ...]] = [map[pauli] for pauli in pauli_string]
-    return CliffordString([sign * _pauli_tuple_to_string(pauli)
-        for pauli in itertools.product(*options)])
+    terms: dict[str, complex] = {}
+    for pauli_tuple in itertools.product(*options):
+        sign, child = split_sign(_tensor_paulis(*pauli_tuple))
+        terms[child] = sign
+    return CliffordString(terms)
 
 
-def _pauli_tuple_to_string(pauli_tuple: tuple[str, ...]):
-    string = PauliString()
-    for pauli in pauli_tuple:
-        string += PauliString(pauli)
-    return string
+def _tensor_paulis(*paulis: str):
+    """Tensor product one or more signed Paulis.
+    
+    Input:
+    * `paulis` a (possibly empty) tuple of signed Paulis e.g. ('X', '-iY').
+
+    Output:
+    * Their tensor product as a `stim.PauliString`.
+    """
+    return sum((PauliString(pauli) for pauli in paulis), start=PauliString())
+
+
+def _reset_qubits(effect: str, indices: set[int]):
+    """Reset specified qubits in an effect."""
+    return ''.join('_' if i in indices else c for i, c in enumerate(effect))
 
 
 SIGNATURE_TO_INDEX = {
@@ -92,38 +113,167 @@ class CliffordString:
     """An error in the form of a superposition of Pauli strings.
     
     Instance attributes:
-    * `terms` a list of signed Pauli strings that make up the superposition.
-    * `denominator_squared` the divisor of each term, squared.
+    * `terms` the Pauli strings that make up the superposition,
+    in the form of a map from each unsigned Pauli string to its unnormalized amplitude.
+    Allowed characters in each Pauli string are `'_', 'X', 'Y', 'Z'`.
+    * `denominator_squared` the divisor of each amplitude, squared.
     """
 
-    def __add__(self, other: 'CliffordString'):
-        """Return the superposition of two Clifford strings."""
-        if not isinstance(other, CliffordString):
-            raise TypeError(f"Cannot add {type(other)} to CliffordString.")
-        return CliffordString(self.terms + other.terms)
+    _PRECISION = 12
 
-    def __init__(self, terms: list[PauliString], denominator_squared: None | float = None):
-        self.terms = terms
-        self.denominator_squared: float = len(terms) if denominator_squared is None else denominator_squared
-        # self.terms_bag = defaultdict(complex)
-        # for term in terms:
-        #     self.terms_bag[unsigned_str(term)] += term.sign
+    def __init__(
+            self,
+            terms: None | dict[str, complex] = None,
+            denominator_squared: None | float = None,
+    ):
+        """Input:
+        * `terms` a map from each unsigned Pauli string to its unnormalized amplitude.
+        Allowed characters in each Pauli string are `'_', 'X', 'Y', 'Z'`.
+        If not specified,
+        the Clifford string is assumed to be zero.
+        * `denominator_squared` the divisor of each amplitude, squared.
+        If not specified,
+        the Clifford string is automatically normalized to 1.
+        """
+        self.terms: defaultdict[str, complex] = defaultdict(complex, {} if terms is None else terms)
+        if denominator_squared is None:
+            self.denominator_squared: float = sum(
+                abs(amplitude)**2 for amplitude in self.terms.values()
+            ) if self.terms else 1
+        else:
+            self.denominator_squared = denominator_squared
 
     def __str__(self):
-        return f'{self.denominator_squared}^(-1/2) ({" ".join(str(term) for term in self.terms)})'
+        return f'{self.denominator_squared}^(-1/2) [{"+".join(
+            f"{sign}{term}" for term, sign in self.terms.items()
+        )}]'
+    
+    def __repr__(self):
+        return f'CliffordString({dict(self.terms)}, {self.denominator_squared})'
+
+    def __mul__(self, rhs: 'int | float | complex | CliffordString'):
+        if isinstance(rhs, (int, float, complex)):
+            return self._scaled(rhs)
+        return self._multiply(self, rhs)
+    
+    def __rmul__(self, lhs: 'int | float | complex | CliffordString'):
+        if isinstance(lhs, (int, float, complex)):
+            return self._scaled(lhs)
+        return self._multiply(lhs, self)
+
+    def _scaled(self, scalar: int | float | complex):
+        """Return a scaled copy of the Clifford string."""
+        return CliffordString(
+            {term: amplitude * scalar for term, amplitude in self.terms.items()},
+            self.denominator_squared,
+        )
+
+    @staticmethod
+    def _multiply(lhs: 'CliffordString', rhs: 'CliffordString'):
+        """Return the product of two Clifford strings."""
+        terms: defaultdict[str, complex] = defaultdict(complex)
+        for l_term, l_amplitude in lhs.terms.items():
+            l_ps = PauliString(l_term)
+            for r_term, r_amplitude in rhs.terms.items():
+                prod_sign, prod_string = split_sign(l_ps * PauliString(r_term))
+                terms[prod_string] += prod_sign * l_amplitude * r_amplitude
+        return CliffordString(terms, lhs.denominator_squared * rhs.denominator_squared)
 
     @property
-    def probability_mass(self):
-        """The probability of the surviving part of the Clifford string after any postselection.
+    def norm_squared(self):
+        numerator = sum(abs(amplitude)**2 for amplitude in self.terms.values())
+        return numerator / self.denominator_squared
+
+    def normalize(self):
+        """Scale the original Clifford string so that its norm is 1."""
+        self.denominator_squared = sum(abs(amplitude)**2 for amplitude in self.terms.values())
+
+    def frozen_copy(self):
+        """Return a frozen and hashable copy of the Clifford string.
         
-        Require:
-        * `self.terms` are all distinct.
+        Side effects:
+        * Casts the original Clifford string into canonical form.
+        """
+        self._canonicalize()
+        return FrozenCliffordString(
+            frozenset(self.terms.items()),
+            self.denominator_squared,
+        )
+
+    def _canonicalize(self):
+        """Cast the Clifford string into canonical form.
+        
+        Canonical form means:
+        * no terms have zero amplitude.
+        * the phase of the lexicographically smallest term is 0.
+        * the magnitude of the smallest amplitude is 1.
+        * all values are rounded to 12 decimal digits.
+        """
+        terms = {term: amplitude for term, amplitude in self.terms.items() if amplitude}
+        if terms:
+            first_term = min(terms.keys())
+            first_phase = cmath.phase(terms[first_term])
+            phase_factor = cmath.exp(1j * first_phase)
+            smallest_magnitude = min(abs(amplitude) for amplitude in terms.values())
+            for term in terms.keys():
+                unrounded = terms[term] / (phase_factor*smallest_magnitude)
+                real = round(unrounded.real, self._PRECISION)
+                imag = round(unrounded.imag, self._PRECISION)
+                terms[term] = complex(real, imag)
+            self.denominator_squared = round(self.denominator_squared / smallest_magnitude**2, self._PRECISION)
+        else:
+            self.denominator_squared = 1
+        self.terms = defaultdict(complex, terms)
+
+    def push_through_unitary(self, unitary: stim.CircuitInstruction):
+        """Push the Clifford string through a unitary gate."""
+        data = stim.gate_data(unitary.name)
+        if data.is_reset or data.produces_measurements:
+            raise ValueError(f"{unitary} is not unitary.")
+        new_terms: defaultdict[str, complex] = defaultdict(complex)
+        for term, amplitude in self.terms.items():
+            sign, unsigned = split_sign(PauliString(term).after(unitary))
+            new_terms[unsigned] += amplitude * sign
+        self.terms = new_terms
+
+    def push_through_reset(self, reset: stim.CircuitInstruction):
+        """Return the result of pushing the Clifford string through a reset instruction.
+        
+        Input:
+        * `reset` the reset instruction to push through.
 
         Output:
-        * The probability mass of the Clifford string whose value is in [0, 1].
+        * `mixture` a mixture of Clifford strings,
+        in the form of a map from each normalized frozen Clifford string to its probability.
+        The sum of these probabilities equals `self.norm_squared`.
+
+        # Examples
+        Pushing `(XX + YY)/sqrt(2)` through a reset on qubit 0 yields...
+        * `_X` with probability 1/2,
+        * `_Y` with probability 1/2.
+        
+        Pushing `(XX + XY + YX + YY)/2` through a reset on qubit 1 yields...
+        * `(X_ + Y_)/sqrt(2)` with probability 1.
         """
-        numerator = sum(abs(a.sign) for a in self.terms)
-        return numerator / self.denominator_squared
+        data = stim.gate_data(reset.name)
+        if not data.is_reset:
+            raise ValueError(f"{reset} is not a reset instruction.")
+        reset_qubits = {target.value for target in reset.targets_copy()}
+        # `clifford_strings` maps the string of Paulis that were reset to a post-reset Clifford string
+        clifford_strings: defaultdict[
+            tuple[str, ...], defaultdict[str, complex]
+        ] = defaultdict(lambda: defaultdict(complex))
+        for term, amplitude in self.terms.items():
+            paulis_reset = tuple(term[index] for index in reset_qubits)
+            term_after = _reset_qubits(term, reset_qubits)
+            clifford_strings[paulis_reset][term_after] += amplitude
+        mixture: defaultdict[FrozenCliffordString, float] = defaultdict(float)
+        for terms in clifford_strings.values():
+            clifford_string = CliffordString(terms, self.denominator_squared)
+            probability = clifford_string.norm_squared
+            clifford_string.normalize()
+            mixture[clifford_string.frozen_copy()] += probability
+        return mixture
 
     def postselect_from_stabilizers(self, stabilizer_generators: Iterable[PauliString]):
         """Kill all terms that do not commute with the stabilizers.
@@ -134,9 +284,13 @@ class CliffordString:
         Side effect:
         * `self.terms` is modified to only include terms that commute with all stabilizers.
         """
-        stabilized: list[PauliString] = [term for term in self.terms if
-        all(term.commutes(stabilizer) for stabilizer in stabilizer_generators)]
-        self.terms = stabilized
+        killed: set[str] = set()
+        for term in self.terms.keys():
+            pauli_string = PauliString(term)
+            if not all(pauli_string.commutes(stabilizer) for stabilizer in stabilizer_generators):
+                killed.add(term)
+        for term in killed:
+            del self.terms[term]
 
     def commutes_or_unknown(self, other: PauliString):
         """Partial predicate for if the Clifford string commutes with a Pauli string.
@@ -144,8 +298,8 @@ class CliffordString:
         When this method returns `True`, the Clifford string definitely commutes with the Pauli string.
         When it returns `None`, the commutation relation is unknown.
         """
-        return True if all(term.commutes(other) for term in self.terms) else None
-    
+        return True if all(PauliString(term).commutes(other) for term in self.terms.keys()) else None
+
     def get_logical_amplitudes(
             self,
             logical_x: PauliString,
@@ -165,12 +319,19 @@ class CliffordString:
         * A 4-vector of normalized amplitudes for the I, X, Y, Z logical classes in the Clifford string.
         """
         amplitudes = np.zeros(4, dtype=np.complex128)
-        for term in self.terms:
+        for term, amplitude in self.terms.items():
+            pauli_string = PauliString(term)
             signature: tuple[bool, bool] = tuple(
-                not term.commutes(logical) for logical in (logical_x, logical_z)) # type: ignore
-            amplitudes[SIGNATURE_TO_INDEX[signature]] += term.sign
+                not pauli_string.commutes(logical) for logical in (logical_x, logical_z)) # type: ignore
+            amplitudes[SIGNATURE_TO_INDEX[signature]] += amplitude
         return LogicalVector(amplitudes / self.denominator_squared**0.5)
-    
+
+
+@dataclass(frozen=True)
+class FrozenCliffordString:
+    terms: frozenset[tuple[str, complex]]
+    denominator_squared: float
+
 
 SQRT2 = 2**0.5
 ANY_ERROR = np.array([0, 1, 1, 1])

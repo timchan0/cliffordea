@@ -5,7 +5,7 @@ import stim
 
 from cliffordep.combinators import FaultSourceCombinator, fault_count
 from cliffordep.noisy_circuit_tools import CultivationCircuit
-from cliffordep.pauli_string_tools import unsigned_str
+from cliffordep.pauli_string_tools import forget_sign
 
 
 class TestMeasurementToDetectors:
@@ -78,7 +78,7 @@ class TestUndetectedCombinationsOnD3DoubleCatCheck():
             # consider pairs (i, j) where i != j
             pairs = itertools.combinations(effect_map.items(), length)
             for (effect_1, counter_1), (effect_2, counter_2) in pairs:
-                product_effect = unsigned_str(stim.PauliString(effect_1) * stim.PauliString(effect_2))
+                product_effect = forget_sign(stim.PauliString(effect_1) * stim.PauliString(effect_2))
                 candidates = itertools.product(counter_1.items(), counter_2.items())
                 for candidate in candidates:
                     update_undetected_combinations(goal, product_effect, candidate)

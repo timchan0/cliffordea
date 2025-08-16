@@ -12,7 +12,7 @@ import stim
 from cliffordep.combinators._base import BaseFaultSourceCombinator
 from cliffordep.type_aliases import FaultSource, Fault
 from cliffordep.noisy_circuit_tools import CultivationCircuit
-from cliffordep.pauli_string_tools import unsigned_str
+from cliffordep.pauli_string_tools import forget_sign
 from cliffordep.combinators import fault_count
 
 
@@ -77,7 +77,7 @@ class SlowFaultSourceCombinator(BaseFaultSourceCombinator):
                         fault_counts = prod(
                             fault_count(source_name)
                             for (_, source_name, _), _ in combo)
-                        result[unsigned_str(product_string)][fault_counts] += 1
+                        result[forget_sign(product_string)][fault_counts] += 1
         if print_progress:
             print(f"Done. They lead to {len(result)} distinct effects.")
         return dict(result)

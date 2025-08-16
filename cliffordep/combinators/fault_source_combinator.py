@@ -8,7 +8,7 @@ import numpy.typing as npt
 import stim
 
 from cliffordep.noisy_circuit_tools import CultivationCircuit
-from cliffordep.pauli_string_tools import unsigned_str
+from cliffordep.pauli_string_tools import forget_sign
 from cliffordep.type_aliases import EffectMap, FaultSource
 from cliffordep.combinators._base import BaseFaultSourceCombinator
 
@@ -123,7 +123,7 @@ class FaultSourceCombinator(BaseFaultSourceCombinator):
                 for segment_product in itertools.product(*(option.items() for option in options)):
                     # note: this is just as fast as iterating through `segment_product` once
                     # segment_product never empty
-                    product_effect = unsigned_str(math.prod(
+                    product_effect = forget_sign(math.prod(
                         stim.PauliString(effect) for effect, _ in segment_product)) # type: ignore
                     candidates = itertools.product(*(
                         valid_segments.items() for _, valid_segments in segment_product))
@@ -181,7 +181,7 @@ class FaultSourceCombinator(BaseFaultSourceCombinator):
             counter = Counter(effect_combo)
             # e.g. counter = {'effect1': 2, 'effect2': 1}
             first_effect, *_ = counter.keys()
-            product_effect = unsigned_str(math.prod(
+            product_effect = forget_sign(math.prod(
                 (stim.PauliString(effect) for effect, count in counter.items() if count % 2),
                 start=stim.PauliString(len(first_effect)),
             ))

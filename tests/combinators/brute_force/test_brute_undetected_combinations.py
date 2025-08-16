@@ -5,7 +5,7 @@ from math import prod
 import stim
 
 from cliffordep.combinators import fault_count, SlowFaultSourceCombinator
-from cliffordep.pauli_string_tools import unsigned_str
+from cliffordep.pauli_string_tools import forget_sign
 
 class TestD3DoubleCatCheck():
     """Tests on the `d3_double_cat_check` circuit."""
@@ -57,7 +57,7 @@ class TestD3DoubleCatCheck():
                     fault_counts = prod(
                         fault_count(source_name)
                         for source_name in (source_name_1, source_name_2))
-                    goal[unsigned_str(product_string)][fault_counts] += 1
+                    goal[forget_sign(product_string)][fault_counts] += 1
 
         result = d3_double_cat_check_brute._get_undetected_fault_combinations_for_length(length)
         assert result == dict(goal)
@@ -76,7 +76,7 @@ class TestD3DoubleCatCheck():
     #             any_defects = _any_defects((syndrome_1, syndrome_2, syndrome_3))
     #             if not any_defects:
     #                 product_string = stim.PauliString(effect_1) * stim.PauliString(effect_2) * stim.PauliString(effect_3)
-    #                 products[unsigned_str(product_string)][denominator_1, denominator_2, denominator_3] += 1
+    #                 products[forget_sign(product_string)][denominator_1, denominator_2, denominator_3] += 1
 
     #     result = undetected_products(d3_double_cat_check_group, length=length)
     #     assert result == dict(products)

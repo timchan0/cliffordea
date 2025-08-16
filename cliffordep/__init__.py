@@ -3,6 +3,6 @@ from cliffordep.noiseless_circuit_tools import split_by_ticks, compose_slices, i
 from cliffordep.noisy_circuit_tools import CultivationCircuit
 from cliffordep.constants import DEPOLARIZE2_FAULTS
 from cliffordep.explained_error_tools import insert_circuit_error_locations, insert_explained_errors
-from cliffordep.pauli_string_tools import unsigned_str, push_through_transversal, CliffordString
+from cliffordep.pauli_string_tools import forget_sign, push_through_transversal, CliffordString
 from cliffordep import noise
 from cliffordep import circuits

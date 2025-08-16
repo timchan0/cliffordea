@@ -12,7 +12,7 @@ import stim
 from cliffordep.noiseless_circuit_tools import split_by_ticks
 from cliffordep.constants import DEPOLARIZE2_FAULTS
 from cliffordep.type_aliases import Fault, FaultSource
-from cliffordep.pauli_string_tools import unsigned_str, push_through_transversal
+from cliffordep.pauli_string_tools import forget_sign, push_through_transversal
 
 
 class CultivationCircuit:
@@ -86,7 +86,7 @@ class CultivationCircuit:
                     if not (produces_measurements or is_reset):
                         pauli_string = pauli_string.after(instruction)
         
-        return syndrome, unsigned_str(pauli_string)
+        return syndrome, forget_sign(pauli_string)
 
 
     def _fault_to_pauli_string(self, name: str, targets: tuple[stim.GateTarget, ...]):
@@ -194,7 +194,7 @@ class CultivationCircuit:
 
 
     def string_to_logical_vector(self, cultivated_state: Literal['T', 'S', 'Z'], data_string: str):
-        clifford = push_through_transversal(stim.PauliString(data_string), gate=cultivated_state)
+        clifford = push_through_transversal(data_string, gate=cultivated_state)
         clifford.postselect_from_stabilizers(self.STABILIZER_GENERATORS)
         logical_vector = clifford.get_logical_amplitudes(self.LOGICAL_X, self.LOGICAL_Z)
         logical_vector.transfer_xy_to_iz(logical_state=cultivated_state)

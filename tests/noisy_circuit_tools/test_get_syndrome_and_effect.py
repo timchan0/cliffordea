@@ -69,7 +69,7 @@ class TestD3DoubleCatCheck:
                                 instance_index=0,
                             )
             sim_syndrome = tuple(sim.get_detector_flips(instance_index=0))
-            sim_effect = cliffordep.unsigned_str(sim.peek_pauli_flips(instance_index=0))
+            sim_effect = cliffordep.forget_sign(sim.peek_pauli_flips(instance_index=0))
         
         # assert the syndrome matches
         assert np.array_equal(sim_syndrome, syndrome)

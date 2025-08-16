@@ -9,7 +9,7 @@ import stim
 from cliffordep.combinators._base import Combinator
 from cliffordep.noisy_circuit_tools import CultivationCircuit
 from cliffordep.combinators.fault_source_combinator import get_trivial_syndrome_combinations
-from cliffordep.pauli_string_tools import unsigned_str
+from cliffordep.pauli_string_tools import forget_sign
 from cliffordep.type_aliases import MechanismBag
 
 
@@ -173,7 +173,7 @@ distributed among {self.syndrome_count} syndromes.")
                 for segment_product in itertools.product(*(option.items() for option in options)):
                     # note: this is probably just as fast as iterating through `segment_product` once
                     # segment_product never empty
-                    product_effect = unsigned_str(math.prod(
+                    product_effect = forget_sign(math.prod(
                         stim.PauliString(effect) for effect, _ in segment_product)) # type: ignore
                     candidates = itertools.product(*(
                         segments for _, segments in segment_product))
@@ -229,7 +229,7 @@ distributed among {self.syndrome_count} syndromes.")
         mechanism_combos = itertools.combinations(mechanism_set, length)
         for mechanism_combo in mechanism_combos:
             # e.g. mechanism_combo = (('effect1', 1), ('effect2', 2)) and is never empty
-            product_effect = unsigned_str(math.prod(
+            product_effect = forget_sign(math.prod(
                 stim.PauliString(effect) for effect, _ in mechanism_combo)) # type: ignore
             index_combo: frozenset[int] = frozenset(
                 index for _, index in mechanism_combo)
