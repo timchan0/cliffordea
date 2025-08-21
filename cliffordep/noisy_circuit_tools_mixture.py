@@ -1,22 +1,28 @@
 """Module for enumerating faults in noisy stim circuits."""
 
+from typing import Literal
+
 import numpy as np
 import numpy.typing as npt
 import stim
 
 from cliffordep.type_aliases import Fault
-from cliffordep.pauli_string_tools import forget_sign
+from cliffordep.pauli_string_tools import forget_sign, CliffordString, Mixture
 from cliffordep.noisy_circuit_tools_base import BaseCultivationCircuit
 
 
-class CultivationCircuit(BaseCultivationCircuit):
+class CultivationCircuitMixture(BaseCultivationCircuit):
     """A class representing a noisy stim circuit with methods to analyze faults.
 
     Extends `BaseCultivationCircuit`.
     """
 
 
-    def get_syndrome_and_effect(self, fault: Fault):
+    def get_syndrome_and_effect(
+            self,
+            fault: Fault,
+            replace_s_with: Literal['T', 'S', 'Z'] = 'S',
+    ):
         """Get the syndrome and the resultant Pauli string after inserting a fault.
         
         Input:
@@ -31,12 +37,12 @@ class CultivationCircuit(BaseCultivationCircuit):
         * `effect` the effect of the fault when propagated to the end of the circuit,
         as an unsigned Pauli string.
         """
-        timeslice, name, targets = fault
+        fault_timeslice, name, targets = fault
         pauli_string = self._fault_to_pauli_string(name=name, targets=targets)
         syndrome: npt.NDArray[np.bool_] = np.zeros(self.noisy_circuit.num_detectors, dtype=bool)
         if name.startswith('M'):
-            # pauli_string is identity
-            for instruction in self._noiseless_layers[timeslice]:
+            # mixture is pure and contains identity Pauli string only
+            for instruction in self._noiseless_layers[fault_timeslice]:
                 if isinstance(instruction, stim.CircuitRepeatBlock):
                     raise ValueError("There is a REPEAT block in the circuit.")
                 if instruction.num_measurements:
@@ -49,29 +55,20 @@ class CultivationCircuit(BaseCultivationCircuit):
                             for detector in self._measurement_to_detectors[measurement_index]:
                                 syndrome[detector] ^= True
                             break
+            mixture = Mixture({tuple(syndrome): [CliffordString({pauli_string: 1})]})
         else:
-            remaining_layers = self._noiseless_layers[timeslice+1:]
+            mixture = Mixture({tuple(syndrome): [CliffordString({pauli_string: 1})]})
+            remaining_layers = self._noiseless_layers[fault_timeslice+1:]
             for layer in remaining_layers:
                 for instruction in layer:
                     if isinstance(instruction, stim.CircuitRepeatBlock):
                         raise ValueError("There is a REPEAT block in the circuit.")
-                    data = stim.gate_data(instruction.name)
-                    if produces_measurements:=data.produces_measurements:
-                        anticommuting_paulis = self._get_anticommuting_paulis(instruction.name)
-                        for measurement_index, target in enumerate(
-                            instruction.targets_copy(),
-                            start=int(instruction.tag),
-                        ):
-                            if pauli_string[target.value] in anticommuting_paulis:
-                                for detector in self._measurement_to_detectors[measurement_index]:
-                                    syndrome[detector] ^= True
-                    if is_reset:=data.is_reset:
-                        for target in instruction.targets_copy():
-                            pauli_string[target.value] = 'I'
-                    if not (produces_measurements or is_reset):
-                        pauli_string = pauli_string.after(instruction)
-        
-        return syndrome, forget_sign(pauli_string)
+                    mixture.push_through(
+                        instruction=instruction,
+                        measurement_to_detectors=self._measurement_to_detectors,
+                        replace_s_with=replace_s_with,
+                    )
+        return mixture
 
 
     def _fault_to_pauli_string(self, name: str, targets: tuple[stim.GateTarget, ...]):
@@ -84,8 +81,9 @@ class CultivationCircuit(BaseCultivationCircuit):
         * `targets` a tuple of stim.GateTarget objects representing the qubits the fault acts on.
 
         Output:
-        * A stim.PauliString representing the fault.
+        * An unsigned Pauli string representing the fault.
         """
+        # TODO: avoid using stim.PauliString altogether in this method
         pauli_string = stim.PauliString(self.noisy_circuit.num_qubits)
         if name == 'E':
             for target in targets:
@@ -93,30 +91,4 @@ class CultivationCircuit(BaseCultivationCircuit):
         elif (basis := name[0]) != 'M':
             (target,) = targets
             pauli_string[target.value] = basis
-        return pauli_string
-
-
-    @staticmethod
-    def _get_anticommuting_paulis(name: str):
-        """Get the set of Paulis that anticommute with the measurement given by `name`."""
-        if 'X' in name:
-            return {2, 3}
-        elif 'Y' in name:
-            return {1, 3}
-        elif 'Z' in name or name in {'M', 'MR'}:
-            return {1, 2}
-        else:
-            raise NotImplementedError
-
-
-
-    def restrict_to_data(self, effect: str):
-        """Restrict `effect` to only the data qubits.
-
-        Input:
-        * `effect` an unsigned Pauli string.
-
-        Output:
-        * The unsigned Pauli string restricted to the data qubits.
-        """
-        return ''.join(effect[index] for index in self.DATA_INDICES)
+        return forget_sign(pauli_string)

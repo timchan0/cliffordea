@@ -8,6 +8,11 @@ import stim
 from cliffordep.pauli_string_tools import CliffordString, FrozenCliffordString
 
 
+@pytest.fixture
+def string_4() -> CliffordString:
+    return CliffordString({"XX": 4, "XY": -2j, "YX": -2j, "YY": -1}, denominator_squared=1.5)
+
+
 class TestInit:
 
     def test_empty(self):
@@ -250,14 +255,88 @@ class TestPushThroughReset:
         })
 
     @pytest.mark.parametrize("basis", BASES)
-    def test_reset_separable(self, basis: str):
-        cs = CliffordString({"XX": 4, "XY": -2j, "YX": -2j, "YY": -1}, denominator_squared=1.5)
-        mixture = cs.push_through_reset(stim.CircuitInstruction(f'R{basis}', [0]))
+    def test_reset_separable(self, string_4: CliffordString, basis: str):
+        mixture = string_4.push_through_reset(stim.CircuitInstruction(f'R{basis}', [0]))
         assert mixture == defaultdict(float, {
-            FrozenCliffordString(frozenset({("_X", 2), ("_Y", -1j)}), 5): cs.norm_squared,
+            FrozenCliffordString(frozenset({("_X", 2), ("_Y", -1j)}), 5): string_4.norm_squared,
         })
-        mixture = cs.push_through_reset(stim.CircuitInstruction(f'R{basis}', [1]))
+        mixture = string_4.push_through_reset(stim.CircuitInstruction(f'R{basis}', [1]))
         assert mixture == defaultdict(float, {
-            FrozenCliffordString(frozenset({("X_", 2), ("Y_", -1j)}), 5): cs.norm_squared,
+            FrozenCliffordString(frozenset({("X_", 2), ("Y_", -1j)}), 5): string_4.norm_squared,
         })
-        assert cs.norm_squared != 1
+        assert string_4.norm_squared != 1
+
+
+class TestPushThroughMeasurement:
+
+    BASES = ('X', 'Y', 'Z')
+
+    # @pytest.mark.parametrize("basis", BASES)
+    # def test_probability_preserved(self, string_2: CliffordString, basis: str):
+    #     mixture = string_2.push_through_reset(stim.CircuitInstruction(f'R{basis}', [0]))
+    #     assert mixture == defaultdict(float, {
+    #         FrozenCliffordString(frozenset({("_", 1)}), 1): string_2.norm_squared,
+    #     })
+    #     assert string_2.norm_squared != 1
+
+    # @pytest.mark.parametrize("basis", BASES)
+    # @pytest.mark.parametrize("qubit,term_1,term_2", [(0, "_X", "_Y"), (1, "X_", "Y_")])
+    # def test_reset_entangled(
+    #     self,
+    #     string_3: CliffordString,
+    #     basis: str,
+    #     qubit: int,
+    #     term_1: str,
+    #     term_2: str,
+    # ):
+    #     string_3.denominator_squared = 1.5
+    #     mixture = string_3.push_through_reset(stim.CircuitInstruction(f'R{basis}', [qubit]))
+    #     normed_result = {
+    #         FrozenCliffordString(frozenset({(term_1, 1)}), 1): 4/5,
+    #         FrozenCliffordString(frozenset({(term_2, 1)}), 1): 1/5,
+    #     }
+    #     assert mixture.keys() == normed_result.keys()
+    #     for key, val in normed_result.items():
+    #         assert (mixture[key] - val * string_3.norm_squared) < 1e-9
+    #     assert string_3.norm_squared != 1
+
+    def test_all_measure_z(self, string_3: CliffordString):
+        mixture = string_3.push_through_measurement(
+            stim.CircuitInstruction('MZ', [0, 1], tag='0'),
+            measurement_to_detectors={0: {0}, 1: {1}},
+            syndrome_before_push=(False, False),
+        )
+        assert mixture == {(1, 1): (FrozenCliffordString(frozenset({("XX", 2), ("YY", -1j)}), 5), 1)}
+        
+    @pytest.mark.parametrize("basis", ('X', 'Y'))
+    def test_all_measure_x_or_y(self, string_3: CliffordString, basis: str):
+        mixture = string_3.push_through_measurement(
+            stim.CircuitInstruction(f'M{basis}', [0, 1], tag='0'),
+            measurement_to_detectors={0: {0}, 1: {1}},
+            syndrome_before_push=(False, False),
+        )
+        assert mixture == {
+            (int(basis=='Y'), int(basis=='Y')): (FrozenCliffordString(frozenset({("XX", 1)}), 1), 4/5),
+            (int(basis=='X'), int(basis=='X')): (FrozenCliffordString(frozenset({("YY", 1)}), 1), 1/5),
+        }
+
+    # @pytest.mark.parametrize("basis", BASES)
+    @pytest.mark.parametrize("index", (0, 1))
+    def test_measure_separable_z(self, string_4: CliffordString, index: int):
+        mixture = string_4.push_through_measurement(
+            stim.CircuitInstruction(f'MZ', [index], tag='0'),
+            measurement_to_detectors={0: {0}},
+            syndrome_before_push=(False,),
+        )
+        expected_result = {(True,): ((FrozenCliffordString(frozenset({
+                ("XX", 4),
+                ("XY", -2j),
+                ("YX", -2j),
+                ("YY", -1),
+            }), 25), string_4.norm_squared))}
+        assert mixture.keys() == expected_result.keys()
+        for key, (expected_frozen_string, expected_prob) in expected_result.items():
+            frozen_string, prob = mixture[key]
+            assert frozen_string == expected_frozen_string
+            assert (prob - expected_prob) < 1e-9
+        assert string_4.norm_squared != 1

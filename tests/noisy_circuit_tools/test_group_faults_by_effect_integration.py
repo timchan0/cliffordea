@@ -6,6 +6,7 @@ import pytest
 import cliffordep
 from cliffordep.combinators import FaultSourceCombinator
 from cliffordep.noisy_circuit_tools import CultivationCircuit
+from cliffordep.pauli_string_tools import CliffordString
 
 
 class TestD3DoubleCatCheck():
@@ -36,4 +37,4 @@ class TestD3DoubleCatCheck():
                 prod = string_1 * string_2
                 if not any(name=='MX' for _, name, _ in (faults_1|faults_2).keys()):
                     for index in cliffordep.circuits.D3DoubleCatCheckA6.ANCILLA_INDICES:
-                        assert prod[index] not in CultivationCircuit._get_anticommuting_paulis('MX')
+                        assert prod[index] not in CliffordString._get_anticommuting_paulis('MX')

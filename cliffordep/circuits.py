@@ -71,7 +71,8 @@ CX 3 1 5 6 12 13
 TICK
 CX 1 0 9 8 6 7 4 5 2 3 13 10 12 11
 TICK
-MX 13 12 9 4 2 6 1
+# added reset after measurement
+MRX 13 12 9 4 2 6 1
 DETECTOR(4, 2, 1) rec[-7]
 DETECTOR(4, 1, 1) rec[-6]
 DETECTOR(3, 1, 1) rec[-5]
@@ -143,7 +144,8 @@ CX 1 0 9 8 6 7 4 5 2 3 13 10 12 11
 TICK
 S 5 10 11 8 7 3 0
 TICK
-MX 13 12 9 4 2 6 1
+# added reset after measurement
+MRX 13 12 9 4 2 6 1
 DETECTOR(4, 2, 1) rec[-7]
 DETECTOR(4, 1, 1) rec[-6]
 DETECTOR(3, 1, 1) rec[-5]
@@ -227,7 +229,8 @@ CX 3 1 5 6 9 12
 TICK
 CX 1 0 9 8 6 7 12 11 4 5 2 3
 TICK
-MX 12 9 4 2 6 1
+# added reset after measurement
+MRX 12 9 4 2 6 1
 DETECTOR(4, 1, 1) rec[-6]
 DETECTOR(3, 1, 1) rec[-5]
 DETECTOR(2, 1, 1) rec[-4] rec[-7]
@@ -340,7 +343,8 @@ TICK
 # CX sweep[18] 5 sweep[18] 8 sweep[18] 10 sweep[18] 11
 S 5 10 11 8 7 3 0
 TICK
-MX 12 9 4 2 6 1
+# added reset after measurement
+MRX 12 9 4 2 6 1
 DETECTOR(4, 1, 1) rec[-6]
 DETECTOR(3, 1, 1) rec[-5]
 DETECTOR(2, 1, 1) rec[-4] rec[-7]

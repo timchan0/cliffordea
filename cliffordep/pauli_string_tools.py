@@ -43,15 +43,26 @@ PUSH_THROUGH_T: dict[str, tuple[str, ...]] = {
 after pushing through a T gate.
 """
 
-PUSH_THROUGH_MAP: dict[Literal['T', 'S', 'Z'], dict[str, tuple[str, ...]]] = {
+PUSH_THROUGH_T_DAG: dict[str, tuple[str, ...]] = {
+    '_': ('I',),
+    'X': ('X', '-Y'),
+    'Y': ('X', 'Y'),
+    'Z': ('Z',),
+}
+"""A map from each Pauli to the unnormalized superposition of Paulis
+after pushing through a T dagger gate.
+"""
+
+PUSH_THROUGH_MAP: dict[str, dict[str, tuple[str, ...]]] = {
     'T': PUSH_THROUGH_T,
     'S': PUSH_THROUGH_S,
     'Z': PUSH_THROUGH_Z,
+    'T_DAG': PUSH_THROUGH_T_DAG,
 }  # TODO: test against PauliString.after
 
 
 def forget_sign(pauli_string: PauliString):
-    """Convert a stim.PauliString to a string without the global phase."""
+    """Convert a `stim.PauliString` to a string without the global phase."""
     return str(pauli_string).replace('+', '').replace('-', '').replace('i', '')
 
 
@@ -108,6 +119,9 @@ i.e. 'anticommute with (logical X, logical Z)?',
 to the Pauli with that signature.
 """
 
+_PRECISION = 12
+"""Rounding precision for `FrozenCliffordString`."""
+
 
 class CliffordString:
     """An error in the form of a superposition of Pauli strings.
@@ -118,8 +132,6 @@ class CliffordString:
     Allowed characters in each Pauli string are `'_', 'X', 'Y', 'Z'`.
     * `denominator_squared` the divisor of each amplitude, squared.
     """
-
-    _PRECISION = 12
 
     def __init__(
             self,
@@ -135,7 +147,8 @@ class CliffordString:
         If not specified,
         the Clifford string is automatically normalized to 1.
         """
-        self.terms: defaultdict[str, complex] = defaultdict(complex, {} if terms is None else terms)
+        self.terms: defaultdict[str, complex] = defaultdict(
+            complex, {} if terms is None else terms)
         if denominator_squared is None:
             self.denominator_squared: float = sum(
                 abs(amplitude)**2 for amplitude in self.terms.values()
@@ -217,30 +230,67 @@ class CliffordString:
             smallest_magnitude = min(abs(amplitude) for amplitude in terms.values())
             for term in terms.keys():
                 unrounded = terms[term] / (phase_factor*smallest_magnitude)
-                real = round(unrounded.real, self._PRECISION)
-                imag = round(unrounded.imag, self._PRECISION)
+                real = round(unrounded.real, _PRECISION)
+                imag = round(unrounded.imag, _PRECISION)
                 terms[term] = complex(real, imag)
-            self.denominator_squared = round(self.denominator_squared / smallest_magnitude**2, self._PRECISION)
+            self.denominator_squared = round(self.denominator_squared / smallest_magnitude**2, _PRECISION)
         else:
             self.denominator_squared = 1
         self.terms = defaultdict(complex, terms)
 
-    def push_through_unitary(self, unitary: stim.CircuitInstruction):
-        """Push the Clifford string through a unitary gate."""
-        data = stim.gate_data(unitary.name)
-        if data.is_reset or data.produces_measurements:
-            raise ValueError(f"{unitary} is not unitary.")
+
+    # TODO: move to `FrozenCliffordString`
+    def push_through_unitary(
+            self,
+            unitary: stim.CircuitInstruction,
+            replace_s_with: Literal['T', 'S', 'Z'] = 'S',
+    ):
+        """Push the Clifford string through a unitary instruction.
+
+        Input:
+        * `unitary` the instruction.
+        It MUST NOT produce measurements or have a reset.
+        * `replace_s_with` the unitary to push through if `unitary` is an S gate.
+        Also affects S dagger gates.
+
+        Side effect:
+        * The terms in the Clifford string are changed to
+        just after pushing them through the unitary instruction.
+        """
+        target_indices: set[int] = {target.value for target in unitary.targets_copy()}
         new_terms: defaultdict[str, complex] = defaultdict(complex)
-        for term, amplitude in self.terms.items():
-            sign, unsigned = split_sign(PauliString(term).after(unitary))
-            new_terms[unsigned] += amplitude * sign
+        
+        if replace_s_with == 'T' and (name:=unitary.name) in {'S', 'S_DAG'}:
+            denominator_for_t = 2**(len(target_indices)/2)
+            map = PUSH_THROUGH_MAP['T' if name=='S' else 'T_DAG']
+            for term, amplitude in self.terms.items():
+                options: list[tuple[str, ...]] = [
+                    map[pauli] if index in target_indices else (pauli,)
+                    for index, pauli in enumerate(term)]
+                for pauli_tuple in itertools.product(*options):
+                    sign, child = split_sign(_tensor_paulis(*pauli_tuple))
+                    new_terms[child] += amplitude * sign / denominator_for_t
+        
+        else:
+            if replace_s_with == 'Z' and unitary.name in {'S', 'S_DAG'}:
+                unitary = stim.CircuitInstruction(
+                    name='Z',
+                    targets=unitary.targets_copy(),
+                )
+            for term, amplitude in self.terms.items():
+                sign, unsigned = split_sign(PauliString(term).after(unitary))
+                new_terms[unsigned] += amplitude * sign
+        
         self.terms = new_terms
 
+
+    # TODO: move to `FrozenCliffordString`
     def push_through_reset(self, reset: stim.CircuitInstruction):
         """Return the result of pushing the Clifford string through a reset instruction.
         
         Input:
         * `reset` the reset instruction to push through.
+        It must satisfy `stim.gate_data(reset.name).is_reset`.
 
         Output:
         * `mixture` a mixture of Clifford strings,
@@ -255,9 +305,6 @@ class CliffordString:
         Pushing `(XX + XY + YX + YY)/2` through a reset on qubit 1 yields...
         * `(X_ + Y_)/sqrt(2)` with probability 1.
         """
-        data = stim.gate_data(reset.name)
-        if not data.is_reset:
-            raise ValueError(f"{reset} is not a reset instruction.")
         reset_qubits = {target.value for target in reset.targets_copy()}
         # `clifford_strings` maps the string of Paulis that were reset to a post-reset Clifford string
         clifford_strings: defaultdict[
@@ -274,6 +321,91 @@ class CliffordString:
             clifford_string.normalize()
             mixture[clifford_string.frozen_copy()] += probability
         return mixture
+    
+
+    # TODO: move to `FrozenCliffordString`
+    def push_through_measurement(
+            self,
+            measurement: stim.CircuitInstruction,
+            measurement_to_detectors: dict[int, set[int]],
+            syndrome_before_push: tuple[bool, ...],
+    ):
+        """Push the Clifford string through a measurement instruction.
+        
+        Input:
+        * `measurement` the measurement instruction.
+        * `measurement_to_detectors` a map from each measurement index in the circuit
+        to a set of indices of the detectors it flips.
+        * `syndrome_before_push` the syndrome of the Clifford string
+        before pushing it through the measurement.
+
+        Output:
+        * `mixture` a mixture of Clifford strings,
+        represented as a map from each syndrome to a normalized Clifford string
+        (that gives that syndrome when pushed through `measurement`) and its probability.
+        """
+        # TODO: give examples in docstring
+        anticommuting_paulis = self._get_anticommuting_paulis(measurement.name)
+        # `clifford_strings` maps each syndrome to a post-measurement Clifford string
+        clifford_strings: defaultdict[
+            tuple[bool, ...], defaultdict[str, complex]
+        ] = defaultdict(lambda: defaultdict(complex))
+        for term, amplitude in self.terms.items():
+            syndrome = np.array(syndrome_before_push, dtype=bool)
+            # TODO: handle multiqubit measurements
+            for measurement_index, target in enumerate(
+                measurement.targets_copy(),
+                start=int(measurement.tag),
+            ):
+                if term[target.value] in anticommuting_paulis:
+                    for detector in measurement_to_detectors[measurement_index]:
+                        syndrome[detector] ^= True
+            clifford_strings[tuple(syndrome)][term] += amplitude
+        mixture: dict[tuple[bool, ...], tuple[FrozenCliffordString, float]] = {}
+        for syndrome, terms in clifford_strings.items():
+            s = CliffordString(terms, self.denominator_squared)
+            probability = s.norm_squared
+            s.normalize()
+            mixture[syndrome] = (s.frozen_copy(), probability)
+        return mixture
+        
+        # # `clifford_strings` maps the string of Paulis that were measured to a post-measurement Clifford string
+        # clifford_strings: defaultdict[
+        #     tuple[str, ...], defaultdict[str, complex]
+        # ] = defaultdict(lambda: defaultdict(complex))
+        # for term, amplitude in self.terms.items():
+        #     paulis_measured = tuple(term[target.value] for target in measurement.targets_copy())
+        #     clifford_strings[paulis_measured][term] += amplitude
+        # anticommuting_paulis = self._get_anticommuting_paulis(measurement.name)
+        # mixture: defaultdict[
+        #     tuple[bool, ...],
+        #     defaultdict[FrozenCliffordString, float],
+        # ] = defaultdict(lambda: defaultdict(float))
+        # for paulis_measured, terms in clifford_strings.items():
+        #     syndrome = np.array(syndrome_before_push, dtype=bool)
+        #     for target, pauli_measured in zip(measurement.targets_copy(), paulis_measured, strict=True):
+        #         if pauli_measured in anticommuting_paulis:
+        #             for detector in measurement_to_detectors[timeslice, target.value]:
+        #                 syndrome[detector] ^= True
+        #     clifford_string = CliffordString(terms, self.denominator_squared)
+        #     probability = clifford_string.norm_squared
+        #     clifford_string.normalize()
+        #     mixture[tuple(syndrome)][clifford_string.frozen_copy()] += probability
+        # return mixture
+
+
+    @staticmethod
+    def _get_anticommuting_paulis(name: str):
+        """Get the set of Paulis that anticommute with the measurement given by `name`."""
+        if 'X' in name:
+            return {'Y', 'Z'}
+        elif 'Y' in name:
+            return {'X', 'Z'}
+        elif 'Z' in name or name in {'M', 'MR'}:
+            return {'X', 'Y'}
+        else:
+            raise NotImplementedError
+
 
     def postselect_from_stabilizers(self, stabilizer_generators: Iterable[PauliString]):
         """Kill all terms that do not commute with the stabilizers.
@@ -331,6 +463,154 @@ class CliffordString:
 class FrozenCliffordString:
     terms: frozenset[tuple[str, complex]]
     denominator_squared: float
+
+    def mutable_copy(self):
+        """Return a mutable, unhashable copy of the Clifford string."""
+        return CliffordString(
+            terms=dict(self.terms),
+            denominator_squared=self.denominator_squared,
+        )
+    
+    # TODO: test
+    def scaled(self, scalar: int | float):
+        """Return a scaled frozen copy of the Clifford string."""
+        return FrozenCliffordString(
+            terms=self.terms,
+            denominator_squared=round(self.denominator_squared / scalar**2, _PRECISION),
+        )
+
+
+class Mixture:
+    """A mixture of Clifford strings.
+    
+    Instance attributes:
+    * `submixtures` a map from each syndrome to a map from each
+    normalized Clifford string (that gives that syndrome) to its probability.
+    Each syndrome is a tuple of booleans, where each boolean
+    indicates whether the corresponding detector has been flipped.
+    """
+
+    def __init__(self, submixtures: dict[tuple[bool, ...], list[CliffordString]]):
+        _submixtures: defaultdict[
+            tuple[bool, ...],
+            defaultdict[FrozenCliffordString, float],
+        ] = defaultdict(lambda: defaultdict(float))
+        for syndrome, list_ in submixtures.items():
+            for clifford_string in list_:
+                probability = clifford_string.norm_squared
+                clifford_string.normalize()
+                _submixtures[syndrome][clifford_string.frozen_copy()] += probability
+        self.submixtures = dict(_submixtures)
+
+
+    def push_through(
+            self,
+            instruction: stim.CircuitInstruction,
+            measurement_to_detectors: dict[int, set[int]],
+            replace_s_with: Literal['T', 'S', 'Z'] = 'S',
+    ):
+        """Push the mixture through a circuit instruction.
+
+        Input:
+        * `instruction` the instruction.
+        * `measurement_to_detectors` a map from each measurement index in the circuit
+        to a set of indices of the detectors it flips.
+
+        Side effect:
+        * All the mixture's terms are pushed through the circuit instruction.
+        """
+        data = stim.gate_data(instruction.name)
+        if produces_measurements := data.produces_measurements:
+            self._push_through_measurement(
+                instruction,
+                measurement_to_detectors,
+            )
+        if is_reset := data.is_reset:
+            self._push_through_reset(instruction)
+        if not (produces_measurements or is_reset):
+            self._push_through_unitary(instruction, replace_s_with=replace_s_with)
+
+
+    def _push_through_unitary(
+            self,
+            unitary: stim.CircuitInstruction,
+            replace_s_with: Literal['T', 'S', 'Z'] = 'S',    
+    ):
+        """Push the mixture through a unitary instruction.
+
+        Input:
+        * `unitary` the instruction.
+        It MUST NOT produce measurements or have a reset.
+
+        Side effect:
+        * All the mixture's terms are pushed through the unitary instruction.
+        """
+        new_mixture: defaultdict[
+            tuple[bool, ...],
+            defaultdict[FrozenCliffordString, float],
+        ] = defaultdict(lambda: defaultdict(float))
+        for syndrome, submixture in self.submixtures.items():
+            for frozen_string, probability in submixture.items():
+                clifford_string = frozen_string.mutable_copy()
+                clifford_string.push_through_unitary(unitary, replace_s_with=replace_s_with)
+                new_mixture[syndrome][clifford_string.frozen_copy()] += probability
+        self.submixtures = dict(new_mixture)
+
+
+    def _push_through_measurement(
+            self,
+            measurement: stim.CircuitInstruction,
+            measurement_to_detectors: dict[int, set[int]],
+    ):
+        """Push the mixture through a measurement.
+        
+        Input:
+        * `measurement` the measurement instruction.
+        It must satisfy `stim.gate_data(measurement.name).produces_measurements`.
+        * `measurement_to_detectors` a map from each measurement index in the circuit
+        to a set of indices of the detectors it flips.
+
+        Side effect:
+        * All the mixture's terms are pushed through the measurement instruction.
+        """
+        new_mixture: defaultdict[
+            tuple[bool, ...],
+            defaultdict[FrozenCliffordString, float],
+        ] = defaultdict(lambda: defaultdict(float))
+        for syndrome_before_push, submixture in self.submixtures.items():
+            for outer_string, outer_prob in submixture.items():
+                clifford_string = outer_string.mutable_copy()
+                inner_submixture = clifford_string.push_through_measurement(
+                    measurement,
+                    measurement_to_detectors,
+                    syndrome_before_push,
+                )
+                for new_syndrome, (inner_string, inner_prob) in inner_submixture.items():
+                    new_mixture[new_syndrome][inner_string] += outer_prob * inner_prob
+        self.submixtures = dict(new_mixture)
+
+
+    def _push_through_reset(self, reset: stim.CircuitInstruction):
+        """Push the mixture through a reset instruction.
+        
+        Input:
+        * `reset` the reset instruction to push through.
+        It must satisfy `stim.gate_data(reset.name).is_reset`.
+
+        Side effect:
+        * All the mixture's terms are pushed through the reset instruction.
+        """
+        new_mixture: defaultdict[
+            tuple[bool, ...],
+            defaultdict[FrozenCliffordString, float],
+        ] = defaultdict(lambda: defaultdict(float))
+        for syndrome, submixture in self.submixtures.items():
+            for outer_string, outer_prob in submixture.items():
+                clifford_string = outer_string.mutable_copy()
+                inner_submixture = clifford_string.push_through_reset(reset)
+                for inner_string, inner_prob in inner_submixture.items():
+                    new_mixture[syndrome][inner_string] += outer_prob * inner_prob
+        self.submixtures = dict(new_mixture)
 
 
 SQRT2 = 2**0.5
