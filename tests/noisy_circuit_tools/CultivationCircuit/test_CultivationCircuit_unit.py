@@ -10,8 +10,8 @@ from cliffordep.pauli_string_tools import forget_sign
 
 class TestMeasurementToDetectors:
 
-    def test_multiple_qubits_and_detectors(self, multi_qubit_detector_circuit):
-        assert multi_qubit_detector_circuit._measurement_to_detectors == {(1, 0): {0}, (1, 1): {1}}
+    def test_multiple_qubits_and_detectors(self, multi_qubit_detector_circuit: CultivationCircuit):
+        assert multi_qubit_detector_circuit._measurement_to_detectors == {0: {0}, 1: {1}}
 
 
 class TestNoiselessLayers:
@@ -27,10 +27,10 @@ class TestNoiselessLayers:
         )
         assert circuit._noiseless_layers == [stim.Circuit(), stim.Circuit("R 0")]
 
-    def test_multiple_qubits_and_detectors(self, multi_qubit_detector_circuit):
+    def test_multiple_qubits_and_detectors(self, multi_qubit_detector_circuit: CultivationCircuit):
         assert multi_qubit_detector_circuit._noiseless_layers == [
             stim.Circuit("CX 0 1"),
-            stim.Circuit("""MZ 0 1
+            stim.Circuit("""MZ[0] 0 1
             DETECTOR rec[-2]
             DETECTOR rec[-1]"""),
         ]

@@ -35,7 +35,20 @@ class CultivationCircuit:
             logical_x: stim.PauliString,
             logical_z: stim.PauliString,
     ) -> None:
-        self.noisy_circuit = noisy_circuit
+        tagged_circuit = stim.Circuit()
+        """Each measurement instruction is tagged with the index of its first measurement."""
+        measurement_index = 0
+        for instruction in noisy_circuit:
+            if isinstance(instruction, stim.CircuitRepeatBlock):
+                raise ValueError
+            tagged_circuit.append(
+                name=instruction.name,
+                targets=instruction.targets_copy(),
+                arg=instruction.gate_args_copy(),
+                tag=str(measurement_index) if (measurement_count:=instruction.num_measurements) else '',
+            )
+            measurement_index += measurement_count
+        self.noisy_circuit = tagged_circuit
         self.DATA_INDICES = data_indices
         self.STABILIZER_GENERATORS = stabilizer_generators
         self.LOGICAL_X = logical_x
@@ -53,6 +66,9 @@ class CultivationCircuit:
         Input:
         * `fault` the fault to analyze.
 
+        Require:
+        * No qubit is noisily measured more than once per tick in `self.noisy_circuit`.
+
         Output:
         * `syndrome` a tuple of booleans representing the syndrome, where each boolean
         indicates whether the corresponding detector has been flipped.
@@ -64,21 +80,35 @@ class CultivationCircuit:
         syndrome: npt.NDArray[np.bool_] = np.zeros(self.noisy_circuit.num_detectors, dtype=bool)
         if name.startswith('M'):
             # pauli_string is identity
-            for target in targets:
-                for detector in self._measurement_to_detectors[timeslice, target.value]:
-                    syndrome[detector] ^= True
+            for instruction in self._noiseless_layers[timeslice]:
+                if isinstance(instruction, stim.CircuitRepeatBlock):
+                    raise ValueError("There is a REPEAT block in the circuit.")
+                if instruction.num_measurements:
+                    # TODO: store measurement index in `Fault` to avoid below search
+                    for measurement_index, target_group in enumerate(
+                        instruction.target_groups(),
+                        start=int(instruction.tag),
+                    ):
+                        if set(target_group) == set(targets):
+                            for detector in self._measurement_to_detectors[measurement_index]:
+                                syndrome[detector] ^= True
+                            break
         else:
             remaining_layers = self._noiseless_layers[timeslice+1:]
-            for k, layer in enumerate(remaining_layers, start=1):
+            for layer in remaining_layers:
                 for instruction in layer:
                     if isinstance(instruction, stim.CircuitRepeatBlock):
                         raise ValueError("There is a REPEAT block in the circuit.")
                     data = stim.gate_data(instruction.name)
                     if produces_measurements:=data.produces_measurements:
+                        # TODO: handle multiqubit measurements
                         anticommuting_paulis = self._get_anticommuting_paulis(instruction.name)
-                        for target in instruction.targets_copy():
+                        for measurement_index, target in enumerate(
+                            instruction.targets_copy(),
+                            start=int(instruction.tag),
+                        ):
                             if pauli_string[target.value] in anticommuting_paulis:
-                                for detector in self._measurement_to_detectors[timeslice+k, target.value]:
+                                for detector in self._measurement_to_detectors[measurement_index]:
                                     syndrome[detector] ^= True
                     if is_reset:=data.is_reset:
                         for target in instruction.targets_copy():
@@ -125,26 +155,21 @@ class CultivationCircuit:
 
 
     @cached_property
-    def _measurement_to_detectors(self) -> dict[tuple[int, int], set[int]]:
-        """A map from each measurement in `self.noisy_circuit` indexed by (timeslice, qubit value)
+    def _measurement_to_detectors(self) -> dict[int, set[int]]:
+        """A map from each measurement index in `self.noisy_circuit`
         to a set of indices of the detectors it flips.
         """
-        measurement_to_detectors: defaultdict[tuple[int, int], set[int]] = defaultdict(set)
-        measurement_indices: list[tuple[int, int]] = []
+        measurement_to_detectors: defaultdict[int, set[int]] = defaultdict(set)
+        total_measurement_count = 0
         detector_count: int = 0
-        timeslice: int = 0
         for instruction in self.noisy_circuit:
             if isinstance(instruction, stim.CircuitRepeatBlock):
                 raise ValueError("REPEAT blocks not handled in this mapping.")
-            elif (name:=instruction.name) == "TICK":
-                timeslice += 1
-            elif stim.gate_data(name).produces_measurements:
+            if instruction.name == "DETECTOR":
                 for target in instruction.targets_copy():
-                    measurement_indices.append((timeslice, target.value))
-            elif name == "DETECTOR":
-                for target in instruction.targets_copy():
-                    measurement_to_detectors[measurement_indices[target.value]].add(detector_count)
+                    measurement_to_detectors[total_measurement_count+target.value].add(detector_count)
                 detector_count += 1
+            total_measurement_count += instruction.num_measurements
         return dict(measurement_to_detectors)
     
 

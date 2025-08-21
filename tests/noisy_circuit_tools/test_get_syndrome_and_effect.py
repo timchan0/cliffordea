@@ -43,9 +43,18 @@ class TestD3DoubleCatCheck:
         timeslice, name, targets = fault
         if name.startswith('M'):
             sim_syndrome = np.zeros(circuit.noisy_circuit.num_detectors, dtype=bool)
-            for target in targets:
-                for detector in circuit._measurement_to_detectors[timeslice, target.value]:
-                    sim_syndrome[detector] ^= True
+            for instruction in circuit._noiseless_layers[timeslice]:
+                if isinstance(instruction, stim.CircuitRepeatBlock):
+                    raise ValueError
+                if instruction.num_measurements:
+                    for measurement_index, target_group in enumerate(
+                        instruction.target_groups(),
+                        start=int(instruction.tag),
+                    ):
+                        if set(target_group) == set(targets):
+                            for detector in circuit._measurement_to_detectors[measurement_index]:
+                                sim_syndrome[detector] ^= True
+                            break
             sim_syndrome = tuple(sim_syndrome)
             sim_effect = circuit.noisy_circuit.num_qubits*'_'
         else:
@@ -87,9 +96,9 @@ def test_measurement_fault_gives_syndrome():
         logical_x=stim.PauliString(),
         logical_z=stim.PauliString(),
     )
-    circuit._measurement_to_detectors = {(0, 0): {0}}
+    circuit._measurement_to_detectors = {0: {0}}
     fault = (0, "MZ", (stim.GateTarget(0),))
-    # For a 1-qubit, 1-detector circuit, measurement at (0, 0) flips detector 0
+    # For a 1-qubit, 1-detector circuit, measurement 0 flips detector 0
     syndrome, effect = circuit.get_syndrome_and_effect(fault)
     assert np.array_equal(syndrome, np.array([True]))
     assert effect == "_"
