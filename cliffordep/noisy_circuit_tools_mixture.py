@@ -27,15 +27,15 @@ class CultivationCircuitMixture(BaseCultivationCircuit):
         
         Input:
         * `fault` the fault to analyze.
+        * `replace_s_with` the unitary to push through if `unitary` is an S gate.
+        Also affects S dagger gates.
 
         Require:
         * No qubit is noisily measured more than once per tick in `self.noisy_circuit`.
 
         Output:
-        * `syndrome` a tuple of booleans representing the syndrome, where each boolean
-        indicates whether the corresponding detector has been flipped.
-        * `effect` the effect of the fault when propagated to the end of the circuit,
-        as an unsigned Pauli string.
+        * The effect of the fault when propagated to the end of the circuit,
+        as a `Mixture` object.
         """
         fault_timeslice, name, targets = fault
         pauli_string = self._fault_to_pauli_string(name=name, targets=targets)

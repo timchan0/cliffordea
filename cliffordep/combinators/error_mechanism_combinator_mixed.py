@@ -7,7 +7,8 @@ from cliffordep.combinators._base import BaseErrorMechanismCombinator
 from cliffordep.noisy_circuit_tools_mixture import CultivationCircuitMixture
 from cliffordep.combinators.fault_source_combinator import get_trivial_syndrome_combinations
 from cliffordep.pauli_string_tools import CliffordString, FrozenCliffordString
-from cliffordep.type_aliases import MechanismBag
+
+MechanismBagMixed = tuple[Counter[float], Counter[float], Counter[float]]
 
 
 class ErrorMechanismCombinatorMixed(BaseErrorMechanismCombinator):
@@ -15,6 +16,9 @@ class ErrorMechanismCombinatorMixed(BaseErrorMechanismCombinator):
     where effects are mixtures of Clifford strings.
     
     Extends `BaseErrorMechanismCombinator`.
+
+    Overriden attributes:
+    * `basis` same as in `BaseErrorMechanismCombinator` but each effect is a normalized frozen Clifford string.
     """
     
     def __init__(
@@ -23,21 +27,28 @@ class ErrorMechanismCombinatorMixed(BaseErrorMechanismCombinator):
             print_progress: bool = False,
             replace_s_with: Literal['T', 'S', 'Z'] = 'S',
     ):
+        """Input:
+        * `circuit` the `CultivationCircuitMixture` to analyze.
+        * `print_progress` whether to print progress.
+        * `replace_s_with` the unitary to push through if `unitary` is an S gate.
+        Also affects S dagger gates.
+        """
         _basis: defaultdict[
             tuple[bool, ...], dict[FrozenCliffordString, int]
         ] = defaultdict(dict)
-        _index_to_bag: defaultdict[int, list[int]] = defaultdict(lambda: [0, 0, 0])
+        _index_to_bag: defaultdict[int, list[Counter[float]]] = defaultdict(lambda: [Counter(), Counter(), Counter()])
         for (_, source_name, _), group in circuit.group_faults_by_source().items():
             source_class = self._classify(source_name)
             for fault in group:
                 mixture = circuit.get_syndrome_and_effect(fault, replace_s_with=replace_s_with)
                 for syndrome, submixture in mixture.submixtures.items():
-                    for effect, probability in submixture.items():
+                    for normalized_effect, probability in submixture.items():
+                        assert normalized_effect.mutable_copy().norm_squared == 1
                         index = _basis[syndrome].setdefault(
-                            effect.scaled(probability**0.5), len(_index_to_bag))  # TODO: use a counter
-                        _index_to_bag[index][source_class] += 1  # TODO: always store normalized Clifford string
+                            normalized_effect, len(_index_to_bag))  # TODO: use an integer counter
+                        _index_to_bag[index][source_class][probability] += 1
         self.basis = dict(_basis)
-        self.index_to_bag: dict[int, MechanismBag] = { # type: ignore
+        self.index_to_bag: dict[int, MechanismBagMixed] = { # type: ignore
             index: tuple(bag) for index, bag in _index_to_bag.items()}
         if print_progress:
             print(f"Finished enumerating all faults. \
@@ -154,7 +165,7 @@ distributed among {self.syndrome_count} syndromes.")
         * `length` the length of mechanism combinations to consider.
 
         Output:
-        * a map from effect to a set of mechanism combinations.
+        * a map from (nonzero) effect to a set of mechanism combinations.
         Each mechanism combination is a frozen set of error mechanism indices
         with that resultant effect.
         """
@@ -163,8 +174,16 @@ distributed among {self.syndrome_count} syndromes.")
         mechanism_combos = itertools.combinations(mechanism_set, length)
         for mechanism_combo in mechanism_combos:
             # e.g. mechanism_combo = (('effect1', 1), ('effect2', 2)) and is never empty
+            # the effects in mechanism_combo are normalized
             product_effect: CliffordString = math.prod( # TODO: implement FrozenCliffordString multiplication
                 effect.mutable_copy() for effect, _ in mechanism_combo) # type: ignore
+            if product_effect.norm_squared == 0:
+                # this is not a bug: two normalized effects can multiply to zero
+                # e.g. (XX + YY)(XX - YY) = 0
+                # this just means they are not unitary, which is possible
+                # e.g. the first of the two above effects could have come from
+                # (XX + XY + YX + YY)/2 and a measurement that collapses the state to (XX + YY)
+                continue
             frozen_product_effect: FrozenCliffordString = product_effect.frozen_copy()
             index_combo: frozenset[int] = frozenset(
                 index for _, index in mechanism_combo)
