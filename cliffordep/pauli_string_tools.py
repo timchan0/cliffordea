@@ -5,6 +5,7 @@ from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 import itertools
+import math
 from typing import Literal
 
 import stim
@@ -261,15 +262,15 @@ class CliffordString:
         new_terms: defaultdict[str, complex] = defaultdict(complex)
         
         if replace_s_with == 'T' and (name:=unitary.name) in {'S', 'S_DAG'}:
-            denominator_for_t = 2**(len(target_indices)/2)
             map = PUSH_THROUGH_MAP['T' if name=='S' else 'T_DAG']
             for term, amplitude in self.terms.items():
                 options: list[tuple[str, ...]] = [
                     map[pauli] if index in target_indices else (pauli,)
                     for index, pauli in enumerate(term)]
+                denominator = math.prod(len(option) for option in options)**0.5
                 for pauli_tuple in itertools.product(*options):
                     sign, child = split_sign(_tensor_paulis(*pauli_tuple))
-                    new_terms[child] += amplitude * sign / denominator_for_t
+                    new_terms[child] += amplitude * sign / denominator
         
         else:
             if replace_s_with == 'Z' and unitary.name in {'S', 'S_DAG'}:

@@ -5,7 +5,9 @@ from unittest import mock
 import pytest
 import stim
 
-from cliffordep.pauli_string_tools import CliffordString, FrozenCliffordString
+from cliffordep.pauli_string_tools import CliffordString, FrozenCliffordString, SQRT2
+
+_EPSILON = 1e-13
 
 
 @pytest.fixture
@@ -82,6 +84,13 @@ class TestMultiply:
         cs = CliffordString._multiply(string_1, string_2)
         assert cs.terms == defaultdict(complex, {"X": 1j, "Y": -1})
         assert cs.denominator_squared == string_1.denominator_squared * string_2.denominator_squared
+
+    def test_annihilate(self):
+        s1 = CliffordString({'XX': 1, 'YY': 1})
+        s2 = CliffordString({'XX': 1, 'YY': -1})
+        cs = CliffordString._multiply(s1, s2)
+        assert dict(cs.terms) == {"__": 0, "ZZ": 0}
+        assert cs.denominator_squared == 4
 
 
 class TestMul:
@@ -163,10 +172,9 @@ class TestCanonicalize:
         assert cs.denominator_squared == 1
 
     def test_round(self, string_1: CliffordString):
-        imprecision = 1e-13
         string_2 = CliffordString(
-            {term: amplitude+imprecision for term, amplitude in string_1.terms.items()},
-            string_1.denominator_squared+imprecision
+            {term: amplitude+_EPSILON for term, amplitude in string_1.terms.items()},
+            string_1.denominator_squared+_EPSILON
         )
         assert string_1.terms != string_2.terms
         assert string_1.denominator_squared != string_2.denominator_squared
@@ -200,6 +208,65 @@ class TestPushThroughUnitary:
     def test_s(self, string_1: CliffordString):
         string_1.push_through_unitary(stim.CircuitInstruction('S', [0]))
         assert string_1.terms == defaultdict(complex, {"X": 1j, "Y": 2})
+        assert string_1.denominator_squared == 5
+
+    def test_x_through_t(self):
+        string = CliffordString({'X': 1})
+        string.push_through_unitary(stim.CircuitInstruction('S', [0]), replace_s_with='T')
+        assert dict(string.terms) == {"X": 1/SQRT2, "Y": 1/SQRT2}
+        assert string.denominator_squared == 1
+
+    def test_y_through_t(self):
+        string = CliffordString({'Y': 1})
+        string.push_through_unitary(stim.CircuitInstruction('S', [0]), replace_s_with='T')
+        assert dict(string.terms) == {"X": -1/SQRT2, "Y": 1/SQRT2}
+        assert string.denominator_squared == 1
+
+    def test_z_through_t(self):
+        string = CliffordString({'Z': 1})
+        string.push_through_unitary(stim.CircuitInstruction('S', [0]), replace_s_with='T')
+        assert dict(string.terms) == {"Z": 1}
+        assert string.denominator_squared == 1
+
+    def test_x_through_t_twice(self):
+        string = CliffordString({'X': 1})
+        for _ in range(2):
+            string.push_through_unitary(stim.CircuitInstruction('S', [0]), replace_s_with='T')
+        assert len(string.terms) == 2
+        assert string.terms['X'] == 0
+        assert abs(string.terms['Y'] - 1) < _EPSILON
+        assert string.denominator_squared == 1
+
+    def test_y_through_t_twice(self):
+        string = CliffordString({'Y': 1})
+        for _ in range(2):
+            string.push_through_unitary(stim.CircuitInstruction('S', [0]), replace_s_with='T')
+        assert len(string.terms) == 2
+        assert abs(string.terms['X'] + 1) < _EPSILON
+        assert string.terms['Y'] == 0
+        assert string.denominator_squared == 1
+
+    def test_z_through_t_twice(self):
+        string = CliffordString({'Z': 1})
+        for _ in range(2):
+            string.push_through_unitary(stim.CircuitInstruction('S', [0]), replace_s_with='T')
+        assert dict(string.terms) == {"Z": 1}
+        assert string.denominator_squared == 1
+
+    def test_s_replaced_with_t_1(self, string_1: CliffordString):
+        string_1.push_through_unitary(stim.CircuitInstruction('S', [0]), replace_s_with='T')
+        assert dict(string_1.terms) == {"X": (2+1j)/SQRT2, "Y": (2-1j)/SQRT2}
+        assert string_1.denominator_squared == 5
+
+    @pytest.mark.parametrize("replacement", ('T', 'Z'))
+    def test_s_replaced_with_t_or_Z_unaffected(self, string_2: CliffordString, replacement):
+        string_2.push_through_unitary(stim.CircuitInstruction('S', [0]), replace_s_with=replacement)
+        assert dict(string_2.terms) == {"_": 1j, "Z": -1j}
+        assert string_2.denominator_squared == 1.5
+
+    def test_s_replaced_with_z(self, string_1: CliffordString):
+        string_1.push_through_unitary(stim.CircuitInstruction('S', [0]), replace_s_with='Z')
+        assert dict(string_1.terms) == {"X": -2, "Y": 1j}
         assert string_1.denominator_squared == 5
 
     def test_cnot(self, string_3: CliffordString):
@@ -244,7 +311,7 @@ class TestPushThroughReset:
         }
         assert mixture.keys() == normed_result.keys()
         for key, val in normed_result.items():
-            assert (mixture[key] - val * string_3.norm_squared) < 1e-9
+            assert (mixture[key] - val * string_3.norm_squared) < _EPSILON
         assert string_3.norm_squared != 1
 
     @pytest.mark.parametrize("basis", BASES)
@@ -297,7 +364,7 @@ class TestPushThroughMeasurement:
     #     }
     #     assert mixture.keys() == normed_result.keys()
     #     for key, val in normed_result.items():
-    #         assert (mixture[key] - val * string_3.norm_squared) < 1e-9
+    #         assert (mixture[key] - val * string_3.norm_squared) < _EPSILON
     #     assert string_3.norm_squared != 1
 
     def test_all_measure_z(self, string_3: CliffordString):
@@ -338,5 +405,5 @@ class TestPushThroughMeasurement:
         for key, (expected_frozen_string, expected_prob) in expected_result.items():
             frozen_string, prob = mixture[key]
             assert frozen_string == expected_frozen_string
-            assert (prob - expected_prob) < 1e-9
+            assert (prob - expected_prob) < _EPSILON
         assert string_4.norm_squared != 1
