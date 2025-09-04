@@ -158,7 +158,7 @@ class CliffordString:
             self.denominator_squared = denominator_squared
 
     def __str__(self):
-        return f'{self.denominator_squared}^(-1/2) [{"+".join(
+        return f'{self.denominator_squared}^(-1/2) [{" + ".join(
             f"{sign}{term}" for term, sign in self.terms.items()
         )}]'
     
@@ -346,6 +346,19 @@ class CliffordString:
         (that gives that syndrome when pushed through `measurement`) and its probability.
         """
         # TODO: give examples in docstring
+        if measurement.name == 'MPP':
+            clifford_strings = self._push_through_multiqubit_measurement(measurement, measurement_to_detectors, syndrome_before_push)
+        else:
+            clifford_strings = self._push_through_1_qubit_measurement(measurement, measurement_to_detectors, syndrome_before_push)
+        mixture = self._push_through_measurement_helper(clifford_strings)
+        return mixture
+
+    def _push_through_1_qubit_measurement(
+            self,
+            measurement: stim.CircuitInstruction,
+            measurement_to_detectors: dict[int, set[int]],
+            syndrome_before_push: tuple[bool, ...],
+    ):
         anticommuting_paulis = self._get_anticommuting_paulis(measurement.name)
         # `clifford_strings` maps each syndrome to a post-measurement Clifford string
         clifford_strings: defaultdict[
@@ -353,7 +366,6 @@ class CliffordString:
         ] = defaultdict(lambda: defaultdict(complex))
         for term, amplitude in self.terms.items():
             syndrome = np.array(syndrome_before_push, dtype=bool)
-            # TODO: handle multiqubit measurements
             for measurement_index, target in enumerate(
                 measurement.targets_copy(),
                 start=int(measurement.tag),
@@ -362,6 +374,35 @@ class CliffordString:
                     for detector in measurement_to_detectors[measurement_index]:
                         syndrome[detector] ^= True
             clifford_strings[tuple(syndrome)][term] += amplitude
+        return clifford_strings
+    
+    def _push_through_multiqubit_measurement(
+            self,
+            measurement: stim.CircuitInstruction,
+            measurement_to_detectors: dict[int, set[int]],
+            syndrome_before_push: tuple[bool, ...],
+    ):
+        # `clifford_strings` maps each syndrome to a post-measurement Clifford string
+        clifford_strings: defaultdict[
+            tuple[bool, ...], defaultdict[str, complex]
+        ] = defaultdict(lambda: defaultdict(complex))
+        for term, amplitude in self.terms.items():
+            syndrome = np.array(syndrome_before_push, dtype=bool)
+            for measurement_index, target_group in enumerate(
+                measurement.target_groups(),
+                start=int(measurement.tag),
+            ):
+                measurement_flips = False
+                for target in target_group:
+                    if term[target.value] in self._get_anticommuting_paulis(target.pauli_type):
+                        measurement_flips ^= True
+                if measurement_flips:
+                    for detector in measurement_to_detectors[measurement_index]:
+                        syndrome[detector] ^= True
+            clifford_strings[tuple(syndrome)][term] += amplitude
+        return clifford_strings
+
+    def _push_through_measurement_helper(self, clifford_strings: dict[tuple[bool, ...], defaultdict[str, complex]]):
         mixture: dict[tuple[bool, ...], tuple[FrozenCliffordString, float]] = {}
         for syndrome, terms in clifford_strings.items():
             s = CliffordString(terms, self.denominator_squared)
@@ -369,30 +410,6 @@ class CliffordString:
             s.normalize()
             mixture[syndrome] = (s.frozen_copy(), probability)
         return mixture
-        
-        # # `clifford_strings` maps the string of Paulis that were measured to a post-measurement Clifford string
-        # clifford_strings: defaultdict[
-        #     tuple[str, ...], defaultdict[str, complex]
-        # ] = defaultdict(lambda: defaultdict(complex))
-        # for term, amplitude in self.terms.items():
-        #     paulis_measured = tuple(term[target.value] for target in measurement.targets_copy())
-        #     clifford_strings[paulis_measured][term] += amplitude
-        # anticommuting_paulis = self._get_anticommuting_paulis(measurement.name)
-        # mixture: defaultdict[
-        #     tuple[bool, ...],
-        #     defaultdict[FrozenCliffordString, float],
-        # ] = defaultdict(lambda: defaultdict(float))
-        # for paulis_measured, terms in clifford_strings.items():
-        #     syndrome = np.array(syndrome_before_push, dtype=bool)
-        #     for target, pauli_measured in zip(measurement.targets_copy(), paulis_measured, strict=True):
-        #         if pauli_measured in anticommuting_paulis:
-        #             for detector in measurement_to_detectors[timeslice, target.value]:
-        #                 syndrome[detector] ^= True
-        #     clifford_string = CliffordString(terms, self.denominator_squared)
-        #     probability = clifford_string.norm_squared
-        #     clifford_string.normalize()
-        #     mixture[tuple(syndrome)][clifford_string.frozen_copy()] += probability
-        # return mixture
 
 
     @staticmethod
@@ -465,6 +482,14 @@ class FrozenCliffordString:
     terms: frozenset[tuple[str, complex]]
     denominator_squared: float
 
+    def __str__(self):
+        return f'{self.denominator_squared}^(-1/2) [{" + ".join(
+            f"{sign}{term}" for term, sign in self.terms
+        )}]'
+    
+    def __repr__(self):
+        return f'FrozenCliffordString({self.terms}, {self.denominator_squared})'
+
     def mutable_copy(self):
         """Return a mutable, unhashable copy of the Clifford string."""
         return CliffordString(
@@ -486,7 +511,7 @@ class Mixture:
     
     Instance attributes:
     * `submixtures` a map from each syndrome to a map from each
-    normalized Clifford string (that gives that syndrome) to its probability.
+    normalized (frozen) Clifford string (that gives that syndrome) to its probability.
     Each syndrome is a tuple of booleans, where each boolean
     indicates whether the corresponding detector has been flipped.
     """

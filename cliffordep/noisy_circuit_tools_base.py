@@ -59,7 +59,7 @@ class BaseCultivationCircuit:
 
 
     @cached_property
-    def _measurement_to_detectors(self) -> dict[int, set[int]]:
+    def _measurement_to_detectors(self) -> defaultdict[int, set[int]]:
         """A map from each measurement index in `self.noisy_circuit`
         to a set of indices of the detectors it flips.
         """
@@ -74,7 +74,7 @@ class BaseCultivationCircuit:
                     measurement_to_detectors[total_measurement_count+target.value].add(detector_count)
                 detector_count += 1
             total_measurement_count += instruction.num_measurements
-        return dict(measurement_to_detectors)
+        return measurement_to_detectors
     
 
     @cached_property
