@@ -114,14 +114,13 @@ distributed among {self.syndrome_count} syndromes.")
                 for segment_product in itertools.product(*(option.items() for option in options)):
                     # note: this is probably just as fast as iterating through `segment_product` once
                     # segment_product never empty
-                    product_effect: CliffordString = math.prod( # TODO: implement FrozenCliffordString multiplication
-                        effect.mutable_copy() for effect, _ in segment_product) # type: ignore
-                    frozen_product_effect: FrozenCliffordString = product_effect.frozen_copy()
+                    product_effect: FrozenCliffordString = math.prod(
+                        effect for effect, _ in segment_product) # type: ignore
                     candidates = itertools.product(*(
                         segments for _, segments in segment_product))
                     for candidate in candidates:
                         flattened = frozenset(itertools.chain.from_iterable(candidate))
-                        result[frozen_product_effect].add(flattened)
+                        result[product_effect].add(flattened)
         if print_progress:
             print(f"Done. They lead to {len(result)} distinct effects.")
         return dict(result)
@@ -175,8 +174,8 @@ distributed among {self.syndrome_count} syndromes.")
         for mechanism_combo in mechanism_combos:
             # e.g. mechanism_combo = (('effect1', 1), ('effect2', 2)) and is never empty
             # the effects in mechanism_combo are normalized
-            product_effect: CliffordString = math.prod( # TODO: implement FrozenCliffordString multiplication
-                effect.mutable_copy() for effect, _ in mechanism_combo) # type: ignore
+            product_effect: FrozenCliffordString = math.prod(
+                effect for effect, _ in mechanism_combo) # type: ignore
             if product_effect.norm_squared == 0:
                 # this is not a bug: two normalized effects can multiply to zero
                 # e.g. (XX + YY)(XX - YY) = 0
@@ -184,8 +183,7 @@ distributed among {self.syndrome_count} syndromes.")
                 # e.g. the first of the two above effects could have come from
                 # (XX + XY + YX + YY)/2 and a measurement that collapses the state to (XX + YY)
                 continue
-            frozen_product_effect: FrozenCliffordString = product_effect.frozen_copy()
             index_combo: frozenset[int] = frozenset(
                 index for _, index in mechanism_combo)
-            result[frozen_product_effect].add(index_combo)
+            result[product_effect].add(index_combo)
         return dict(result)
