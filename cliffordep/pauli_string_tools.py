@@ -325,6 +325,7 @@ class FrozenCliffordString:
             return self._scaled(lhs)
         return self._multiply(lhs, self)
 
+    # TODO: implement product so no need to canonicalize repeatedly
     @staticmethod
     def _multiply(lhs: 'FrozenCliffordString', rhs: 'FrozenCliffordString'):
         """Return the product of two frozen Clifford strings, canonicalized."""
@@ -718,6 +719,12 @@ class LogicalVector:
 
     def __init__(self, amplitudes: npt.NDArray[np.complex128]):
         self.amplitudes = amplitudes
+
+    def __str__(self):
+        return str(self.amplitudes)
+    
+    def __repr__(self):
+        return f"LogicalVector({self.amplitudes})"
 
     @property
     def probability_mass(self):
