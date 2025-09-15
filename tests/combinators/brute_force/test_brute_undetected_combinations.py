@@ -12,7 +12,7 @@ class TestD3DoubleCatCheck():
 
     def test_length_0_exact(self, d3_double_cat_check_brute: SlowFaultSourceCombinator):
         result = d3_double_cat_check_brute._get_undetected_fault_combinations_for_length(0)
-        trivial_effect = '_'*7
+        trivial_effect = '_'*d3_double_cat_check_brute.circuit.noisy_circuit.num_qubits
         assert len(result) == 1
         assert trivial_effect in result
         assert result[trivial_effect] == Counter({1: 1})

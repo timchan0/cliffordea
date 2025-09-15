@@ -107,16 +107,3 @@ class CultivationCircuit(BaseCultivationCircuit):
             return {1, 2}
         else:
             raise NotImplementedError
-
-
-
-    def restrict_to_data(self, effect: str):
-        """Restrict `effect` to only the data qubits.
-
-        Input:
-        * `effect` an unsigned Pauli string.
-
-        Output:
-        * The unsigned Pauli string restricted to the data qubits.
-        """
-        return ''.join(effect[index] for index in self.DATA_INDICES)

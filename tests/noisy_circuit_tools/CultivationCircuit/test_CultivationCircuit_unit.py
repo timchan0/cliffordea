@@ -41,7 +41,7 @@ class TestUndetectedCombinationsOnD3DoubleCatCheck():
 
     def test_length_0_exact(self, d3_double_cat_check_fault_source_combinator: FaultSourceCombinator):
         result = d3_double_cat_check_fault_source_combinator._get_undetected_fault_combinations_for_length(0)
-        trivial_effect = '_'*7
+        trivial_effect = '_'*d3_double_cat_check_fault_source_combinator.circuit.noisy_circuit.num_qubits
         assert len(result) == 1
         assert trivial_effect in result
         assert result[trivial_effect] == Counter({1: 1})

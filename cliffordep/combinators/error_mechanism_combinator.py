@@ -21,7 +21,6 @@ class ErrorMechanismCombinator(BaseErrorMechanismCombinator):
     def __init__(
             self,
             circuit: CultivationCircuit,
-            restrict_to_data: bool = True,
             print_progress: bool = False,
     ):
         _basis: defaultdict[
@@ -32,8 +31,6 @@ class ErrorMechanismCombinator(BaseErrorMechanismCombinator):
             source_class = self._classify(source_name)
             for fault in group:
                 syndrome, effect = circuit.get_syndrome_and_effect(fault)
-                if restrict_to_data:
-                    effect = circuit.restrict_to_data(effect)
                 index = _basis[tuple(syndrome)].setdefault(effect, len(_index_to_bag))  # TODO: use a counter
                 _index_to_bag[index][source_class] += 1
         self.basis = dict(_basis)
@@ -43,7 +40,7 @@ class ErrorMechanismCombinator(BaseErrorMechanismCombinator):
             print(f"Finished enumerating all faults. \
 Found {self.mechanism_count} error mechanisms \
 distributed among {self.syndrome_count} syndromes.")
-        super().__init__(circuit, restrict_to_data, print_progress)
+        super().__init__(circuit, print_progress)
 
     @property
     def syndrome_count(self) -> int:

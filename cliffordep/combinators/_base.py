@@ -20,12 +20,10 @@ class Combinator(abc.ABC):
     def __init__(
             self,
             circuit: 'CultivationCircuit | CultivationCircuitMixture',
-            restrict_to_data: bool = True,
             print_progress: bool = False,
     ):
         """Input:
         * `circuit` the `CultivationCircuit` to analyze.
-        * `restrict_to_data` whether to restrict all effects to only the data qubits.
         * `print_progress` whether to print progress.
         """
         self.circuit = circuit

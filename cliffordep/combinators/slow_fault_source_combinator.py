@@ -34,7 +34,6 @@ class SlowFaultSourceCombinator(BaseFaultSourceCombinator):
     def __init__(
             self,
             circuit: CultivationCircuit,
-            restrict_to_data: bool = True,
             print_progress: bool = False,
     ):
         _basis: defaultdict[
@@ -42,13 +41,11 @@ class SlowFaultSourceCombinator(BaseFaultSourceCombinator):
         for source, group in circuit.group_faults_by_source().items():
             for fault in group:
                 syndrome, effect = circuit.get_syndrome_and_effect(fault)
-                if restrict_to_data:
-                    effect = circuit.restrict_to_data(effect)
                 _basis[source][fault] = (syndrome, effect)
         self.basis = dict(_basis)
         if print_progress:
             print(f"Finished enumerating all faults.")
-        super().__init__(circuit, restrict_to_data, print_progress)
+        super().__init__(circuit, print_progress)
 
 
     def _get_undetected_fault_combinations_for_length(

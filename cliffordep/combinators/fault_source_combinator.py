@@ -74,7 +74,6 @@ class FaultSourceCombinator(BaseFaultSourceCombinator):
     def __init__(
             self,
             circuit: CultivationCircuit,
-            restrict_to_data: bool = True,
             print_progress: bool = False,
     ) -> None:
         _basis: defaultdict[
@@ -84,13 +83,11 @@ class FaultSourceCombinator(BaseFaultSourceCombinator):
             for fault in group:
                 syndrome, effect = circuit.get_syndrome_and_effect(fault)
                 tuple_syndrome = tuple(syndrome)
-                if restrict_to_data:
-                    effect = circuit.restrict_to_data(effect)
                 _basis[tuple_syndrome][effect][source] += 1
         self.basis = {syndrome: dict(effect_map) for syndrome, effect_map in _basis.items()}
         if print_progress:
             print(f"Finished enumerating all faults. Found {self.syndrome_count} distinct syndromes.")
-        super().__init__(circuit, restrict_to_data, print_progress)
+        super().__init__(circuit, print_progress)
 
     @property
     def syndrome_count(self) -> int:

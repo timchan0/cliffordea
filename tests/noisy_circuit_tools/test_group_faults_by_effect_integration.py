@@ -1,23 +1,14 @@
 import itertools
 
 import stim
-import pytest
 
 import cliffordep
 from cliffordep.combinators import FaultSourceCombinator
-from cliffordep.noisy_circuit_tools import CultivationCircuit
 from cliffordep.pauli_string_tools import FrozenCliffordString
 
 
 class TestD3DoubleCatCheck():
     """Tests on the `d3_double_cat_check` circuit."""
-
-
-    @pytest.fixture
-    def unrestricted_fault_source_combinator(self, noisy_d3_double_cat_check: CultivationCircuit) -> FaultSourceCombinator:
-        """Fault source combinator for the distance-3 double cat check circuit."""
-        combinator = FaultSourceCombinator(noisy_d3_double_cat_check, restrict_to_data=False)
-        return combinator
     
 
     def test_correct_length(self, d3_double_cat_check_fault_source_combinator: FaultSourceCombinator):
@@ -27,9 +18,9 @@ class TestD3DoubleCatCheck():
         assert d3_double_cat_check_fault_source_combinator.syndrome_count == 19
 
 
-    def test_undetected_pairs(self, unrestricted_fault_source_combinator: FaultSourceCombinator):
+    def test_undetected_pairs(self, d3_double_cat_check_fault_source_combinator: FaultSourceCombinator):
         """Test that undetected pairs commute with the flag measurements at the end of `d3_double_cat_check`."""
-        for _, resultant_paulis in unrestricted_fault_source_combinator.items():
+        for _, resultant_paulis in d3_double_cat_check_fault_source_combinator.items():
             pairs = itertools.combinations(resultant_paulis.items(), 2)
             for (resultant_pauli_1, faults_1), (resultant_pauli_2, faults_2) in pairs:
                 string_1 = stim.PauliString(resultant_pauli_1)
