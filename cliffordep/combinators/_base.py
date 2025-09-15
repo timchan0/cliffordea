@@ -358,7 +358,7 @@ class BaseErrorMechanismCombinator(Combinator):
     def _decomposed_probability(
             class_: int,
             noise_level: float,
-    ):
+    ) -> float:
         """Return the probability of the independent processes of a fault source of class `class_`.
 
         Input:
@@ -384,7 +384,7 @@ class BaseErrorMechanismCombinator(Combinator):
             probability_combo_pairs: Iterable[tuple[float, set[frozenset[int]]]],
             index_to_odds: dict[int, float],
         ) -> float:
-        """Sum the odds of all error mechanim combinations in `probability_combo_pairs`.
+        """Sum the odds of all error mechanism combinations in `probability_combo_pairs`.
         
         Input:
         * `probability_combo_pairs` an iterable of pairs, each containing:

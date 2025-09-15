@@ -6,20 +6,44 @@ class _D3DoubleCatCheckA6Or7:
     DATA_INDICES = (0, 3, 5, 7, 8, 10, 11)
     """Indices of the data qubits."""
 
-    STABILIZER_GENERATORS = (
-        stim.PauliString('X0*X1*X2*X4'),
-        stim.PauliString('Z0*Z1*Z2*Z4'),
-        stim.PauliString('X1*X2*X3*X5'),
-        stim.PauliString('Z1*Z2*Z3*Z5'),
-        stim.PauliString('X2*X4*X5*X6'),
-        stim.PauliString('Z2*Z4*Z5*Z6'),
+    _STABILIZER_GENERATOR_INDICES = (
+        (0, 1, 2, 4),
+        (1, 2, 3, 5),
+        (2, 4, 5, 6),
+    )
+    """Indices of the stabilizer generators restricted to the 7 data qubits
+    in the order given by `DATA_INDICES`.
+    """
+
+    _LOGICAL_INDICES = (0, 1, 3)
+    """Indices of the logicals restricted to the 7 data qubits
+    in the order given by `DATA_INDICES`.
+    """
+
+    STABILIZER_GENERATORS_RESTRICTED = tuple(
+        stim.PauliString('*'.join(f'{basis}{index}' for index in indices))
+        for indices in _STABILIZER_GENERATOR_INDICES
+        for basis in ('X', 'Z')
     )
     """Generators restricted to the 7 data qubits
     in the order given by `DATA_INDICES`.
     """
 
-    LOGICAL_X = stim.PauliString('X0*X1*X3')
-    LOGICAL_Z = stim.PauliString('Z0*Z1*Z3')
+
+    def __init__(self):
+        self.STABILIZER_GENERATORS = tuple(
+        stim.PauliString('*'.join(f'{basis}{self.DATA_INDICES[index]}' for index in indices))
+        for indices in self._STABILIZER_GENERATOR_INDICES
+        for basis in ('X', 'Z')
+    )
+        (self.LOGICAL_X_RESTRICTED, self.LOGICAL_Z_RESTRICTED) = tuple(
+            stim.PauliString('*'.join(f'{basis}{index}' for index in self._LOGICAL_INDICES))
+            for basis in ('X', 'Z')
+        )
+        (self.LOGICAL_X, self.LOGICAL_Z) = tuple(
+            stim.PauliString('*'.join(f'{basis}{self.DATA_INDICES[index]}' for index in self._LOGICAL_INDICES))
+            for basis in ('X', 'Z')
+        )
 
 
 class D3DoubleCatCheckA7(_D3DoubleCatCheckA6Or7):

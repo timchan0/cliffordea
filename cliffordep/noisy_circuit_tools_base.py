@@ -1,7 +1,7 @@
 """Module for enumerating faults in noisy stim circuits."""
 
 from collections import defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from functools import cached_property
 from typing import Literal
 
@@ -29,7 +29,7 @@ class BaseCultivationCircuit:
             self,
             noisy_circuit: stim.Circuit,
             data_indices: Sequence[int],
-            stabilizer_generators: Iterable[stim.PauliString],
+            stabilizer_generators: Sequence[stim.PauliString],
             logical_x: stim.PauliString,
             logical_z: stim.PauliString,
     ) -> None:

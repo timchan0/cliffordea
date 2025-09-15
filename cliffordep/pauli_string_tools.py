@@ -2,7 +2,7 @@
 
 import cmath
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Sequence
 from dataclasses import dataclass
 import itertools
 import math
@@ -250,7 +250,7 @@ class CliffordString:
         )
 
 
-    def postselect_from_stabilizers(self, stabilizer_generators: Iterable[PauliString]):
+    def postselect_from_stabilizers(self, stabilizer_generators: Sequence[PauliString]):
         """Kill all terms that do not commute with the stabilizers.
         
         Input:
