@@ -22,9 +22,7 @@ class TestD3DoubleCatCheck():
             d3_double_cat_check_brute: SlowFaultSourceCombinator
     ):
         goal: defaultdict[str, Counter[int]] = defaultdict(Counter)
-        first_fault_dict, *_ = d3_double_cat_check_brute.basis.values()
-        (_, first_effect), *_ = first_fault_dict.values()
-        goal['_'*len(first_effect)][1] += 1
+        goal['_'*d3_double_cat_check_brute.circuit.noisy_circuit.num_qubits][1] += 1
 
         result = d3_double_cat_check_brute._get_undetected_fault_combinations_for_length(0)
         assert result == dict(goal)

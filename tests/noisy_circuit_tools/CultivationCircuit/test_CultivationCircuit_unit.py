@@ -48,9 +48,7 @@ class TestUndetectedCombinationsOnD3DoubleCatCheck():
 
     def test_length_0(self, d3_double_cat_check_fault_source_combinator: FaultSourceCombinator):
         goal: defaultdict[str, Counter[int]] = defaultdict(Counter)
-        first_effect_map, *_ = d3_double_cat_check_fault_source_combinator.values()
-        first_effect, *_ = first_effect_map.keys()
-        goal['_'*len(first_effect)][1] += 1
+        goal['_'*d3_double_cat_check_fault_source_combinator.circuit.noisy_circuit.num_qubits][1] += 1
 
         result = d3_double_cat_check_fault_source_combinator._get_undetected_fault_combinations_for_length(0)
         assert result == dict(goal)

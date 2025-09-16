@@ -57,9 +57,7 @@ class SlowFaultSourceCombinator(BaseFaultSourceCombinator):
         if print_progress:
             print(f"Finding undetected combinations of length {length}...")
         if length == 0:
-            first_fault_dict, *_ = self.basis.values()
-            (_, first_effect), *_ = first_fault_dict.values()
-            result['_'*len(first_effect)][1] += 1
+            result['_'*self.circuit.noisy_circuit.num_qubits][1] += 1
         else:
             combos = itertools.combinations(self.basis.items(), length)
             for combo in combos:

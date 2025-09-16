@@ -71,10 +71,7 @@ def test_length_2_candidates(dummy_fault_count, update_undetected_combinations):
             goal = defaultdict(Counter)
             (source_1, count_1), (source_2, count_2) = candidate
             if source_1 != source_2:
-                denominators = math.prod((
-                                fault_count(source_1[1]),
-                                fault_count(source_2[1]),
-                            ))
+                denominators = fault_count(source_1[1]) * fault_count(source_2[1])
                 goal[effect][denominators] += count_1 * count_2
 
             assert undetected_combinations == goal

@@ -109,9 +109,7 @@ class FaultSourceCombinator(BaseFaultSourceCombinator):
         if print_progress:
             print(f"Finding undetected combinations of length {length}...")
         if length == 0:
-            first_effect_map, *_ = self.values()
-            first_effect, *_ = first_effect_map.keys()
-            result['_'*len(first_effect)][1] += 1
+            result['_'*self.circuit.noisy_circuit.num_qubits][1] += 1
         else:
             trivial_syndrome_combos = get_trivial_syndrome_combinations(
                 self.keys(), length)
@@ -177,10 +175,9 @@ class FaultSourceCombinator(BaseFaultSourceCombinator):
             # e.g. effect_combo = ('effect1', 'effect1', 'effect2') and is never empty
             counter = Counter(effect_combo)
             # e.g. counter = {'effect1': 2, 'effect2': 1}
-            first_effect, *_ = counter.keys()
             product_effect = forget_sign(math.prod(
                 (stim.PauliString(effect) for effect, count in counter.items() if count % 2),
-                start=stim.PauliString(len(first_effect)),
+                start=stim.PauliString(self.circuit.noisy_circuit.num_qubits),
             ))
             options = self._effect_counter_to_options(effect_map, counter)
             valid_segments: Counter[frozenset[FaultSource]] = Counter()

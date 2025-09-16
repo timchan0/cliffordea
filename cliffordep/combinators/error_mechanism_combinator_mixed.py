@@ -104,9 +104,8 @@ distributed among {self.syndrome_count} syndromes.")
         if print_progress:
             print(f"Finding undetected combinations of length {length}...")
         if length == 0:
-            first_effect_map, *_ = self.basis.values()
-            first_effect, *_ = first_effect_map.keys()
-            result[first_effect].add(frozenset())  # TODO: check `first_effect` is all identity
+            identity = FrozenCliffordString(frozenset({('_'*self.circuit.noisy_circuit.num_qubits, 1)}), 1)
+            result[identity].add(frozenset())
         else:
             trivial_syndrome_combos = get_trivial_syndrome_combinations(self.basis.keys(), length)
             for syndrome_counter in trivial_syndrome_combos:
