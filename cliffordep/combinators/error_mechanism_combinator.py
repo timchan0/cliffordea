@@ -31,43 +31,14 @@ class ErrorMechanismCombinator(BaseErrorMechanismCombinator):
             source_class = self._classify(source_name)
             for fault in group:
                 syndrome, effect = circuit.get_syndrome_and_effect(fault)
-                index = _basis[tuple(syndrome)].setdefault(effect, len(_index_to_bag))  # TODO: use a counter
+                index = _basis[tuple(syndrome)].setdefault(effect, len(_index_to_bag))
                 _index_to_bag[index][source_class] += 1
-        self.basis = dict(_basis)
+        self.basis: dict[tuple[bool, ...], dict[str, int]] = dict(_basis) # type: ignore
         self.index_to_bag: dict[int, MechanismBag] = { # type: ignore
             index: tuple(bag) for index, bag in _index_to_bag.items()}
         if print_progress:
-            print(f"Finished enumerating all faults. \
-Found {self.mechanism_count} error mechanisms \
-distributed among {self.syndrome_count} syndromes.")
-        super().__init__(circuit, print_progress)
-
-    @property
-    def syndrome_count(self) -> int:
-        return len(self.basis)
-    
-    @property
-    def mechanism_count(self) -> int:
-        return sum(len(mechanisms) for mechanisms in self.basis.values())
-    
-
-    def get_undetected_mechanism_combinations(
-            self,
-            max_order: int,
-            print_progress: bool = False,
-    ):
-        """Find all combinations of mechanisms up to `max_order` that have trivial syndrome.
-
-        Input:
-        * `max_order` the maximum order of probability to consider.
-        * `print_progress` whether to print progress.
-
-        Output:
-        * A list whose kth entry is a map
-        from each effect to a set of frozen sets of error mechanism indices.
-        """
-        return [self._get_undetected_mechanism_combinations_for_length(
-            length, print_progress) for length in range(max_order + 1)]
+            print(f"Finished enumerating all faults. {str(self)}")
+        super().__init__(circuit, print_progress=print_progress)
     
 
     def _get_undetected_mechanism_combinations_for_length(
@@ -75,17 +46,6 @@ distributed among {self.syndrome_count} syndromes.")
             length: int,
             print_progress: bool = False
     ) -> dict[str, set[frozenset[int]]]:
-        """Find all combinations of `length` mechanisms that have trivial syndrome.
-        
-        Helper for `get_undetected_mechanism_combinations`.
-        
-        Input:
-        * `length` the length of combinations to find.
-        * `print_progress` whether to print progress.
-
-        Output:
-        * a map from each effect to a set of frozen sets of error mechanism indices.
-        """
         result: defaultdict[str, set[frozenset[int]]] = defaultdict(set)
         if print_progress:
             print(f"Finding undetected combinations of length {length}...")
@@ -110,7 +70,10 @@ distributed among {self.syndrome_count} syndromes.")
         return dict(result)
     
 
-    def _syndrome_counter_to_options(self, syndrome_counter: Counter[tuple[bool, ...]]) -> list[dict[str, set[frozenset[int]]]]:
+    def _syndrome_counter_to_options(
+            self,
+            syndrome_counter: Counter[tuple[bool, ...]],
+    ) -> list[dict[str, set[frozenset[int]]]]:
         """Get mechanism combination segments for each syndrome based on the counts in `syndrome_counter`.
         
         Input:
@@ -160,3 +123,15 @@ distributed among {self.syndrome_count} syndromes.")
                 index for _, index in mechanism_combo)
             result[product_effect].add(index_combo)
         return dict(result)
+    
+
+    def get_index_to_odds(self, noise_level: float):
+        index_to_odds: dict[int, float] = {}
+        for index, bag in self.index_to_bag.items():
+            decay_factor = math.prod(
+                (1-2*self._decomposed_probability(process_class, noise_level))**count
+                for process_class, count in enumerate(bag)
+            )
+            prob = (1 - decay_factor) / 2
+            index_to_odds[index] = prob / (1 - prob)
+        return index_to_odds

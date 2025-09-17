@@ -33,3 +33,5 @@ There are three types of processes, corresponding to the three counts in the tup
 The probability of each process depends on its class and the noise level in a nontrivial way.
 The probability of the error mechanism is the probability of an odd number of its processes occurring.
 """
+
+MechanismBagMixed = tuple[Counter[float], Counter[float], Counter[float]]

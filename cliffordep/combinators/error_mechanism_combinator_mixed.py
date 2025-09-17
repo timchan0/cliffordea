@@ -6,9 +6,8 @@ from typing import Literal
 from cliffordep.combinators._base import BaseErrorMechanismCombinator
 from cliffordep.noisy_circuit_tools_mixture import CultivationCircuitMixture
 from cliffordep.combinators.fault_source_combinator import get_trivial_syndrome_combinations
-from cliffordep.pauli_string_tools import CliffordString, FrozenCliffordString
-
-MechanismBagMixed = tuple[Counter[float], Counter[float], Counter[float]]
+from cliffordep.pauli_string_tools import FrozenCliffordString
+from cliffordep.type_aliases import MechanismBagMixed
 
 
 class ErrorMechanismCombinatorMixed(BaseErrorMechanismCombinator):
@@ -45,43 +44,14 @@ class ErrorMechanismCombinatorMixed(BaseErrorMechanismCombinator):
                     for normalized_effect, probability in submixture.items():
                         assert normalized_effect.mutable_copy().norm_squared == 1
                         index = _basis[syndrome].setdefault(
-                            normalized_effect, len(_index_to_bag))  # TODO: use an integer counter
+                            normalized_effect, len(_index_to_bag))
                         _index_to_bag[index][source_class][probability] += 1
-        self.basis = dict(_basis)
+        self.basis: dict[tuple[bool, ...], dict[FrozenCliffordString, int]] = dict(_basis) # type: ignore
         self.index_to_bag: dict[int, MechanismBagMixed] = { # type: ignore
             index: tuple(bag) for index, bag in _index_to_bag.items()}
         if print_progress:
-            print(f"Finished enumerating all faults. \
-Found {self.mechanism_count} error mechanisms \
-distributed among {self.syndrome_count} syndromes.")
+            print(f"Finished enumerating all faults. {str(self)}")
         super().__init__(circuit, print_progress=print_progress)
-
-    @property
-    def syndrome_count(self) -> int:
-        return len(self.basis)
-    
-    @property
-    def mechanism_count(self) -> int:
-        return sum(len(mechanisms) for mechanisms in self.basis.values())
-    
-
-    def get_undetected_mechanism_combinations(
-            self,
-            max_order: int,
-            print_progress: bool = False,
-    ):
-        """Find all combinations of mechanisms up to `max_order` that have trivial syndrome.
-
-        Input:
-        * `max_order` the maximum order of probability to consider.
-        * `print_progress` whether to print progress.
-
-        Output:
-        * A list whose kth entry is a map
-        from each effect to a set of frozen sets of error mechanism indices.
-        """
-        return [self._get_undetected_mechanism_combinations_for_length(
-            length, print_progress) for length in range(max_order + 1)]
     
 
     def _get_undetected_mechanism_combinations_for_length(
@@ -89,17 +59,6 @@ distributed among {self.syndrome_count} syndromes.")
             length: int,
             print_progress: bool = False
     ) -> dict[FrozenCliffordString, set[frozenset[int]]]:
-        """Find all combinations of `length` mechanisms that have trivial syndrome.
-        
-        Helper for `get_undetected_mechanism_combinations`.
-        
-        Input:
-        * `length` the length of combinations to find.
-        * `print_progress` whether to print progress.
-
-        Output:
-        * a map from each effect to a set of frozen sets of error mechanism indices.
-        """
         result: defaultdict[FrozenCliffordString, set[frozenset[int]]] = defaultdict(set)
         if print_progress:
             print(f"Finding undetected combinations of length {length}...")
@@ -186,3 +145,7 @@ distributed among {self.syndrome_count} syndromes.")
                 index for _, index in mechanism_combo)
             result[product_effect].add(index_combo)
         return dict(result)
+    
+
+    def get_index_to_odds(self, noise_level: float):
+        raise NotImplementedError

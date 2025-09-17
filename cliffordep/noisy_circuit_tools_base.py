@@ -53,6 +53,16 @@ class BaseCultivationCircuit:
         self.LOGICAL_Z = logical_z
 
 
+    def __repr__(self):
+        return f"""{self.__class__.__name__}(
+        noisy_circuit={self.noisy_circuit},
+        data_indices={self.DATA_INDICES},
+        stabilizer_generators={self.STABILIZER_GENERATORS},
+        logical_x={self.LOGICAL_X},
+        logical_z={self.LOGICAL_Z}
+    )"""
+
+
     @cached_property
     def noiseless_circuit(self):
         return self.noisy_circuit.without_noise()

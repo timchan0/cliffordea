@@ -569,6 +569,15 @@ class Mixture:
         self.submixtures = dict(_submixtures)
 
 
+    def __str__(self) -> str:
+        lines = []
+        for syndrome, submixture in self.submixtures.items():
+            lines.append(''.join('1' if detector else '0' for detector in syndrome))
+            for clifford_string, probability in submixture.items():
+                lines.append(f'  probability {probability}: {str(clifford_string)}')
+        return '\n'.join(lines)
+
+
     def push_through(
             self,
             instruction: stim.CircuitInstruction,

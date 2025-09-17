@@ -1,12 +1,14 @@
 import abc
 from collections import Counter
 from collections.abc import Iterable
+from functools import cache
 import math
 from typing import Literal
 
 from cliffordep.noisy_circuit_tools import CultivationCircuit
 from cliffordep.noisy_circuit_tools_mixture import CultivationCircuitMixture
-from cliffordep.type_aliases import MechanismBag
+from cliffordep.type_aliases import MechanismBag, MechanismBagMixed
+from cliffordep.pauli_string_tools import FrozenCliffordString
 
 
 class Combinator(abc.ABC):
@@ -27,6 +29,9 @@ class Combinator(abc.ABC):
         * `print_progress` whether to print progress.
         """
         self.circuit = circuit
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.circuit})"
 
 
 class BaseFaultSourceCombinator(Combinator):
@@ -208,7 +213,86 @@ class BaseErrorMechanismCombinator(Combinator):
     * `index_to_bag` a map from each error mechanism index to its mechanism bag.
     """
 
-    index_to_bag: dict[int, MechanismBag]
+    index_to_bag: dict[int, MechanismBag] | dict[int, MechanismBagMixed]
+    basis: dict[tuple[bool, ...], dict[str, int]] | dict[
+            tuple[bool, ...], dict[FrozenCliffordString, int]]
+
+    @property
+    def syndrome_count(self) -> int:
+        return len(self.basis)
+    
+    @property
+    def mechanism_count(self) -> int:
+        return sum(len(mechanisms) for mechanisms in self.basis.values())
+    
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__} with {self.mechanism_count} error mechanisms distributed among {self.syndrome_count} syndromes."
+    
+    def print_basis(self):
+        """Print the syndrome, effect, index, and mechanism bag of all error mechanisms."""
+        lines = []
+        for syndrome, effect_dict in self.basis.items():
+            lines.append(''.join('1' if detector else '0' for detector in syndrome))
+            for effect, index in effect_dict.items():
+                bag = self.index_to_bag[index]
+                bag_str = bag if type(bag[0]) is int else tuple(dict(b) for b in bag) # type: ignore
+                lines.append(f"  {effect}: {index}, {bag_str}")
+        print('\n'.join(lines))
+
+    @cache
+    def index_to_syndrome_and_effect(self, index: int) -> tuple[tuple[bool, ...], str | FrozenCliffordString]:
+        """Get the syndrome and effect corresponding to an error mechanism index.
+        
+        Input:
+        * `index` the error mechanism index.
+
+        Output:
+        * `syndrome` the syndrome of the error mechanism.
+        * `effect` the effect of the error mechanism.
+        """
+        for syndrome, effect_dict in self.basis.items():
+            for effect, effect_index in effect_dict.items():
+                if effect_index == index:
+                    return syndrome, effect
+        raise ValueError(f"Index {index} not found in basis.")
+    
+
+    def get_undetected_mechanism_combinations(
+            self,
+            max_order: int,
+            print_progress: bool = False,
+    ):
+        """Find all combinations of mechanisms up to `max_order` that have trivial syndrome.
+
+        Input:
+        * `max_order` the maximum order of probability to consider.
+        * `print_progress` whether to print progress.
+
+        Output:
+        * A list whose kth entry is a map
+        from each effect to a set of frozen sets of error mechanism indices.
+        """
+        return [self._get_undetected_mechanism_combinations_for_length(
+            length, print_progress) for length in range(max_order + 1)]
+
+
+    @abc.abstractmethod
+    def _get_undetected_mechanism_combinations_for_length(
+            self,
+            length: int,
+            print_progress: bool = False
+    ) -> dict[str, set[frozenset[int]]] | dict[FrozenCliffordString, set[frozenset[int]]]:
+        """Find all combinations of `length` mechanisms that have trivial syndrome.
+        
+        Helper for `get_undetected_mechanism_combinations`.
+        
+        Input:
+        * `length` the length of combinations to find.
+        * `print_progress` whether to print progress.
+
+        Output:
+        * a map from each effect to a set of frozen sets of error mechanism indices.
+        """
 
 
     def get_kept_strings(
@@ -315,17 +399,9 @@ class BaseErrorMechanismCombinator(Combinator):
         return error_odds / (identity_odds + error_odds)
     
 
-    def get_index_to_odds(self, noise_level: float):
+    @abc.abstractmethod
+    def get_index_to_odds(self, noise_level: float) -> dict[int, float]:
         """Get a map from error mechanism index to the odds of it flipping."""
-        index_to_odds: dict[int, float] = {}
-        for index, bag in self.index_to_bag.items():
-            decay_factor = math.prod(
-                (1-2*self._decomposed_probability(process_class, noise_level))**count
-                for process_class, count in enumerate(bag)
-            )
-            prob = (1 - decay_factor) / 2
-            index_to_odds[index] = prob / (1 - prob)
-        return index_to_odds
 
 
     @staticmethod
