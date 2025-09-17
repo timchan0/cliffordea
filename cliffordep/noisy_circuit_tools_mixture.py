@@ -72,7 +72,7 @@ class CultivationCircuitMixture(BaseCultivationCircuit):
 
 
     def _fault_to_pauli_string(self, name: str, targets: tuple[stim.GateTarget, ...]):
-        """Convert a fault to a stim.PauliString.
+        """Convert a fault to an unsigned Pauli string.
         
         Input:
         * `name` the name of the fault,

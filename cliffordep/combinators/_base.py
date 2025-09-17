@@ -158,8 +158,8 @@ class BaseFaultSourceCombinator(Combinator):
             logical_vector = self.circuit.string_to_logical_vector(cultivated_state, data_string)
             # TODO: check if `LogicalVector.transfer_xy_to_iz` is unitary. If so, move from above method into below conditional block.
             if logical_vector.probability_mass:
-                # TODO: use `logical_error_probability` instead of `is_logical_error`
-                if logical_vector.is_logical_error:
+                # TODO: use `error_probability` instead of `is_error`
+                if logical_vector.is_error:
                     error_strings[data_string] = (logical_vector.probability_mass, denominators)
                 else:
                     identity_strings[data_string] = (logical_vector.probability_mass, denominators)
@@ -359,8 +359,8 @@ class BaseErrorMechanismCombinator(Combinator):
             logical_vector = self.circuit.string_to_logical_vector(cultivated_state, data_string)
             # TODO: check if `LogicalVector.transfer_xy_to_iz` is unitary. If so, move from above method into below conditional block.
             if logical_vector.probability_mass:
-                # TODO: use `logical_error_probability` instead of `is_logical_error`
-                if logical_vector.is_logical_error:
+                # TODO: use `error_probability` instead of `is_error`
+                if logical_vector.is_error:
                     error_strings[data_string] = (logical_vector.probability_mass, combo_set)
                 else:
                     identity_strings[data_string] = (logical_vector.probability_mass, combo_set)

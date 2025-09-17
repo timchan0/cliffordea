@@ -743,23 +743,24 @@ class LogicalVector:
         return float(np.vdot(self.amplitudes, self.amplitudes).real)
 
     @property
-    def is_logical_error(self):
+    def is_error(self):
         """Return whether `self` leads to a logical fidelity < 1."""
         return bool(np.vdot(ANY_ERROR, self.amplitudes))
     
     @property
-    def logical_error_probability(self):
+    def error_probability(self):
         """Return the probability of Z logical error.
 
         Require:
         * The amplitudes of the X and Y logical classes are zero.
 
         Output:
-        * the probability the logical vector leads to Z logical error.
+        * the probability the logical vector leads to Z logical error
+        given the logical vector has survived.
         This is a real number in the range [0, 1].
         """
-        z_amplitude = self.amplitudes[3]
-        return float(z_amplitude.real**2 + z_amplitude.imag**2)
+        z_amplitude: complex = self.amplitudes[3]
+        return (z_amplitude.real**2 + z_amplitude.imag**2) / self.probability_mass
 
     def transfer_xy_to_iz(
             self,
