@@ -39,7 +39,15 @@ class ErrorMechanismCombinator(BaseErrorMechanismCombinator):
         if print_progress:
             print(f"Finished enumerating all faults. {str(self)}")
         super().__init__(circuit, print_progress=print_progress)
-    
+
+
+    def get_undetected_mechanism_combinations( # type: ignore
+            self,
+            max_order: int,
+            print_progress: bool = False,
+    ) -> list[dict[str, set[frozenset[int]]]]:
+        return super().get_undetected_mechanism_combinations(max_order, print_progress=print_progress) # type: ignore
+
 
     def _get_undetected_mechanism_combinations_for_length(
             self,
