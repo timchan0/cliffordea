@@ -28,7 +28,6 @@ def multi_qubit_detector_circuit():
             DETECTOR rec[-2]
             DETECTOR rec[-1]
         """),
-        data_indices= (0, 1),
         stabilizer_generators=(stim.PauliString(),),
         logical_x=stim.PauliString(),
         logical_z=stim.PauliString(),

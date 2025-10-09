@@ -18,7 +18,6 @@ class BaseCultivationCircuit:
     
     Instance attributes:
     * `noisy_circuit` a `stim.Circuit` annotated with noise.
-    * `DATA_INDICES` a set of indices corresponding to the data qubits.
     * `STABILIZER_GENERATORS` the generators of the stabilizer group.
     * `LOGICAL_X` a Pauli string representing a logical X operator.
     * `LOGICAL_Z` ditto for Z.
@@ -28,7 +27,6 @@ class BaseCultivationCircuit:
     def __init__(
             self,
             noisy_circuit: stim.Circuit,
-            data_indices: Sequence[int],
             stabilizer_generators: Sequence[stim.PauliString],
             logical_x: stim.PauliString,
             logical_z: stim.PauliString,
@@ -47,7 +45,6 @@ class BaseCultivationCircuit:
             )
             measurement_index += measurement_count
         self.noisy_circuit = tagged_circuit
-        self.DATA_INDICES = data_indices
         self.STABILIZER_GENERATORS = stabilizer_generators
         self.LOGICAL_X = logical_x
         self.LOGICAL_Z = logical_z
@@ -56,7 +53,6 @@ class BaseCultivationCircuit:
     def __repr__(self):
         return f"""{self.__class__.__name__}(
         noisy_circuit={self.noisy_circuit},
-        data_indices={self.DATA_INDICES},
         stabilizer_generators={self.STABILIZER_GENERATORS},
         logical_x={self.LOGICAL_X},
         logical_z={self.LOGICAL_Z}

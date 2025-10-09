@@ -91,7 +91,6 @@ def test_measurement_fault_gives_syndrome():
     circuit = CultivationCircuit(
         noisy_circuit=stim.Circuit("""MZ 0
                                    DETECTOR rec[-1]"""),
-        data_indices= (0,),
         stabilizer_generators=(stim.PauliString(),),
         logical_x=stim.PauliString(),
         logical_z=stim.PauliString(),
@@ -111,7 +110,6 @@ def test_pauli_fault_gives_effect_and_syndrome():
             MZ 0
             DETECTOR rec[-1]
         """),
-        data_indices= (0,),
         stabilizer_generators=(stim.PauliString(),),
         logical_x=stim.PauliString(),
         logical_z=stim.PauliString(),
@@ -128,7 +126,6 @@ def test_no_syndrome_for_commuting_pauli():
         noisy_circuit=stim.Circuit("""H 0
         MZ 0
         DETECTOR rec[-1]"""),
-        data_indices= (0,),
         stabilizer_generators=(stim.PauliString(),),
         logical_x=stim.PauliString(),
         logical_z=stim.PauliString(),
@@ -144,7 +141,6 @@ def test_reset_removes_pauli():
     circuit = CultivationCircuit(
         noisy_circuit=stim.Circuit("""TICK
                                    R 0"""),
-        data_indices= (0,),
         stabilizer_generators=(stim.PauliString(),),
         logical_x=stim.PauliString(),
         logical_z=stim.PauliString(),

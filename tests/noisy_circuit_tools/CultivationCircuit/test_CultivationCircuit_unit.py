@@ -20,7 +20,6 @@ class TestNoiselessLayers:
         circuit = CultivationCircuit(
             noisy_circuit=stim.Circuit("""TICK
             R 0"""),
-            data_indices= (0,),
             stabilizer_generators=(stim.PauliString(),),
             logical_x=stim.PauliString(),
             logical_z=stim.PauliString(),

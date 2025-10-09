@@ -22,7 +22,6 @@ def noisy_d3_double_cat_check(noisy_d3_double_cat_check_circuit: stim.Circuit):
     d3_double_cat_check = cliffordep.circuits.D3DoubleCatCheckA6()
     return cliffordep.CultivationCircuit(
         noisy_d3_double_cat_check_circuit,
-        data_indices=d3_double_cat_check.DATA_INDICES,
         stabilizer_generators=d3_double_cat_check.STABILIZER_GENERATORS,
         logical_x=d3_double_cat_check.LOGICAL_X,
         logical_z=d3_double_cat_check.LOGICAL_Z,
