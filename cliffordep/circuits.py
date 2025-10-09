@@ -1,7 +1,7 @@
 import stim
 
-class _D3DoubleCatCheckA6Or7:
-    """Common constants for the distance-3 double cat-check circuit using 6 or 7 ancillas."""
+class _OriginalD3ColorCodeLayout:
+    """Common constants for the distance-3 double cat-check circuit using 1, 6, or 7 ancillas."""
 
     DATA_INDICES = (0, 3, 5, 7, 8, 10, 11)
     """Indices of the data qubits."""
@@ -46,7 +46,168 @@ class _D3DoubleCatCheckA6Or7:
         )
 
 
-class D3DoubleCatCheckA6(_D3DoubleCatCheckA6Or7):
+class D3DoubleCatCheckA1(_OriginalD3ColorCodeLayout):
+    """The distance-3 double cat-check circuit using 1 ancilla."""
+
+    ANCILLA_INDICES = (4,)
+    """Indices of the ancilla qubits."""
+
+    INNER_CIRCUIT = stim.Circuit(
+"""
+QUBIT_COORDS(0, 0) 0
+QUBIT_COORDS(1, 1) 3
+QUBIT_COORDS(2, 0) 4
+QUBIT_COORDS(2, 1) 5
+QUBIT_COORDS(2, 3) 7
+QUBIT_COORDS(3, 0) 8
+QUBIT_COORDS(3, 2) 10
+QUBIT_COORDS(4, 0) 11
+#!pragma POLYGON(0,0,1,0.25) 8 11 10 5
+#!pragma POLYGON(0,1,0,0.25) 7 10 5 3
+#!pragma POLYGON(1,0,0,0.25) 3 5 8 0
+H 0 3 5 7 8 10 11
+RX 4
+TICK
+CX 4 5
+TICK
+CX 5 0
+TICK
+CX 5 3
+TICK
+CX 5 7
+TICK
+CX 5 8
+TICK
+CX 5 10
+TICK
+CX 5 11
+TICK
+MX 5
+DETECTOR(0, 0, 0) rec[-1]
+TICK
+RX 5
+TICK
+CX 5 11
+TICK
+CX 5 10
+TICK
+CX 5 8
+TICK
+CX 5 7
+TICK
+CX 5 3
+TICK
+CX 5 0
+TICK
+CX 4 5
+TICK
+# added reset after measurement
+MRX 4
+DETECTOR(2, 1, 1) rec[-1] rec[-2]
+"""
+    )
+
+    CIRCUIT = stim.Circuit(
+"""
+QUBIT_COORDS(0, 0) 0
+QUBIT_COORDS(0, 1) 1
+QUBIT_COORDS(1, 0) 2
+QUBIT_COORDS(1, 1) 3
+QUBIT_COORDS(2, 0) 4
+QUBIT_COORDS(2, 1) 5
+QUBIT_COORDS(2, 2) 6
+QUBIT_COORDS(2, 3) 7
+QUBIT_COORDS(3, 0) 8
+QUBIT_COORDS(3, 1) 9
+QUBIT_COORDS(3, 2) 10
+QUBIT_COORDS(4, 0) 11
+QUBIT_COORDS(4, 1) 12
+#!pragma POLYGON(0,0,1,0.25) 8 11 10 5
+#!pragma POLYGON(0,1,0,0.25) 7 10 5 3
+#!pragma POLYGON(1,0,0,0.25) 3 5 8 0
+TICK
+MPP Y0*Y8*Y11*Y10*Y7*Y5*Y3
+TICK
+MPP X8*X0*X3*X5
+TICK
+MPP X3*X5*X10*X7
+TICK
+MPP X11*X8*X5*X10
+TICK
+MPP Z8*Z0*Z3*Z5
+TICK
+MPP Z7*Z10*Z5*Z3
+TICK
+MPP Z11*Z8*Z5*Z10
+TICK
+RX 4
+TICK
+S_DAG 0 3 5 7 8 10 11
+TICK
+CX 4 5
+TICK
+CX 5 0
+TICK
+CX 5 3
+TICK
+CX 5 7
+TICK
+CX 5 8
+TICK
+CX 5 10
+TICK
+CX 5 11
+TICK
+MX 5
+DETECTOR(0, 0, 0) rec[-1] rec[-8]
+TICK
+RX 5
+TICK
+CX 5 11
+TICK
+CX 5 10
+TICK
+CX 5 8
+TICK
+CX 5 7
+TICK
+CX 5 3
+TICK
+CX 5 0
+TICK
+CX 4 5
+TICK
+S 5 10 11 8 7 3 0
+TICK
+# added reset after measurement
+MRX 4
+DETECTOR(2, 1, 1) rec[-1] rec[-2]
+TICK
+MPP X8*X0*X3*X5
+DETECTOR(3, 0, 2) rec[-1] rec[-3] rec[-9]
+TICK
+MPP X7*X10*X5*X3
+DETECTOR(1, 1, 3) rec[-1] rec[-4] rec[-9]
+TICK
+MPP X11*X8*X5*X10
+DETECTOR(4, 0, 4) rec[-1] rec[-5] rec[-9]
+TICK
+MPP Z8*Z0*Z3*Z5
+DETECTOR(3, 0, 5) rec[-1] rec[-9]
+TICK
+MPP Z7*Z10*Z5*Z3
+DETECTOR(2, 3, 6) rec[-1] rec[-9]
+TICK
+MPP Z11*Z8*Z5*Z10
+DETECTOR(4, 0, 7) rec[-1] rec[-9]
+TICK
+MPP Y0*Y8*Y11*Y10*Y7*Y5*Y3
+OBSERVABLE_INCLUDE(0) rec[-1]  # unsure about this
+"""
+    )
+
+
+class D3DoubleCatCheckA6(_OriginalD3ColorCodeLayout):
     """The distance-3 double cat-check circuit using 6 ancillas.
     
     This is the circuit used in the paper.
@@ -247,7 +408,7 @@ OBSERVABLE_INCLUDE(0) rec[-1] rec[-8] rec[-9] rec[-12] rec[-13]
     """
 
 
-class D3DoubleCatCheckA7(_D3DoubleCatCheckA6Or7):
+class D3DoubleCatCheckA7(_OriginalD3ColorCodeLayout):
     """The distance-3 double cat-check circuit using 7 ancillas."""
 
     ANCILLA_INDICES = (13, 12, 9, 4, 2, 6, 1)
