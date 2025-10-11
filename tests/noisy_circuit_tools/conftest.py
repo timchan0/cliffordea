@@ -1,20 +1,20 @@
 import pytest
 import stim
 
-from cliffordep.combinators import FaultSourceCombinator
+from cliffordep.combinators import FaultCombinatorExclusive
 from cliffordep.noisy_circuit_tools import CultivationCircuit
 
 
 @pytest.fixture
-def d3_double_cat_check_grouped_by_source(noisy_d3_double_cat_check: CultivationCircuit):
-    """Output of `group_faults_by_source` for the distance-3 double cat check circuit."""
-    return noisy_d3_double_cat_check.group_faults_by_source()
+def d3_double_cat_check_grouped_by_location(noisy_d3_double_cat_check: CultivationCircuit):
+    """Output of `group_error_events_by_location` for the distance-3 double cat check circuit."""
+    return noisy_d3_double_cat_check.group_error_events_by_location()
 
 
 @pytest.fixture
-def d3_double_cat_check_fault_source_combinator(noisy_d3_double_cat_check: CultivationCircuit) -> FaultSourceCombinator:
-    """Fault source combinator for the distance-3 double cat check circuit."""
-    combinator = FaultSourceCombinator(noisy_d3_double_cat_check)
+def d3_double_cat_check_fault_source_combinator(noisy_d3_double_cat_check: CultivationCircuit) -> FaultCombinatorExclusive:
+    """Exclusive fault combinator for the distance-3 double cat check circuit."""
+    combinator = FaultCombinatorExclusive(noisy_d3_double_cat_check)
     return combinator
 
 

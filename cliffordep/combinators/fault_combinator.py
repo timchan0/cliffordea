@@ -4,18 +4,18 @@ import math
 
 import stim
 
-from cliffordep.combinators._base import BaseErrorMechanismCombinator
+from cliffordep.combinators._base import BaseFaultCombinator
 from cliffordep.noisy_circuit_tools import CultivationCircuit
-from cliffordep.combinators.fault_source_combinator import get_trivial_syndrome_combinations
+from cliffordep.combinators.fault_combinator_exclusive import get_trivial_syndrome_combinations
 from cliffordep.pauli_string_tools import forget_sign
-from cliffordep.type_aliases import MechanismBag
+from cliffordep.type_aliases import FaultBag
 
 
-class ErrorMechanismCombinator(BaseErrorMechanismCombinator):
-    """Group error mechanisms by their syndrome then effect,
+class FaultCombinator(BaseFaultCombinator):
+    """Group faults by their syndrome then effect,
     where effects are pure Clifford strings.
     
-    Extends `BaseErrorMechanismCombinator`.
+    Extends `BaseFaultCombinator`.
     """
     
     def __init__(
@@ -27,36 +27,36 @@ class ErrorMechanismCombinator(BaseErrorMechanismCombinator):
             tuple[bool, ...], dict[str, int]
         ] = defaultdict(dict)
         _index_to_bag: defaultdict[int, list[int]] = defaultdict(lambda: [0, 0, 0])
-        for (_, source_name, _), group in circuit.group_faults_by_source().items():
-            source_class = self._classify(source_name)
-            for fault in group:
-                syndrome, effect = circuit.get_syndrome_and_effect(fault)
+        for (_, process_name, _), group in circuit.group_error_events_by_location().items():
+            process_class = self._classify(process_name)
+            for error_event in group:
+                syndrome, effect = circuit.get_syndrome_and_effect(error_event)
                 index = _basis[tuple(syndrome)].setdefault(effect, len(_index_to_bag))
-                _index_to_bag[index][source_class] += 1
+                _index_to_bag[index][process_class] += 1
         self.basis: dict[tuple[bool, ...], dict[str, int]] = dict(_basis) # type: ignore
-        self.index_to_bag: dict[int, MechanismBag] = { # type: ignore
+        self.index_to_bag: dict[int, FaultBag] = { # type: ignore
             index: tuple(bag) for index, bag in _index_to_bag.items()}
         if print_progress:
             print(f"Finished enumerating all faults. {str(self)}")
         super().__init__(circuit, print_progress=print_progress)
 
 
-    def get_undetected_mechanism_combinations( # type: ignore
+    def get_undetected_configurations( # type: ignore
             self,
             max_order: int,
             print_progress: bool = False,
     ) -> list[dict[str, set[frozenset[int]]]]:
-        return super().get_undetected_mechanism_combinations(max_order, print_progress=print_progress) # type: ignore
+        return super().get_undetected_configurations(max_order, print_progress=print_progress) # type: ignore
 
 
-    def _get_undetected_mechanism_combinations_for_length(
+    def _get_undetected_configurations_for_length(
             self,
             length: int,
             print_progress: bool = False
     ) -> dict[str, set[frozenset[int]]]:
         result: defaultdict[str, set[frozenset[int]]] = defaultdict(set)
         if print_progress:
-            print(f"Finding undetected combinations of length {length}...")
+            print(f"Finding undetected configurations of length {length}...")
         if length == 0:
             result['_'*self.circuit.noisy_circuit.num_qubits].add(frozenset())
         else:
@@ -82,18 +82,18 @@ class ErrorMechanismCombinator(BaseErrorMechanismCombinator):
             self,
             syndrome_counter: Counter[tuple[bool, ...]],
     ) -> list[dict[str, set[frozenset[int]]]]:
-        """Get mechanism combination segments for each syndrome based on the counts in `syndrome_counter`.
+        """Get configuration segments for each syndrome based on the counts in `syndrome_counter`.
         
         Input:
         * `syndrome_counter` dictates for each syndrome
-        how many mechanisms in `self.basis[syndrome]` should appear in the combination.
+        how many faults in `self.basis[syndrome]` should appear in the configuration.
         E.g. `{syndrome1: 2, syndrome2: 1}`.
 
         Output:
         * `options` a list of options, one for each item in `syndrome_counter`
         e.g. `[option1, option2]`.
         Each option is a map from effect to a set of frozen sets
-        of error mechanism indices whose combination produces that effect.
+        of fault indices whose combination produces that effect.
         e.g. `{effect1: {frozenset1, frozenset2}, effect2: {frozenset3}}`
         where e.g. `frozenset1 = {1, 2}`.
         """
@@ -109,26 +109,26 @@ class ErrorMechanismCombinator(BaseErrorMechanismCombinator):
         syndrome: tuple[bool, ...],
         length: int,
     ):
-        """Get a map from effect to the error mechanism combinations with that resultant effect.
+        """Get a map from effect to the configurations with that resultant effect.
         
         Input:
-        * `syndrome` defines the set of error mechanisms to take combinations from.
-        * `length` the length of mechanism combinations to consider.
+        * `syndrome` defines the set of faults to take combinations from.
+        * `length` the length of configurations to consider.
 
         Output:
-        * a map from effect to a set of mechanism combinations.
-        Each mechanism combination is a frozen set of error mechanism indices
+        * a map from effect to a set of configurations.
+        Each configuration is a frozen set of fault indices
         with that resultant effect.
         """
         result: defaultdict[str, set[frozenset[int]]] = defaultdict(set)
-        mechanism_set = self.basis[syndrome].items()
-        mechanism_combos = itertools.combinations(mechanism_set, length)
-        for mechanism_combo in mechanism_combos:
-            # e.g. mechanism_combo = (('effect1', 1), ('effect2', 2)) and is never empty
+        fault_set = self.basis[syndrome].items()
+        fault_combos = itertools.combinations(fault_set, length)
+        for fault_combo in fault_combos:
+            # e.g. fault_combo = (('effect1', 1), ('effect2', 2)) and is never empty
             product_effect = forget_sign(math.prod(
-                stim.PauliString(effect) for effect, _ in mechanism_combo)) # type: ignore
+                stim.PauliString(effect) for effect, _ in fault_combo)) # type: ignore
             index_combo: frozenset[int] = frozenset(
-                index for _, index in mechanism_combo)
+                index for _, index in fault_combo)
             result[product_effect].add(index_combo)
         return dict(result)
     

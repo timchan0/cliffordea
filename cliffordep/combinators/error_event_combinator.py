@@ -9,23 +9,23 @@ import numpy as np
 import numpy.typing as npt
 import stim
 
-from cliffordep.combinators._base import BaseFaultSourceCombinator
-from cliffordep.type_aliases import FaultSource, Fault
+from cliffordep.combinators._base import BaseExclusiveCombinator
+from cliffordep.type_aliases import ErrorLocation, ErrorEvent
 from cliffordep.noisy_circuit_tools import CultivationCircuit
 from cliffordep.pauli_string_tools import forget_sign
-from cliffordep.combinators import fault_count
+from cliffordep.combinators import error_event_count
 
 
-class SlowFaultSourceCombinator(BaseFaultSourceCombinator):
-    """Group all faults in a noisy circuit by their source Stim gate.
+class ErrorEventCombinator(BaseExclusiveCombinator):
+    """Group all error events in a noisy circuit by their error location.
 
-    Extends `BaseFaultSourceCombinator`.
+    Extends `BaseExclusiveCombinator`.
     Finds undetected fault combinations by brute force
     i.e. iterating through all fault combinations
     and recording which ones have trivial syndrome.
     
     Additional instance attributes:
-    * `basis` a map from each fault source to another map
+    * `basis` a map from each error location to another map
     from each of the faults it can produce to a pair containing:
         - `syndrome` a tuple of booleans representing the syndrome of the fault.
         - `effect` a string representing the resultant Pauli operator of the fault.
@@ -37,25 +37,25 @@ class SlowFaultSourceCombinator(BaseFaultSourceCombinator):
             print_progress: bool = False,
     ):
         _basis: defaultdict[
-            FaultSource, dict[Fault, tuple[npt.NDArray[np.bool_], str]]] = defaultdict(dict)
-        for source, group in circuit.group_faults_by_source().items():
-            for fault in group:
-                syndrome, effect = circuit.get_syndrome_and_effect(fault)
-                _basis[source][fault] = (syndrome, effect)
+            ErrorLocation, dict[ErrorEvent, tuple[npt.NDArray[np.bool_], str]]] = defaultdict(dict)
+        for source, group in circuit.group_error_events_by_location().items():
+            for error_event in group:
+                syndrome, effect = circuit.get_syndrome_and_effect(error_event)
+                _basis[source][error_event] = (syndrome, effect)
         self.basis = dict(_basis)
         if print_progress:
             print(f"Finished enumerating all faults.")
         super().__init__(circuit, print_progress)
 
 
-    def _get_undetected_fault_combinations_for_length(
+    def _get_undetected_configurations_for_length(
             self,
             length: int,
             print_progress: bool = False,
     ):
         result: defaultdict[str, Counter[int]] = defaultdict(Counter)
         if print_progress:
-            print(f"Finding undetected combinations of length {length}...")
+            print(f"Finding undetected configurations of length {length}...")
         if length == 0:
             result['_'*self.circuit.noisy_circuit.num_qubits][1] += 1
         else:
@@ -70,8 +70,8 @@ class SlowFaultSourceCombinator(BaseFaultSourceCombinator):
                             start=stim.PauliString()
                         )
                         fault_counts = prod(
-                            fault_count(source_name)
-                            for (_, source_name, _), _ in combo)
+                            error_event_count(process_name)
+                            for (_, process_name, _), _ in combo)
                         result[forget_sign(product_string)][fault_counts] += 1
         if print_progress:
             print(f"Done. They lead to {len(result)} distinct effects.")

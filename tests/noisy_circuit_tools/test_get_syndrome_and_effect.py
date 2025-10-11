@@ -1,9 +1,10 @@
+from collections import defaultdict
 import numpy as np
 import stim
 import pytest
 
 import cliffordep
-from cliffordep.type_aliases import Fault, FaultSource
+from cliffordep.type_aliases import ErrorEvent, ErrorLocation
 from cliffordep.noisy_circuit_tools import CultivationCircuit
 
 
@@ -11,16 +12,16 @@ class TestD3DoubleCatCheck:
     """Tests on the `d3_double_cat_check` circuit."""
 
     @pytest.fixture
-    def ungrouped(self, d3_double_cat_check_grouped_by_source: dict[FaultSource, set[Fault]]):
-        result: set[Fault] = set.union(*d3_double_cat_check_grouped_by_source.values())
+    def ungrouped(self, d3_double_cat_check_grouped_by_location: dict[ErrorLocation, set[ErrorEvent]]):
+        result: set[ErrorEvent] = set.union(*d3_double_cat_check_grouped_by_location.values())
         return result
 
     def test_with_flip_simulator(
             self,
-            ungrouped: set[Fault],
+            ungrouped: set[ErrorEvent],
             noisy_d3_double_cat_check: CultivationCircuit,
     ):
-        """Test the correctness of `group_faults_by_source`
+        """Test the correctness of `group_error_events_by_location`
         by comparing results with a `stim.FlipSimulator`.
         """
         sim = stim.FlipSimulator(
@@ -35,7 +36,7 @@ class TestD3DoubleCatCheck:
     def _test_with_flip_simulator(
             circuit: CultivationCircuit,
             sim: stim.FlipSimulator,
-            fault: Fault,
+            fault: ErrorEvent,
     ):
 
         syndrome, effect = circuit.get_syndrome_and_effect(fault)
@@ -86,8 +87,8 @@ class TestD3DoubleCatCheck:
         assert sim_effect == effect
 
 
-def test_measurement_fault_gives_syndrome():
-    # Fault: measurement error at timeslice 0, qubit 0
+def test_measurement_error_gives_syndrome():
+    # Error event: measurement error at timeslice 0, qubit 0
     circuit = CultivationCircuit(
         noisy_circuit=stim.Circuit("""MZ 0
                                    DETECTOR rec[-1]"""),
@@ -95,14 +96,14 @@ def test_measurement_fault_gives_syndrome():
         logical_x=stim.PauliString(),
         logical_z=stim.PauliString(),
     )
-    circuit._measurement_to_detectors = {0: {0}}
+    circuit._measurement_to_detectors = defaultdict(set, {0: {0}})
     fault = (0, "MZ", (stim.GateTarget(0),))
     # For a 1-qubit, 1-detector circuit, measurement 0 flips detector 0
     syndrome, effect = circuit.get_syndrome_and_effect(fault)
     assert np.array_equal(syndrome, np.array([True]))
     assert effect == "_"
 
-def test_pauli_fault_gives_effect_and_syndrome():
+def test_pauli_error_gives_effect_and_syndrome():
     circuit = CultivationCircuit(
         noisy_circuit=stim.Circuit("""
             H 0
@@ -114,7 +115,7 @@ def test_pauli_fault_gives_effect_and_syndrome():
         logical_x=stim.PauliString(),
         logical_z=stim.PauliString(),
     )
-    # Fault: X_ERROR at timeslice 0, qubit 0 (after H)
+    # Error event: X_ERROR at timeslice 0, qubit 0 (after H)
     fault = (0, "X_ERROR", (stim.GateTarget(0),))
     syndrome, effect = circuit.get_syndrome_and_effect(fault)
     # X anticommutes with MZ, so syndrome flips
@@ -130,7 +131,7 @@ def test_no_syndrome_for_commuting_pauli():
         logical_x=stim.PauliString(),
         logical_z=stim.PauliString(),
     )
-    # Fault: Z_ERROR at timeslice 0, qubit 0 (commutes with MZ)
+    # Error event: Z_ERROR at timeslice 0, qubit 0 (commutes with MZ)
     fault = (0, "Z_ERROR", (stim.GateTarget(0),))
     syndrome, effect = circuit.get_syndrome_and_effect(fault)
     assert np.array_equal(syndrome, np.array([False]))

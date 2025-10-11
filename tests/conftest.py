@@ -3,7 +3,7 @@ import stim
 
 import cliffordep
 from cliffordep.noisy_circuit_tools import CultivationCircuit
-from cliffordep.combinators import SlowFaultSourceCombinator
+from cliffordep.combinators import ErrorEventCombinator
 
 
 @pytest.fixture
@@ -29,6 +29,6 @@ def noisy_d3_double_cat_check(noisy_d3_double_cat_check_circuit: stim.Circuit):
 
 
 @pytest.fixture
-def d3_double_cat_check_brute(noisy_d3_double_cat_check: CultivationCircuit) -> SlowFaultSourceCombinator:
-    """Fault source brute-force combinator for the distance-3 double cat check circuit."""
-    return SlowFaultSourceCombinator(noisy_d3_double_cat_check)
+def d3_double_cat_check_brute(noisy_d3_double_cat_check: CultivationCircuit) -> ErrorEventCombinator:
+    """Exclusive fault brute-force combinator for the distance-3 double cat check circuit."""
+    return ErrorEventCombinator(noisy_d3_double_cat_check)

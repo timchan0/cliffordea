@@ -9,7 +9,7 @@ import stim
 
 from cliffordep.noiseless_circuit_tools import split_by_ticks
 from cliffordep.constants import DEPOLARIZE2_FAULTS
-from cliffordep.type_aliases import Fault, FaultSource
+from cliffordep.type_aliases import ErrorEvent, ErrorLocation
 from cliffordep.pauli_string_tools import push_through_transversal
 
 
@@ -91,13 +91,13 @@ class BaseCultivationCircuit:
         return split_by_ticks(self.noisy_circuit.without_noise())
 
 
-    def group_faults_by_source(self):
-        """Group all possible faults in a noisy circuit by their source Stim gate.
+    def group_error_events_by_location(self):
+        """Group all possible error events in a noisy circuit by their error location.
 
         Output:
-        * A map from a `FaultSource` to a set `Fault`s.
+        * A map from a `ErrorLocation` to a set `ErrorEvent`s.
         """
-        _faults: defaultdict[FaultSource, set[Fault]] = defaultdict(set)
+        _faults: defaultdict[ErrorLocation, set[ErrorEvent]] = defaultdict(set)
         for timeslice, layer in enumerate(split_by_ticks(self.noisy_circuit)):
             for instruction in layer:
                 if isinstance(instruction, stim.CircuitRepeatBlock):

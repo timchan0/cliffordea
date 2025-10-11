@@ -4,7 +4,7 @@ import numpy as np
 import numpy.typing as npt
 import stim
 
-from cliffordep.type_aliases import Fault
+from cliffordep.type_aliases import ErrorEvent
 from cliffordep.pauli_string_tools import forget_sign
 from cliffordep.noisy_circuit_tools_base import BaseCultivationCircuit
 
@@ -16,11 +16,11 @@ class CultivationCircuit(BaseCultivationCircuit):
     """
 
 
-    def get_syndrome_and_effect(self, fault: Fault):
-        """Get the syndrome and the resultant Pauli string after inserting a fault.
+    def get_syndrome_and_effect(self, error_event: ErrorEvent):
+        """Get the syndrome and the resultant Pauli string after inserting an error event.
         
         Input:
-        * `fault` the fault to analyze.
+        * `error_event` the error event to analyze.
 
         Require:
         * No qubit is noisily measured more than once per tick in `self.noisy_circuit`.
@@ -28,11 +28,11 @@ class CultivationCircuit(BaseCultivationCircuit):
         Output:
         * `syndrome` a tuple of booleans representing the syndrome, where each boolean
         indicates whether the corresponding detector has been flipped.
-        * `effect` the effect of the fault when propagated to the end of the circuit,
+        * `effect` the effect of the error event when propagated to the end of the circuit,
         as an unsigned Pauli string.
         """
-        timeslice, name, targets = fault
-        pauli_string = self._fault_to_pauli_string(name=name, targets=targets)
+        timeslice, name, targets = error_event
+        pauli_string = self._error_event_to_pauli_string(name=name, targets=targets)
         syndrome: npt.NDArray[np.bool_] = np.zeros(self.noisy_circuit.num_detectors, dtype=bool)
         if name.startswith('M'):
             # pauli_string is identity
@@ -40,7 +40,7 @@ class CultivationCircuit(BaseCultivationCircuit):
                 if isinstance(instruction, stim.CircuitRepeatBlock):
                     raise ValueError("There is a REPEAT block in the circuit.")
                 if instruction.num_measurements:
-                    # TODO: store measurement index in `Fault` to avoid below search
+                    # TODO: store measurement index in `ErrorEvent` to avoid below search
                     for measurement_index, target_group in enumerate(
                         instruction.target_groups(),
                         start=int(instruction.tag),
@@ -74,17 +74,17 @@ class CultivationCircuit(BaseCultivationCircuit):
         return syndrome, forget_sign(pauli_string)
 
 
-    def _fault_to_pauli_string(self, name: str, targets: tuple[stim.GateTarget, ...]):
-        """Convert a fault to a stim.PauliString.
+    def _error_event_to_pauli_string(self, name: str, targets: tuple[stim.GateTarget, ...]):
+        """Convert an error event to a `stim.PauliString`.
         
         Input:
-        * `name` the name of the fault,
+        * `name` the name of the error event,
         which can be 'E', 'X_ERROR', 'Y_ERROR', 'Z_ERROR', 'MX', 'MY', 'MZ'.
         The measurement faults do not affect the Pauli string.
-        * `targets` a tuple of stim.GateTarget objects representing the qubits the fault acts on.
+        * `targets` a tuple of stim.GateTarget objects representing the qubits the error event acts on.
 
         Output:
-        * A stim.PauliString representing the fault.
+        * A stim.PauliString representing the error event.
         """
         pauli_string = stim.PauliString(self.noisy_circuit.num_qubits)
         if name == 'E':

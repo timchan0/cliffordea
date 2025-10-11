@@ -7,12 +7,12 @@ from typing import Literal
 
 from cliffordep.noisy_circuit_tools import CultivationCircuit
 from cliffordep.noisy_circuit_tools_mixture import CultivationCircuitMixture
-from cliffordep.type_aliases import MechanismBag, MechanismBagMixed
+from cliffordep.type_aliases import FaultBag, FaultBagMixed
 from cliffordep.pauli_string_tools import FrozenCliffordString
 
 
 class Combinator(abc.ABC):
-    """Class to find all combinations of faults that lead to trivial syndrome.
+    """Class to find all fault configurations that are undetectable i.e. lead to trivial syndrome.
 
     Instance attributes:
     * `circuit` the noisy circuit to analyze.
@@ -34,13 +34,13 @@ class Combinator(abc.ABC):
         return f"{self.__class__.__name__}({self.circuit})"
 
 
-class BaseFaultSourceCombinator(Combinator):
-    """Group all faults in a noisy circuit.
+class BaseExclusiveCombinator(Combinator):
+    """Group all events in a noisy circuit where some events are exclusive.
     
     Extends `Combinator`.
     """
 
-    def get_undetected_fault_combinations(
+    def get_undetected_configurations(
             self,
             max_order: int,
             print_progress: bool = False,
@@ -57,13 +57,13 @@ class BaseFaultSourceCombinator(Combinator):
         Each denominator divides (noise level)^k to equal
         the probability an instance of that undetected combination of k faults occurs.
         """
-        return [self._get_undetected_fault_combinations_for_length(
+        return [self._get_undetected_configurations_for_length(
             length, print_progress) for length in range(max_order + 1)]
 
 
     def get_kept_strings(
             self,
-            fault_combinations: list[dict[str, Counter[int]]],
+            configurations: list[dict[str, Counter[int]]],
             cultivated_state: Literal['T', 'S', 'Z'] = 'T',
             print_progress: bool = False,
     ) -> list[tuple[
@@ -73,7 +73,7 @@ class BaseFaultSourceCombinator(Combinator):
         """Return all the information needed to reconstruct the logical error probability for any noise level.
 
         Input:
-        * `fault_combinations` the output of `get_undetected_fault_combinations`.
+        * `configurations` the output of `self.get_undetected_configurations()`.
         * `cultivated_state` the target logical state cultivated.
         * `print_progress` whether to print progress.
 
@@ -90,7 +90,7 @@ class BaseFaultSourceCombinator(Combinator):
                 combinations_of_order,
                 cultivated_state=cultivated_state,
                 order=order if print_progress else None,
-            ) for order, combinations_of_order in enumerate(fault_combinations)]
+            ) for order, combinations_of_order in enumerate(configurations)]
         return result
 
 
@@ -169,14 +169,14 @@ class BaseFaultSourceCombinator(Combinator):
 
 
     @abc.abstractmethod
-    def _get_undetected_fault_combinations_for_length(
+    def _get_undetected_configurations_for_length(
             self,
             length: int,
             print_progress: bool = False,
     ) -> dict[str, Counter[int]]:
         """Find all combinations of `length` faults that have trivial syndrome.
 
-        Helper for `self.get_undetected_fault_combinations()`.
+        Helper for `self.get_undetected_configurations()`.
 
         Input:
         * `length` the length of combinations to find.
@@ -201,19 +201,18 @@ class BaseFaultSourceCombinator(Combinator):
         return sum(count / denominator for denominator, count in counter.items())
     
 
-class BaseErrorMechanismCombinator(Combinator):
-    """Group error mechanisms by their syndrome then effect.
+class BaseFaultCombinator(Combinator):
+    """Group faults by their syndrome then effect, where all faults are independent.
     
     Extends `Combinator`.
 
     Instance attributes:
     * `circuit` the noisy circuit to analyze.
-    * `basis` a map from each syndrome to another map from each effect
-    to an error mechanism index.
-    * `index_to_bag` a map from each error mechanism index to its mechanism bag.
+    * `basis` a map from each syndrome to another map from each effect to a fault index.
+    * `index_to_bag` a map from each fault index to its fault bag.
     """
 
-    index_to_bag: dict[int, MechanismBag] | dict[int, MechanismBagMixed]
+    index_to_bag: dict[int, FaultBag] | dict[int, FaultBagMixed]
     basis: dict[tuple[bool, ...], dict[str, int]] | dict[
             tuple[bool, ...], dict[FrozenCliffordString, int]]
 
@@ -222,14 +221,14 @@ class BaseErrorMechanismCombinator(Combinator):
         return len(self.basis)
     
     @property
-    def mechanism_count(self) -> int:
-        return sum(len(mechanisms) for mechanisms in self.basis.values())
+    def fault_count(self) -> int:
+        return sum(len(faults) for faults in self.basis.values())
     
     def __str__(self) -> str:
-        return f"{self.__class__.__name__} with {self.mechanism_count} error mechanisms distributed among {self.syndrome_count} syndromes."
+        return f"{self.__class__.__name__} with {self.fault_count} faults distributed among {self.syndrome_count} syndromes."
     
     def print_basis(self):
-        """Print the syndrome, effect, index, and mechanism bag of all error mechanisms."""
+        """Print the syndrome, effect, index, and fault bag of all faults."""
         lines = []
         for syndrome, effect_dict in self.basis.items():
             lines.append(''.join('1' if detector else '0' for detector in syndrome))
@@ -241,14 +240,14 @@ class BaseErrorMechanismCombinator(Combinator):
 
     @cache
     def index_to_syndrome_and_effect(self, index: int) -> tuple[tuple[bool, ...], str | FrozenCliffordString]:
-        """Get the syndrome and effect corresponding to an error mechanism index.
+        """Get the syndrome and effect corresponding to a fault index.
         
         Input:
-        * `index` the error mechanism index.
+        * `index` the fault index.
 
         Output:
-        * `syndrome` the syndrome of the error mechanism.
-        * `effect` the effect of the error mechanism.
+        * `syndrome` the syndrome of the fault.
+        * `effect` the effect of the fault.
         """
         for syndrome, effect_dict in self.basis.items():
             for effect, effect_index in effect_dict.items():
@@ -257,12 +256,12 @@ class BaseErrorMechanismCombinator(Combinator):
         raise ValueError(f"Index {index} not found in basis.")
     
 
-    def get_undetected_mechanism_combinations(
+    def get_undetected_configurations(
             self,
             max_order: int,
             print_progress: bool = False,
     ):
-        """Find all combinations of mechanisms up to `max_order` that have trivial syndrome.
+        """Find all combinations of faults up to `max_order` that have trivial syndrome.
 
         Input:
         * `max_order` the maximum order of probability to consider.
@@ -270,34 +269,34 @@ class BaseErrorMechanismCombinator(Combinator):
 
         Output:
         * A list whose kth entry is a map
-        from each effect to a set of frozen sets of error mechanism indices.
+        from each effect to a set of frozen sets of fault indices.
         """
-        return [self._get_undetected_mechanism_combinations_for_length(
+        return [self._get_undetected_configurations_for_length(
             length, print_progress) for length in range(max_order + 1)]
 
 
     @abc.abstractmethod
-    def _get_undetected_mechanism_combinations_for_length(
+    def _get_undetected_configurations_for_length(
             self,
             length: int,
             print_progress: bool = False
     ) -> dict[str, set[frozenset[int]]] | dict[FrozenCliffordString, set[frozenset[int]]]:
-        """Find all combinations of `length` mechanisms that have trivial syndrome.
+        """Find all combinations of `length` faults that have trivial syndrome.
         
-        Helper for `get_undetected_mechanism_combinations`.
+        Helper for `self.get_undetected_configurations()`.
         
         Input:
         * `length` the length of combinations to find.
         * `print_progress` whether to print progress.
 
         Output:
-        * a map from each effect to a set of frozen sets of error mechanism indices.
+        * a map from each effect to a set of frozen sets of fault indices.
         """
 
 
     def get_kept_strings(
             self,
-            mechanism_combinations: list[dict[str, set[frozenset[int]]]],
+            configurations: list[dict[str, set[frozenset[int]]]],
             cultivated_state: Literal['T', 'S', 'Z'] = 'T',
             print_progress: bool = False,
     ) -> list[tuple[
@@ -307,7 +306,7 @@ class BaseErrorMechanismCombinator(Combinator):
         """Construct the information needed to reconstruct the logical error probability for any noise level.
 
         Input:
-        * `mechanism_combinations` the output of `get_undetected_mechanism_combinations`.
+        * `configurations` the output of `self.get_undetected_configurations()`.
         * `cultivated_state` the target logical state cultivated.
         * `print_progress` whether to print progress.
 
@@ -315,7 +314,7 @@ class BaseErrorMechanismCombinator(Combinator):
         * A list of pairs, one for each order. Each pair contains:
             - `identity_strings` a map from each effect that leads to logical identity to a pair containing:
                 - the probability they are not rejected,
-                - a set of frozen sets of error mechanism indices.
+                - a set of frozen sets of fault indices.
             - `error_strings` ditto for effects that lead to a logical error.
         """
         if print_progress:
@@ -324,7 +323,7 @@ class BaseErrorMechanismCombinator(Combinator):
                 combinations_of_order,
                 cultivated_state=cultivated_state,
                 order=order if print_progress else None,
-            ) for order, combinations_of_order in enumerate(mechanism_combinations)]
+            ) for order, combinations_of_order in enumerate(configurations)]
         return result
     
 
@@ -344,13 +343,13 @@ class BaseErrorMechanismCombinator(Combinator):
 
         Input:
         * `combinations_of_order` a map from each effect to
-        a set of frozen sets of error mechanism indices.
+        a set of frozen sets of fault indices.
         * `cultivated_state` the target logical state cultivated.
         * `order` an optional parameter used only for printing progress.
 
         Output:
         * `identity_strings` a map from each effect that leads to logical identity,
-        to the probability it is not rejected and a set of frozen set of mechanism indices.
+        to the probability it is not rejected and a set of frozen set of fault indices.
         * `error_strings` ditto for effects that lead to a logical error.
         """
         identity_strings: dict[str, tuple[float, set[frozenset[int]]]] = {}
@@ -401,31 +400,31 @@ class BaseErrorMechanismCombinator(Combinator):
 
     @abc.abstractmethod
     def get_index_to_odds(self, noise_level: float) -> dict[int, float]:
-        """Get a map from error mechanism index to the odds of it flipping."""
+        """Get a map from fault index to the odds of it flipping."""
 
 
     @staticmethod
-    def _classify(source_name: str) -> int:
-        """Classify a fault source by how many faults it can make.
+    def _classify(process_name: str) -> int:
+        """Classify an error process by how many error events it can make.
 
         Input:
-        * `source_name` the name of the Stim gate that gives rise to faults.
+        * `process_name` the name of the Stim gate that gives rise to error events.
         This can be 'DEPOLARIZE1', 'DEPOLARIZE2', 'X_ERROR', 'Y_ERROR', 'Z_ERROR', 'MX', 'MY', 'MZ'.
 
         Output:
-        * An integer indicating the type of fault source:
-            * 0 if it makes only 1 fault (X_ERROR, Y_ERROR, Z_ERROR, MX, MY, MZ).
-            * 1 if it makes 3 faults (DEPOLARIZE1).
-            * 2 if it makes 15 faults (DEPOLARIZE2).
+        * An integer indicating the type of error process:
+            * 0 if it makes only 1 error event (X_ERROR, Y_ERROR, Z_ERROR, MX, MY, MZ).
+            * 1 if it makes 3 error events (DEPOLARIZE1).
+            * 2 if it makes 15 error events (DEPOLARIZE2).
         """
-        if source_name in {'X_ERROR', 'Y_ERROR', 'Z_ERROR', 'MX', 'MY', 'MZ'}:
+        if process_name in {'X_ERROR', 'Y_ERROR', 'Z_ERROR', 'MX', 'MY', 'MZ'}:
             return 0
-        elif source_name == 'DEPOLARIZE1':
+        elif process_name == 'DEPOLARIZE1':
             return 1
-        elif source_name == 'DEPOLARIZE2':
+        elif process_name == 'DEPOLARIZE2':
             return 2
         else:
-            raise ValueError(f"Unknown fault source: {source_name}")
+            raise ValueError(f"Unknown error process: {process_name}")
 
 
     @staticmethod
@@ -433,13 +432,13 @@ class BaseErrorMechanismCombinator(Combinator):
             class_: int,
             noise_level: float,
     ) -> float:
-        """Return the probability of the independent processes of a fault source of class `class_`.
+        """Return the probability of the independent events of an error location of class `class_`.
 
         Input:
-        * `class_` the class of the fault source.
+        * `class_` the class of the error location.
         It can be 0, 1, or 2.
-        This depends on the number of independent processes
-        that sequentially compose to equal the fault source.
+        This depends on the number of independent events
+        that sequentially compose to equal the error location.
         * `noise_level` a float in [0, 1].
         """
         p = noise_level
@@ -458,13 +457,13 @@ class BaseErrorMechanismCombinator(Combinator):
             probability_combo_pairs: Iterable[tuple[float, set[frozenset[int]]]],
             index_to_odds: dict[int, float],
         ) -> float:
-        """Sum the odds of all error mechanism combinations in `probability_combo_pairs`.
+        """Sum the odds of all configurations in `probability_combo_pairs`.
         
         Input:
         * `probability_combo_pairs` an iterable of pairs, each containing:
-            - the probability the error mechanism combination is not rejected,
-            - a set of frozen sets of error mechanism indices that defines the combination.
-        * `index_to_odds` a map from each error mechanism index to the odds of it flipping.
+            - the probability the configuration is not rejected,
+            - a set of frozen sets of fault indices that defines the combination.
+        * `index_to_odds` a map from each fault index to the odds of it flipping.
         """
         return sum(probability_kept * sum(math.prod(
             index_to_odds[index]
