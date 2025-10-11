@@ -271,6 +271,8 @@ class BaseFaultCombinator(Combinator):
         * A list whose kth entry is a map
         from each effect to a set of frozen sets of fault indices.
         """
+        if print_progress:
+            print("Found undetected configurations of length...")
         return [self._get_undetected_configurations_for_length(
             length, print_progress) for length in range(max_order + 1)]
 
@@ -318,7 +320,7 @@ class BaseFaultCombinator(Combinator):
             - `error_strings` ditto for effects that lead to a logical error.
         """
         if print_progress:
-            print(f"{cultivated_state} state cultivation:")
+            print(f"{cultivated_state} state cultivation: for order...")
         result = [self._get_kept_strings(
                 combinations_of_order,
                 cultivated_state=cultivated_state,
@@ -364,7 +366,7 @@ class BaseFaultCombinator(Combinator):
                 else:
                     identity_strings[data_string] = (logical_vector.probability_mass, combo_set)
         if order is not None:
-            print(f'For order {order}, {len(identity_strings)} ({len(error_strings)}) effects are stabilized and lead to identity (error).')
+            print(f'    {order}, {len(identity_strings)} ({len(error_strings)}) errors are kept and lead to identity (error).')
         return identity_strings, error_strings
     
 

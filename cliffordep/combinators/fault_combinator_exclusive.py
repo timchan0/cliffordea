@@ -125,7 +125,7 @@ class FaultCombinatorExclusive(BaseExclusiveCombinator):
                     for candidate in candidates:
                         self._process_candidate(result, product_effect, candidate)
         if print_progress:
-            print(f"Done. They lead to {len(result)} distinct effects.")
+            print(f"Done. They lead to {len(result)} distinct errors.")
         return dict(result)
 
 

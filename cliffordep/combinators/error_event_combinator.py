@@ -74,7 +74,7 @@ class ErrorEventCombinator(BaseExclusiveCombinator):
                             for (_, process_name, _), _ in combo)
                         result[forget_sign(product_string)][fault_counts] += 1
         if print_progress:
-            print(f"Done. They lead to {len(result)} distinct effects.")
+            print(f"Done. They lead to {len(result)} distinct errors.")
         return dict(result)
 
 

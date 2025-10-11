@@ -55,8 +55,6 @@ class FaultCombinator(BaseFaultCombinator):
             print_progress: bool = False
     ) -> dict[str, set[frozenset[int]]]:
         result: defaultdict[str, set[frozenset[int]]] = defaultdict(set)
-        if print_progress:
-            print(f"Finding undetected configurations of length {length}...")
         if length == 0:
             result['_'*self.circuit.noisy_circuit.num_qubits].add(frozenset())
         else:
@@ -74,7 +72,7 @@ class FaultCombinator(BaseFaultCombinator):
                         flattened = frozenset(itertools.chain.from_iterable(candidate))
                         result[product_effect].add(flattened)
         if print_progress:
-            print(f"Done. They lead to {len(result)} distinct effects.")
+            print(f"    {length}, leading to {len(result)} distinct errors.")
         return dict(result)
     
 
