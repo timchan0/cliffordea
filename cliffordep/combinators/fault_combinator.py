@@ -3,6 +3,7 @@ import itertools
 import math
 
 import stim
+import pandas as pd
 
 from cliffordep.combinators._base import BaseFaultCombinator
 from cliffordep.noisy_circuit_tools import CultivationCircuit
@@ -141,3 +142,51 @@ class FaultCombinator(BaseFaultCombinator):
             prob = (1 - decay_factor) / 2
             index_to_odds[index] = prob / (1 - prob)
         return index_to_odds
+    
+
+    def summarize_contributions(
+            self,
+            all_kept_strings: dict[str, list[tuple[
+                dict[str, tuple[float, set[frozenset[int]]]],
+                dict[str, tuple[float, set[frozenset[int]]]],
+            ]]],
+    ):
+        """Summarize contribution of each order to overall probability.
+        
+        Input:
+        * `all_kept_strings` a map from cultivated state to an output of `get_kept_strings`.
+
+        Output:
+        * A DataFrame whose rows are of the form (cultivated_state, order)
+        whose columns are [identity_entropy, error_entropy, conditional_probability].
+        """
+        dict_: defaultdict[tuple[str, int], list[float]] = defaultdict(list)
+        for state, strings_for_state in all_kept_strings.items():
+            for order, kept_strings in enumerate(strings_for_state):
+                for strings in kept_strings:
+                    contribution = sum(probability_kept * sum(math.prod(
+                        self._bag_to_entropy(self.index_to_bag[index])
+                        for index in config)
+                        for config in configs)
+                        for probability_kept, configs in strings.values())
+                    dict_[state, order].append(contribution)
+        data = pd.DataFrame(dict_).T
+        data.index.set_names(['cultivated_state', 'order'], inplace=True)
+        data.columns.set_names(['logical_error'], inplace=True)
+        data['conditional_probability'] = data[1] / (data[0] + data[1])
+        return data
+    
+    
+    @staticmethod
+    def _bag_to_entropy(bag: FaultBag) -> float:
+        """Convert a fault bag to its entropy contribution.
+        
+        Input:
+        * `bag` a `FaultBag`.
+
+        Output:
+        * The probability of the fault bag in terms of the noise level,
+        as the noise level tends to zero.
+        """
+        a, b, c = bag
+        return a + b/3 + c/15
