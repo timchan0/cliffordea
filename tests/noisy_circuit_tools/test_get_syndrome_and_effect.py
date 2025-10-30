@@ -12,13 +12,13 @@ class TestD3DoubleCatCheck:
     """Tests on the `d3_double_cat_check` circuit."""
 
     @pytest.fixture
-    def ungrouped(self, d3_double_cat_check_grouped_by_location: dict[ErrorLocation, set[ErrorEvent]]):
-        result: set[ErrorEvent] = set.union(*d3_double_cat_check_grouped_by_location.values())
+    def ungrouped(self, d3_double_cat_check_grouped_by_location: dict[ErrorLocation, list[ErrorEvent]]):
+        result: list[ErrorEvent] = sum(d3_double_cat_check_grouped_by_location.values(), [])
         return result
 
     def test_with_flip_simulator(
             self,
-            ungrouped: set[ErrorEvent],
+            ungrouped: list[ErrorEvent],
             noisy_d3_double_cat_check: CultivationCircuit,
     ):
         """Test the correctness of `group_error_events_by_location`

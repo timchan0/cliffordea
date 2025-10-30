@@ -8,7 +8,7 @@ from typing import Literal
 import stim
 
 from cliffordep.noiseless_circuit_tools import split_by_ticks
-from cliffordep.constants import DEPOLARIZE2_FAULTS
+from cliffordep.constants import DEPOLARIZE2_ERROR_EVENTS
 from cliffordep.type_aliases import ErrorEvent, ErrorLocation
 from cliffordep.pauli_string_tools import push_through_transversal
 
@@ -95,9 +95,12 @@ class BaseCultivationCircuit:
         """Group all possible error events in a noisy circuit by their error location.
 
         Output:
-        * A map from a `ErrorLocation` to a set `ErrorEvent`s.
+        * A map from a `ErrorLocation` to a list of `ErrorEvent`s.
+        Each list is sorted consistently e.g. the order of error events for DEPOLARIZE2 is
+        II, IX, IY, IZ, XI, XX, XY, XZ, YI, YX, YY, YZ, ZI, ZX, ZY, ZZ
+        for targets A and B, where A < B.
         """
-        _faults: defaultdict[ErrorLocation, set[ErrorEvent]] = defaultdict(set)
+        _events: defaultdict[ErrorLocation, list[ErrorEvent]] = defaultdict(list)
         for timeslice, layer in enumerate(split_by_ticks(self.noisy_circuit)):
             for instruction in layer:
                 if isinstance(instruction, stim.CircuitRepeatBlock):
@@ -105,27 +108,28 @@ class BaseCultivationCircuit:
                 for basis in ('X', 'Y', 'Z'):
                     if instruction.name in {f'{basis}_ERROR', f'M{basis}'}:
                         for target in instruction.targets_copy():
-                            _faults[timeslice, instruction.name, (target,)].add(
+                            _events[timeslice, instruction.name, (target,)].append(
                                 (timeslice, instruction.name, (target,)))
                     elif instruction.name == 'DEPOLARIZE1':
                         for target in instruction.targets_copy():
-                            _faults[timeslice, instruction.name, (target,)].add(
+                            _events[timeslice, instruction.name, (target,)].append(
                                 (timeslice, f'{basis}_ERROR', (target,)))
                 if instruction.name == 'DEPOLARIZE2':
-                    for target_1, target_2 in instruction.target_groups():
-                        group = _faults[timeslice, instruction.name, (target_1, target_2)]
-                        for fault in DEPOLARIZE2_FAULTS:
-                            match fault:
+                    for targets in instruction.target_groups():
+                        target_1, target_2 = sorted(targets, key=lambda t: t.value)
+                        group = _events[timeslice, instruction.name, (target_1, target_2)]
+                        for event in DEPOLARIZE2_ERROR_EVENTS:
+                            match event:
                                 case ('I', basis):
-                                    group.add((timeslice, f'{basis}_ERROR', (target_2,)))
+                                    group.append((timeslice, f'{basis}_ERROR', (target_2,)))
                                 case (basis, 'I'):
-                                    group.add((timeslice, f'{basis}_ERROR', (target_1,)))
+                                    group.append((timeslice, f'{basis}_ERROR', (target_1,)))
                                 case (basis_1, basis_2):
-                                    group.add((timeslice, 'E', (
+                                    group.append((timeslice, 'E', (
                                         stim.target_pauli(target_1.value, basis_1),
                                         stim.target_pauli(target_2.value, basis_2),
                                     )))
-        return dict(_faults)
+        return dict(_events)
 
 
     def string_to_logical_vector(self, cultivated_state: Literal['T', 'S', 'Z'], data_string: str):

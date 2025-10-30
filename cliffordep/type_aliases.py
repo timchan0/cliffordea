@@ -7,7 +7,8 @@ ErrorLocation = tuple[int, str, tuple[stim.GateTarget, ...]]
 * `timeslice` the timeslice the error location occurs on.
 * `name` the name of the Stim gate that produces noise, hence gives rise to faults.
 This can be 'DEPOLARIZE1', 'DEPOLARIZE2', 'X_ERROR', 'Y_ERROR', 'Z_ERROR', 'MX', 'MY', 'MZ'.
-* `targets` a tuple of `stim.GateTarget`s representing the qubits the error location acts on.
+* `targets` a tuple of `stim.GateTarget`s representing the qubits the error location acts on,
+sorted by their qubit values.
 It is a pair only for `name` 'DEPOLARIZE2'; else, a 1-tuple.
 """
 
@@ -22,7 +23,8 @@ Represented by a tuple containing:
 * `timeslice` the timeslice the event occurs on.
 * `name` the name of the event.
 This can be 'E', 'X_ERROR', 'Y_ERROR', 'Z_ERROR', 'MX', 'MY', 'MZ'.
-* `targets` a tuple of `stim.GateTarget`s representing the qubits the event acts on.
+* `targets` a tuple of `stim.GateTarget`s representing the qubits the event acts on,
+sorted by their qubit values.
 It is a pair only for `name` 'E'; else, a 1-tuple.
 """
 
