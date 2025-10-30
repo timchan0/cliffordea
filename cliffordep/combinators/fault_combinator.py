@@ -8,7 +8,7 @@ import pandas as pd
 from cliffordep.combinators._base import BaseFaultCombinator
 from cliffordep.noisy_circuit_tools import CultivationCircuit
 from cliffordep.combinators.fault_combinator_exclusive import get_trivial_syndrome_combinations
-from cliffordep.pauli_string_tools import forget_sign
+from cliffordep.pauli_string_tools import forget_sign, LogicalVector
 from cliffordep.type_aliases import FaultBag
 
 
@@ -146,10 +146,7 @@ class FaultCombinator(BaseFaultCombinator):
 
     def summarize_contributions(
             self,
-            all_kept_strings: dict[str, list[tuple[
-                dict[str, tuple[float, set[frozenset[int]]]],
-                dict[str, tuple[float, set[frozenset[int]]]],
-            ]]],
+            all_kept_strings: dict[str, list[dict[str, tuple[LogicalVector, set[frozenset[int]]]]]],
     ):
         """Summarize contribution of each order to overall probability.
         
@@ -160,16 +157,16 @@ class FaultCombinator(BaseFaultCombinator):
         * A DataFrame whose rows are of the form (cultivated_state, order)
         whose columns are [identity_entropy, error_entropy, conditional_probability].
         """
-        dict_: defaultdict[tuple[str, int], list[float]] = defaultdict(list)
+        dict_: dict[tuple[str, int], tuple[float, float]] = {}
         for state, strings_for_state in all_kept_strings.items():
             for order, kept_strings in enumerate(strings_for_state):
-                for strings in kept_strings:
-                    contribution = sum(probability_kept * sum(math.prod(
-                        self._bag_to_entropy(self.index_to_bag[index])
-                        for index in config)
-                        for config in configs)
-                        for probability_kept, configs in strings.values())
-                    dict_[state, order].append(contribution)
+                i_entropy, e_entropy = 0, 0
+                for logical_vector, set_of_configurations in kept_strings.values():
+                    entropy = sum(math.prod(self._bag_to_entropy(
+                        self.index_to_bag[index]) for index in config) for config in set_of_configurations)
+                    i_entropy += logical_vector.probability_of('I') * entropy
+                    e_entropy += logical_vector.probability_of('Z') * entropy
+                dict_[state, order] = (i_entropy, e_entropy)
         data = pd.DataFrame(dict_).T
         data.index.set_names(['cultivated_state', 'order'], inplace=True)
         data.columns.set_names(['logical_error'], inplace=True)

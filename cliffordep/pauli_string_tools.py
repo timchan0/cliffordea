@@ -715,7 +715,10 @@ GATE_TO_IS_AND_ZS: dict[Literal['T', 'S', 'Z'], tuple[
     'S': (IY, ZY),
     'Z': (InX, ZnX),
 }
-"""A map from gate G to the operators (IS, ZS) such that S stabilizes G|+>."""
+"""A map from gate G to the operators (IA, ZA) such that A stabilizes G|+>.
+The operators are are 4-vectors in the basis of logical Paulis I, X, Y, Z,
+and form a basis in the subspace spanned by (X, Y).
+"""
 
 
 class LogicalVector:
@@ -741,26 +744,21 @@ class LogicalVector:
         whose value is in [0, 1].
         """
         return float(np.vdot(self.amplitudes, self.amplitudes).real)
-
-    @property
-    def is_error(self):
-        """Return whether `self` leads to a logical fidelity < 1."""
-        return bool(np.vdot(ANY_ERROR, self.amplitudes))
     
-    @property
-    def error_probability(self):
-        """Return the probability of Z logical error.
+    def probability_of(self, sector: Literal['I', 'X', 'Y', 'Z']):
+        """Return the probability of a given logical sector.
 
-        Require:
-        * The amplitudes of the X and Y logical classes are zero.
+        Input:
+        * `sector` the logical sector to get the probability of.
 
         Output:
-        * the probability the logical vector leads to Z logical error
-        given the logical vector has survived.
-        This is a real number in the range [0, 1].
+        * The probability the logical vector leads to that sector.
+        This is not normalized by the probability mass,
+        and is a real number in the range [0, 1].
         """
-        z_amplitude: complex = self.amplitudes[3]
-        return (z_amplitude.real**2 + z_amplitude.imag**2) / self.probability_mass
+        index = {'I': 0, 'X': 1, 'Y': 2, 'Z': 3}[sector]
+        amplitude: complex = self.amplitudes[index]
+        return amplitude.real**2 + amplitude.imag**2
 
     def transfer_xy_to_iz(
             self,
@@ -780,8 +778,8 @@ class LogicalVector:
         """
         # TODO: speed up by casting as a matrix multiplication
         I_stabilizer, Z_stabilizer = GATE_TO_IS_AND_ZS[logical_state]
-        i_component = np.vdot(I_stabilizer, self.amplitudes)
-        z_component = np.vdot(Z_stabilizer, self.amplitudes)
+        i_component: complex = np.vdot(I_stabilizer, self.amplitudes)
+        z_component: complex = np.vdot(Z_stabilizer, self.amplitudes)
         # TODO: assume these are zero
         self.amplitudes -= i_component * I_stabilizer
         self.amplitudes -= z_component * Z_stabilizer

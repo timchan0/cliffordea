@@ -8,7 +8,7 @@ from typing import Literal
 from cliffordep.noisy_circuit_tools import CultivationCircuit
 from cliffordep.noisy_circuit_tools_mixture import CultivationCircuitMixture
 from cliffordep.type_aliases import FaultBag, FaultBagMixed
-from cliffordep.pauli_string_tools import FrozenCliffordString
+from cliffordep.pauli_string_tools import FrozenCliffordString, LogicalVector
 
 
 class Combinator(abc.ABC):
@@ -66,10 +66,7 @@ class BaseExclusiveCombinator(Combinator):
             configurations: list[dict[str, Counter[int]]],
             cultivated_state: Literal['T', 'S', 'Z'] = 'T',
             print_progress: bool = False,
-    ) -> list[tuple[
-        dict[str, tuple[float, Counter[int]]],
-        dict[str, tuple[float, Counter[int]]],
-    ]]:
+    ) -> list[dict[str, tuple[LogicalVector, Counter[int]]]]:
         """Return all the information needed to reconstruct the logical error probability for any noise level.
 
         Input:
@@ -78,11 +75,10 @@ class BaseExclusiveCombinator(Combinator):
         * `print_progress` whether to print progress.
 
         Output:
-        * A list of pairs, one for each order. Each pair contains:
-            - `identity_strings` a map from each effect that leads to logical identity to a pair containing:
-                - the probability they are not rejected,
-                - a counter of denominators.
-            - `error_strings` ditto for effects that lead to a logical error.
+        * A list of maps, one for each order. Each one maps from each error
+        (as an unsigned Pauli string) to a pair containing:
+            - the resulting logical vector,
+            - a counter of denominators.
         """
         if print_progress:
             print(f"{cultivated_state} state cultivation:")
@@ -97,10 +93,7 @@ class BaseExclusiveCombinator(Combinator):
     @classmethod
     def error_rate_per_kept_shot(
             cls,
-            all_string_leads: list[tuple[
-                dict[str, tuple[float, Counter[int]]],
-                dict[str, tuple[float, Counter[int]]],
-            ]],
+            all_string_leads: list[dict[str, tuple[LogicalVector, Counter[int]]]],
             noise_level: float,
             print_progress: bool = False,
     ) -> float:
@@ -113,16 +106,17 @@ class BaseExclusiveCombinator(Combinator):
         """
         p_odds = noise_level / (1 - noise_level)
         identity_odds, error_odds = 0, 0
-        for length, (identity_strings, error_strings) in enumerate(all_string_leads):
+        for length, strings in enumerate(all_string_leads):
             single_odds = p_odds**length
-            i_odds = single_odds * cls._get_normalized_counts(identity_strings.values())
-            e_odds = single_odds * cls._get_normalized_counts(error_strings.values())
-            identity_odds += i_odds
-            error_odds += e_odds
+            i_counts, e_counts = cls._get_normalized_counts(strings.values())
+            i_odds = single_odds * i_counts
+            e_odds = single_odds * e_counts
             if print_progress:
                 print(f'O(p^{length}) events:')
                 print(f'Identity odds = {i_odds}')
                 print(f'Error odds = {e_odds}')
+            identity_odds += i_odds
+            error_odds += e_odds
         return error_odds / (identity_odds + error_odds)
 
 
@@ -132,11 +126,8 @@ class BaseExclusiveCombinator(Combinator):
             combinations_of_order: dict[str, Counter[int]],
             cultivated_state: Literal['T', 'S', 'Z'] = 'T',
             order: None | int = None,
-    ) -> tuple[
-        dict[str, tuple[float, Counter[int]]],
-        dict[str, tuple[float, Counter[int]]],
-    ]:
-        """Group postselected effects by whether they lead to identity or error.
+    ) -> dict[str, tuple[LogicalVector, Counter[int]]]:
+        """Compute the logical vector for each postselected error.
 
         Helper for `get_kept_strings`.
 
@@ -148,24 +139,25 @@ class BaseExclusiveCombinator(Combinator):
         * `order` an optional parameter used only for printing progress.
 
         Output:
-        * `identity_strings` a map from each effect that leads to logical identity,
-        to the probability it is not rejected and a counter of denominators.
-        * `error_strings` ditto for effects that lead to a logical error.
+        * `strings` a map from each error (as an unsigned Pauli string)
+        to a pair containing:
+            - the resulting logical vector,
+            - a counter of denominators.
         """
-        identity_strings: dict[str, tuple[float, Counter[int]]] = {}
-        error_strings: dict[str, tuple[float, Counter[int]]] = {}
-        for data_string, denominators in combinations_of_order.items():
-            logical_vector = self.circuit.string_to_logical_vector(cultivated_state, data_string)
+        strings: dict[str, tuple[LogicalVector, Counter[int]]] = {}
+        for pauli_string, denominators in combinations_of_order.items():
+            logical_vector = self.circuit.string_to_logical_vector(cultivated_state, pauli_string)
             # TODO: check if `LogicalVector.transfer_xy_to_iz` is unitary. If so, move from above method into below conditional block.
             if logical_vector.probability_mass:
-                # TODO: use `error_probability` instead of `is_error`
-                if logical_vector.is_error:
-                    error_strings[data_string] = (logical_vector.probability_mass, denominators)
-                else:
-                    identity_strings[data_string] = (logical_vector.probability_mass, denominators)
+                strings[pauli_string] = (logical_vector, denominators)
         if order is not None:
-            print(f'For order {order}, {len(identity_strings)} ({len(error_strings)}) effects are stabilized and lead to identity (error).')
-        return identity_strings, error_strings
+            identity_weight = 0
+            error_weight = 0
+            for logical_vector, _ in strings.values():
+                identity_weight += logical_vector.probability_of('I')
+                error_weight += logical_vector.probability_of('Z')
+            print(f'    {order}, {identity_weight} ({error_weight}) errors are kept and lead to identity (error).')
+        return strings
 
 
     @abc.abstractmethod
@@ -190,11 +182,13 @@ class BaseExclusiveCombinator(Combinator):
 
 
     @classmethod
-    def _get_normalized_counts(cls, probability_counter_pairs: Iterable[tuple[float, Counter[int]]]) -> float:
-        return sum(
-            probability_kept * cls._counter_to_normalized_total(counter)
-            for probability_kept, counter in probability_counter_pairs
-        )
+    def _get_normalized_counts(cls, vector_counter_pairs: Iterable[tuple[LogicalVector, Counter[int]]]) -> tuple[float, float]:
+        i_counts, e_counts = 0, 0
+        for logical_vector, counter in vector_counter_pairs:
+            normalized_total = cls._counter_to_normalized_total(counter)
+            i_counts += logical_vector.probability_of('I') * normalized_total
+            e_counts += logical_vector.probability_of('Z') * normalized_total
+        return i_counts, e_counts
 
     @staticmethod
     def _counter_to_normalized_total(counter: Counter[int]) -> float:
@@ -301,10 +295,7 @@ class BaseFaultCombinator(Combinator):
             configurations: list[dict[str, set[frozenset[int]]]],
             cultivated_state: Literal['T', 'S', 'Z'] = 'T',
             print_progress: bool = False,
-    ) -> list[tuple[
-        dict[str, tuple[float, set[frozenset[int]]]],
-        dict[str, tuple[float, set[frozenset[int]]]],
-    ]]:
+    ) -> list[dict[str, tuple[LogicalVector, set[frozenset[int]]]]]:
         """Construct the information needed to reconstruct the logical error probability for any noise level.
 
         Input:
@@ -313,11 +304,10 @@ class BaseFaultCombinator(Combinator):
         * `print_progress` whether to print progress.
 
         Output:
-        * A list of pairs, one for each order. Each pair contains:
-            - `identity_strings` a map from each effect that leads to logical identity to a pair containing:
-                - the probability they are not rejected,
-                - a set of frozen sets of fault indices.
-            - `error_strings` ditto for effects that lead to a logical error.
+        * A list of maps, one for each order. Each one maps from each error
+        (as an unsigned Pauli string) to a pair containing:
+            - the resulting logical vector,
+            - a set fault configurations (each represented by a frozen set of fault indices).
         """
         if print_progress:
             print(f"{cultivated_state} state cultivation: for order...")
@@ -335,11 +325,8 @@ class BaseFaultCombinator(Combinator):
             combinations_of_order: dict[str, set[frozenset[int]]],
             cultivated_state: Literal['T', 'S', 'Z'] = 'T',
             order: None | int = None,
-    ) -> tuple[
-        dict[str, tuple[float, set[frozenset[int]]]],
-        dict[str, tuple[float, set[frozenset[int]]]],
-    ]:
-        """Group postselected effects by whether they lead to identity or error.
+    ) -> dict[str, tuple[LogicalVector, set[frozenset[int]]]]:
+        """Compute the logical vector for each postselected error.
 
         Helper for `get_kept_strings`.
 
@@ -350,32 +337,30 @@ class BaseFaultCombinator(Combinator):
         * `order` an optional parameter used only for printing progress.
 
         Output:
-        * `identity_strings` a map from each effect that leads to logical identity,
-        to the probability it is not rejected and a set of frozen set of fault indices.
-        * `error_strings` ditto for effects that lead to a logical error.
+        * `strings` a map from each error (as an unsigned Pauli string)
+        to a pair containing:
+            - the resulting logical vector,
+            - a set fault configurations (each represented by a frozen set of fault indices).
         """
-        identity_strings: dict[str, tuple[float, set[frozenset[int]]]] = {}
-        error_strings: dict[str, tuple[float, set[frozenset[int]]]] = {}
-        for data_string, combo_set in combinations_of_order.items():
-            logical_vector = self.circuit.string_to_logical_vector(cultivated_state, data_string)
+        strings: dict[str, tuple[LogicalVector, set[frozenset[int]]]] = {}
+        for pauli_string, combo_set in combinations_of_order.items():
+            logical_vector = self.circuit.string_to_logical_vector(cultivated_state, pauli_string)
             # TODO: check if `LogicalVector.transfer_xy_to_iz` is unitary. If so, move from above method into below conditional block.
             if logical_vector.probability_mass:
-                # TODO: use `error_probability` instead of `is_error`
-                if logical_vector.is_error:
-                    error_strings[data_string] = (logical_vector.probability_mass, combo_set)
-                else:
-                    identity_strings[data_string] = (logical_vector.probability_mass, combo_set)
+                strings[pauli_string] = (logical_vector, combo_set)
         if order is not None:
-            print(f'    {order}, {len(identity_strings)} ({len(error_strings)}) errors are kept and lead to identity (error).')
-        return identity_strings, error_strings
+            identity_weight = 0
+            error_weight = 0
+            for logical_vector, _ in strings.values():
+                identity_weight += logical_vector.probability_of('I')
+                error_weight += logical_vector.probability_of('Z')
+            print(f'    {order}, {identity_weight} ({error_weight}) errors are kept and lead to identity (error).')
+        return strings
     
 
     def error_rate_per_kept_shot(
             self,
-            all_string_leads: list[tuple[
-                dict[str, tuple[float, set[frozenset[int]]]],
-                dict[str, tuple[float, set[frozenset[int]]]],
-            ]],
+            all_string_leads: list[dict[str, tuple[LogicalVector, set[frozenset[int]]]]],
             noise_level: float,
             print_progress: bool = False,
     ) -> float:
@@ -388,15 +373,14 @@ class BaseFaultCombinator(Combinator):
         """
         index_to_odds = self.get_index_to_odds(noise_level)
         identity_odds, error_odds = 0, 0
-        for length, (identity_strings, error_strings) in enumerate(all_string_leads):
-            i_odds = self._sum_odds(identity_strings.values(), index_to_odds)
-            e_odds = self._sum_odds(error_strings.values(), index_to_odds)
-            identity_odds += i_odds
-            error_odds += e_odds
+        for length, strings in enumerate(all_string_leads):
+            i_odds, e_odds = self._sum_odds(strings.values(), index_to_odds)
             if print_progress:
                 print(f'O(p^{length}) events:')
                 print(f'Identity odds = {i_odds}')
                 print(f'Error odds = {e_odds}')
+            identity_odds += i_odds
+            error_odds += e_odds
         return error_odds / (identity_odds + error_odds)
     
 
@@ -456,19 +440,20 @@ class BaseFaultCombinator(Combinator):
 
     @staticmethod
     def _sum_odds(
-            probability_combo_pairs: Iterable[tuple[float, set[frozenset[int]]]],
+            vector_combo_pairs: Iterable[tuple[LogicalVector, set[frozenset[int]]]],
             index_to_odds: dict[int, float],
-        ) -> float:
-        """Sum the odds of all configurations in `probability_combo_pairs`.
+        ) -> tuple[float, float]:
+        """Sum the odds of all configurations in `vector_combo_pairs`.
         
         Input:
-        * `probability_combo_pairs` an iterable of pairs, each containing:
-            - the probability the configuration is not rejected,
+        * `vector_combo_pairs` an iterable of pairs, each containing:
+            - a logical vector,
             - a set of frozen sets of fault indices that defines the combination.
         * `index_to_odds` a map from each fault index to the odds of it flipping.
         """
-        return sum(probability_kept * sum(math.prod(
-            index_to_odds[index]
-            for index in combo)
-            for combo in combos)
-            for probability_kept, combos in probability_combo_pairs)
+        i_odds, e_odds = 0, 0
+        for logical_vector, set_of_configurations in vector_combo_pairs:
+            prob = sum(math.prod(index_to_odds[index] for index in combo) for combo in set_of_configurations)
+            i_odds += logical_vector.probability_of('I') * prob
+            e_odds += logical_vector.probability_of('Z') * prob
+        return i_odds, e_odds

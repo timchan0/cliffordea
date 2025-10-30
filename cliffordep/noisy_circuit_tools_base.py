@@ -132,8 +132,8 @@ class BaseCultivationCircuit:
         return dict(_events)
 
 
-    def string_to_logical_vector(self, cultivated_state: Literal['T', 'S', 'Z'], data_string: str):
-        clifford = push_through_transversal(data_string, gate=cultivated_state)
+    def string_to_logical_vector(self, cultivated_state: Literal['T', 'S', 'Z'], pauli_string: str):
+        clifford = push_through_transversal(pauli_string, gate=cultivated_state)
         clifford.postselect_from_stabilizers(self.STABILIZER_GENERATORS)
         logical_vector = clifford.get_logical_amplitudes(self.LOGICAL_X, self.LOGICAL_Z)
         logical_vector.transfer_xy_to_iz(logical_state=cultivated_state)
