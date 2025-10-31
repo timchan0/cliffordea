@@ -778,8 +778,8 @@ class LogicalVector:
         """
         # TODO: speed up by casting as a matrix multiplication
         I_stabilizer, Z_stabilizer = GATE_TO_IS_AND_ZS[logical_state]
-        i_component: complex = np.vdot(I_stabilizer, self.amplitudes)
-        z_component: complex = np.vdot(Z_stabilizer, self.amplitudes)
+        i_component: complex = np.vdot(I_stabilizer, self.amplitudes) # type: ignore
+        z_component: complex = np.vdot(Z_stabilizer, self.amplitudes) # type: ignore
         # TODO: assume these are zero
         self.amplitudes -= i_component * I_stabilizer
         self.amplitudes -= z_component * Z_stabilizer

@@ -29,19 +29,19 @@ class TestD3DoubleCatCheck:
             disable_stabilizer_randomization=True,
             num_qubits=noisy_d3_double_cat_check.noisy_circuit.num_qubits,
         )
-        for fault in ungrouped:
-            self._test_with_flip_simulator(noisy_d3_double_cat_check, sim, fault)
+        for error_event in ungrouped:
+            self._test_with_flip_simulator(noisy_d3_double_cat_check, sim, error_event)
 
     @staticmethod
     def _test_with_flip_simulator(
             circuit: CultivationCircuit,
             sim: stim.FlipSimulator,
-            fault: ErrorEvent,
+            error_event: ErrorEvent,
     ):
 
-        syndrome, effect = circuit.get_syndrome_and_effect(fault)
+        syndrome, effect = circuit.get_syndrome_and_effect(error_event)
         
-        timeslice, name, targets = fault
+        timeslice, name, targets = error_event
         if name.startswith('M'):
             sim_syndrome = np.zeros(circuit.noisy_circuit.num_detectors, dtype=bool)
             for instruction in circuit._noiseless_layers[timeslice]:
@@ -59,11 +59,9 @@ class TestD3DoubleCatCheck:
             sim_syndrome = tuple(sim_syndrome)
             sim_effect = circuit.noisy_circuit.num_qubits*'_'
         else:
-            faulty_circuit = cliffordep.insert_fault(
+            faulty_circuit = cliffordep.insert_error_events(
                     circuit.noiseless_circuit,
-                    timeslice=timeslice,
-                    name=name,
-                    targets=targets,
+                    error_events=[error_event],
                 )
             sim.clear()
             for instruction in faulty_circuit:

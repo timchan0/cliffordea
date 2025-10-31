@@ -9,7 +9,7 @@ from cliffordep.combinators._base import BaseFaultCombinator
 from cliffordep.noisy_circuit_tools import CultivationCircuit
 from cliffordep.combinators.fault_combinator_exclusive import get_trivial_syndrome_combinations
 from cliffordep.pauli_string_tools import forget_sign, LogicalVector
-from cliffordep.type_aliases import FaultBag
+from cliffordep.type_aliases import FaultBag, ErrorEvent
 
 
 class FaultCombinator(BaseFaultCombinator):
@@ -17,6 +17,10 @@ class FaultCombinator(BaseFaultCombinator):
     where effects are pure Clifford strings.
     
     Extends `BaseFaultCombinator`.
+
+    Additional instance attributes:
+    * `index_to_events` a map from fault index to the set of error events it represents.
+    Not used for computation, just for introspection.
     """
     
     def __init__(
@@ -28,12 +32,14 @@ class FaultCombinator(BaseFaultCombinator):
             tuple[bool, ...], dict[str, int]
         ] = defaultdict(dict)
         _index_to_bag: defaultdict[int, list[int]] = defaultdict(lambda: [0, 0, 0])
+        self.index_to_events: dict[int, set[ErrorEvent]] = defaultdict(set)
         for (_, process_name, _), group in circuit.group_error_events_by_location().items():
             process_class = self._classify(process_name)
             for error_event in group:
                 syndrome, effect = circuit.get_syndrome_and_effect(error_event)
                 index = _basis[tuple(syndrome)].setdefault(effect, len(_index_to_bag))
                 _index_to_bag[index][process_class] += 1
+                self.index_to_events[index].add(error_event)
         self.basis: dict[tuple[bool, ...], dict[str, int]] = dict(_basis) # type: ignore
         self.index_to_bag: dict[int, FaultBag] = { # type: ignore
             index: tuple(bag) for index, bag in _index_to_bag.items()}

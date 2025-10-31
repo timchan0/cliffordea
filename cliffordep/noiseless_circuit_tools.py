@@ -4,6 +4,9 @@ from typing import Iterable
 
 import stim
 
+from cliffordep.type_aliases import ErrorEvent
+
+
 def split_by_ticks(circuit: stim.Circuit):
     """Split a circuit into a list of circuits, one for each timeslice.
 
@@ -41,28 +44,22 @@ def compose_slices(circuits: list[stim.Circuit]):
     composed.pop()
     return composed
 
-def insert_fault(
+def insert_error_events(
         circuit: stim.Circuit,
-        timeslice: int,
-        name: str,
-        targets: int | stim.GateTarget | Iterable[int | stim.GateTarget],
+        error_events: Iterable[ErrorEvent],
         probability: float = 1,
 ):
-    """Insert a fault on given qubits at the end of a give timeslice.
+    """Insert error events into stim circuit.
     
     Input:
     * `circuit` a stim.Circuit object.
-    * `timeslice` which timeslice to insert the fault after.
-    * `name` the name of the fault. Possible values are
-    "X_ERROR", "Y_ERROR", "Z_ERROR", "E", "DEPOLARIZE1", "DEPOLARIZE2".
-    * `targets` the qubits to apply the fault to. This can be a single integer,
-      a stim.GateTarget, or an iterable of integers or stim.GateTargets.
-      If an iterable is provided, the fault will be applied to all targets in the iterable.
-    * `probability` the probability of the fault.
+    * `error_events` an iterable of error events to insert.
+    * `probability` the probability of the error events.
 
     Output:
-    * The circuit with the fault inserted after the specified timeslice.
+    * The circuit with the error events inserted.
     """
     circuits = split_by_ticks(circuit)
-    circuits[timeslice].append(name, targets, probability)
+    for timeslice, name, targets in error_events:
+        circuits[timeslice].append(name, targets, probability)
     return compose_slices(circuits)
