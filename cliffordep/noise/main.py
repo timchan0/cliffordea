@@ -7,7 +7,7 @@ from cliffordep.noiseless_circuit_tools import split_by_ticks, compose_slices
 
 
 def uniformly_depolarize(
-        circuit_without_noise: stim.Circuit,
+        noiseless_circuit: stim.Circuit,
         noise_level: float,
         noisy_timeslices: None | Container[int] = None,
 ):
@@ -24,24 +24,21 @@ def uniformly_depolarize(
     Only the qubits that are acted upon at least once are subject to depolarization.
 
     Input:
-    * `circuit_without_noise` a stim.Circuit without noise.
+    * `noiseless_circuit` a stim.Circuit without noise.
     * `noise_level` a float in [0, 1].
     * `noisy_timeslices` an optional iterable of timeslice indices to apply noise to.
-    If unspecified, noise is applied to all timeslices.
+    If unspecified, noise is applied to all timeslices, *except the first and last*.
     """
+    if noisy_timeslices is None:
+        noisy_timeslices = range(1, noiseless_circuit.num_ticks)
     system_qubit_indices: set[int] = set()
-    for instruction in circuit_without_noise:
+    for instruction in noiseless_circuit:
         if isinstance(instruction, stim.CircuitInstruction):
             for target in instruction.targets_copy():
                 if (val:=target.qubit_value) is not None:
                     system_qubit_indices.add(val)
     model = NoiseModel.uniform_depolarizing(noise_level)
-    if noisy_timeslices is None:
-        return model.noisy_circuit(
-            circuit_without_noise,
-            system_qubit_indices=system_qubit_indices,
-        )
-    layers = split_by_ticks(circuit_without_noise)
+    layers = split_by_ticks(noiseless_circuit)
     noisy_layers: list[stim.Circuit] = []
     for timeslice, layer in enumerate(layers):
         noisy_layer = model.noisy_circuit(

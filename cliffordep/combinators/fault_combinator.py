@@ -1,4 +1,5 @@
 from collections import Counter, defaultdict
+from collections.abc import Iterable, Sequence
 from functools import cached_property
 import itertools
 import math
@@ -11,6 +12,7 @@ from cliffordep.noisy_circuit_tools import CultivationCircuit
 from cliffordep.combinators.fault_combinator_exclusive import get_trivial_syndrome_combinations
 from cliffordep.pauli_string_tools import forget_sign, LogicalVector
 from cliffordep.type_aliases import FaultBag, ErrorEvent
+from cliffordep import noiseless_circuit_tools
 
 
 class FaultCombinator(BaseFaultCombinator):

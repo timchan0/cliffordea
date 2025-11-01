@@ -14,8 +14,9 @@ def split_by_ticks(circuit: stim.Circuit):
     * `circuit` a stim.Circuit object.
     
     Output:
-    * `circuits` a list of stim.Circuit objects, one for each timeslice.
+    * `circuits` a list of new stim.Circuit objects, one for each timeslice.
     Its length is `circuit.num_ticks + 1`.
+    Does not modify the input circuit.
     """
     circuits: list[stim.Circuit] = []
     current_circuit = stim.Circuit()
@@ -36,12 +37,13 @@ def compose_slices(circuits: list[stim.Circuit]):
 
     Output:
     * `composed` the sequential composition of the circuits in `circuits`.
+    Does not modify the input circuits.
     """
     composed = stim.Circuit()
     for circuit in circuits:
         composed += circuit
         composed.append("TICK") # type: ignore
-    composed.pop()
+    composed.pop()  # remove last TICK
     return composed
 
 def insert_error_events(
@@ -57,7 +59,8 @@ def insert_error_events(
     * `probability` the probability of the error events.
 
     Output:
-    * The circuit with the error events inserted.
+    * A new circuit with the error events inserted.
+    Does not modify the input circuit.
     """
     circuits = split_by_ticks(circuit)
     for timeslice, name, targets in error_events:

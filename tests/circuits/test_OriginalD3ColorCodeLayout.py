@@ -4,9 +4,15 @@ import stim
 from cliffordep.circuits import _OriginalD3ColorCodeLayout
 
 
+class _ConcreteD3ColorCodeLayout(_OriginalD3ColorCodeLayout):
+    """Concrete subclass of `_OriginalD3ColorCodeLayout` for testing purposes."""
+    
+    DATA_INDICES = (0, 3, 5, 7, 8, 10, 11)
+
+
 @pytest.fixture
 def original_d3_color_code():
-    return _OriginalD3ColorCodeLayout()
+    return _ConcreteD3ColorCodeLayout()
 
 
 STABILIZER_GENERATORS_RESTRICTED = (

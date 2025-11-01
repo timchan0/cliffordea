@@ -11,8 +11,6 @@ def noisy_d3_double_cat_check_circuit():
     """Noisy version of the distance-3 double cat check circuit."""
     circuit = cliffordep.circuits.D3DoubleCatCheckA6.INNER_CIRCUIT
     noisy_circuit = cliffordep.noise.uniformly_depolarize(circuit, noise_level=1e-3)
-    # remove last layer of depolarizing noise
-    noisy_circuit = noisy_circuit[:-1]
     return noisy_circuit
 
 
