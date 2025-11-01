@@ -43,6 +43,7 @@ class FaultCombinator(BaseFaultCombinator):
         if print_progress:
             print(f"Finished enumerating all faults. {str(self)}")
         super().__init__(circuit, print_progress=print_progress)
+        self.circuit: CultivationCircuit
 
     
     @cached_property
@@ -204,3 +205,45 @@ class FaultCombinator(BaseFaultCombinator):
         """
         a, b, c = bag
         return a + b/3 + c/15
+    
+
+    def visualize_fault_configurations(
+            self,
+            configurations: Sequence[Iterable[int]],
+            probability_increment: float = 0.1,
+            diagram_type: str = 'timeline',
+            **kwargs_for_diagram,
+    ):
+        """Visualize multiple fault configurations one by one.
+        
+        Input:
+        * `configurations` a sequence of fault configurations.
+        Each fault configuration is a frozen set of fault indices.
+        * `probability_increment` the increment in error probability for each fault in the configuration.
+        I.e. all error events of the kth fault have probability `k*probability_increment`.
+        This is used to distinguish error events belonging to different faults.
+        * `diagram_type` the type of diagram to produce. See `stim.Circuit.diagram()` for options.
+        * `**kwargs_for_diagram` other keyword arguments for `stim.Circuit.diagram()`.
+
+        Output:
+        * An interactive widget that displays one configuration at a time.
+        For each configuration, shows a diagram of the circuit where each fault in the configuration
+        is represented by all the error events that correspond to it.
+        """
+        from ipywidgets import interact, BoundedIntText
+        @interact(configuration=BoundedIntText(
+                value=0,
+                min=0,
+                max=len(configurations)-1,
+                step=1,
+        ))
+        def f(configuration: int):
+            circuit = self.circuit.noiseless_circuit
+            for k, fault_index in enumerate(configurations[configuration]):
+                circuit = noiseless_circuit_tools.insert_error_events(
+                    circuit=circuit,
+                    error_events=self.index_to_events[fault_index],
+                    probability=k*probability_increment,
+                )
+            return circuit.diagram(type=diagram_type, **kwargs_for_diagram)
+        return f
