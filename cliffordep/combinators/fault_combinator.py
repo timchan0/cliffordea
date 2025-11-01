@@ -1,4 +1,5 @@
 from collections import Counter, defaultdict
+from functools import cached_property
 import itertools
 import math
 
@@ -17,10 +18,6 @@ class FaultCombinator(BaseFaultCombinator):
     where effects are pure Clifford strings.
     
     Extends `BaseFaultCombinator`.
-
-    Additional instance attributes:
-    * `index_to_events` a map from fault index to the set of error events it represents.
-    Not used for computation, just for introspection.
     """
     
     def __init__(
@@ -32,20 +29,32 @@ class FaultCombinator(BaseFaultCombinator):
             tuple[bool, ...], dict[str, int]
         ] = defaultdict(dict)
         _index_to_bag: defaultdict[int, list[int]] = defaultdict(lambda: [0, 0, 0])
-        self.index_to_events: dict[int, set[ErrorEvent]] = defaultdict(set)
         for (_, process_name, _), group in circuit.group_error_events_by_location().items():
             process_class = self._classify(process_name)
             for error_event in group:
                 syndrome, effect = circuit.get_syndrome_and_effect(error_event)
                 index = _basis[tuple(syndrome)].setdefault(effect, len(_index_to_bag))
                 _index_to_bag[index][process_class] += 1
-                self.index_to_events[index].add(error_event)
         self.basis: dict[tuple[bool, ...], dict[str, int]] = dict(_basis) # type: ignore
         self.index_to_bag: dict[int, FaultBag] = { # type: ignore
             index: tuple(bag) for index, bag in _index_to_bag.items()}
         if print_progress:
             print(f"Finished enumerating all faults. {str(self)}")
         super().__init__(circuit, print_progress=print_progress)
+
+    
+    @cached_property
+    def index_to_events(self):
+        """A map from fault index to the set of error events it represents.
+        Not used for computation, just for introspection.
+        """
+        map_: defaultdict[int, set[ErrorEvent]] = defaultdict(set)
+        for group in self.circuit.group_error_events_by_location().values():
+            for error_event in group:
+                syndrome, effect = self.circuit.get_syndrome_and_effect(error_event)
+                index = self.basis[tuple(syndrome)][effect]
+                map_[index].add(error_event)
+        return dict(map_)
 
 
     def get_undetected_configurations( # type: ignore
