@@ -61,8 +61,28 @@ def insert_error_events(
     Output:
     * A new circuit with the error events inserted.
     Does not modify the input circuit.
+    The tags are not preserved in the output circuit.
     """
     circuits = split_by_ticks(circuit)
     for timeslice, name, targets in error_events:
-        circuits[timeslice].append(name, targets, probability)
+        if name.startswith('M'):
+            target, = targets
+            # find the index of the instruction containing the erroneous measurement
+            for instruction_index, instruction in enumerate(circuits[timeslice]):
+                if isinstance(instruction, stim.CircuitRepeatBlock):
+                    raise ValueError("There is a REPEAT block in the circuit.")
+                if instruction.num_measurements:
+                    # TODO: store measurement index in `ErrorEvent` to avoid below search
+                    targets_copy: list[stim.GateTarget] = instruction.targets_copy()
+                    if target in targets_copy:
+                        target_index = targets_copy.index(target)
+                        insertand = stim.Circuit()
+                        insertand.append(stim.CircuitInstruction(name, targets_copy[:target_index]))
+                        insertand.append(stim.CircuitInstruction(name, [target], [probability]))
+                        insertand.append(stim.CircuitInstruction(name, targets_copy[target_index+1:]))
+                        circuits[timeslice].pop(instruction_index)
+                        circuits[timeslice].insert(instruction_index, insertand)
+                        break
+        else:
+            circuits[timeslice].append(name, targets, probability)
     return compose_slices(circuits)
