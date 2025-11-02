@@ -7,11 +7,17 @@ class _OriginalD3ColorCodeLayout:
     * `DATA_INDICES` the indices of the data qubits.
     * `ANCILLA_INDICES` the indices of the ancilla qubits.
     * `FULL_CIRCUIT` the full double check circuit.
-    * `INNER_CIRCUIT` the double check circuit within the transversal T gates.
-    It is important that the ancilla measurements at the end are measurement _and_ reset,
-    as this lowers the number of errors that must be enumerated,
-    thus improving the numeric performance considerably.
-    This is adapted from the full circuit.
+    * `INNER_CIRCUIT` the double check circuit _within_ the transversal T gates:
+        * The first timeslice of this circuit is an MPP measurement of all data qubits,
+        which the first logical H_XY measurement is checked against.
+        * If the ancilla qubit is used again after measurement,
+        the measurement should be MR instead of M (or MRX instead of MX).
+        When M/MX/MY is applied to a qubit,
+        this indicates the qubit will no longer be used
+        so the noise model will no longer apply noise to it.
+        * The last timeslice of this circuit is a reset of all non-data qubits.
+        This is important as it lowers the number of errors that must be enumerated,
+        thus improving the numeric performance considerably.
     """
 
     _STABILIZER_GENERATOR_INDICES = (
@@ -111,8 +117,10 @@ CX 3 0
 TICK
 CX 2 3
 TICK
-MRX 2
+MX 2
 DETECTOR(2, 1, 1) rec[-1] rec[-2]
+TICK
+RX 2
 """
     )
 
@@ -183,7 +191,7 @@ CX 2 3
 TICK
 S 3 6 7 5 4 1 0
 TICK
-MRX 2
+MX 2
 DETECTOR(2, 1, 1) rec[-1] rec[-2]
 TICK
 MPP X5*X0*X1*X3
@@ -258,9 +266,11 @@ CX 6 8 3 4
 TICK
 CX 6 5 2 3
 TICK
-MRX 6 2
+MX 6 2
 DETECTOR(3, 1, 1) rec[-2]
 DETECTOR(2, 1, 1) rec[-1] rec[-3]
+TICK
+RX 6 2
 """
     )
 
@@ -324,7 +334,7 @@ CX 6 5 2 3
 TICK
 S 3 7 8 5 4 1 0
 TICK
-MRX 6 2
+MX 6 2
 DETECTOR(3, 1, 1) rec[-2]
 DETECTOR(2, 1, 1) rec[-1] rec[-3]
 TICK
@@ -397,10 +407,12 @@ CX 7 9 2 0 4 5
 TICK
 CX 7 6 3 4 1 2
 TICK
-MRX 7 3 1
+MX 7 3 1
 DETECTOR(3, 1, 1) rec[-3]
 DETECTOR(2, 1, 1) rec[-2] rec[-4]
 DETECTOR(1, 0, 1) rec[-1]
+TICK
+RX 7 3 1
 """
     )
 
@@ -461,7 +473,7 @@ CX 7 6 3 4 1 2
 TICK
 S 4 8 9 6 5 2 0
 TICK
-MRX 7 3 1
+MX 7 3 1
 DETECTOR(3, 1, 1) rec[-3]
 DETECTOR(2, 1, 1) rec[-2] rec[-4]
 DETECTOR(1, 0, 1) rec[-1]
@@ -536,11 +548,13 @@ CX 4 5 8 10 2 0
 TICK
 CX 8 7 5 6 3 4 1 2
 TICK
-MRX 8 3 1 5
+MX 8 3 1 5
 DETECTOR(3, 1, 1) rec[-4]
 DETECTOR(2, 1, 1) rec[-3] rec[-5]
 DETECTOR(1, 0, 1) rec[-2]
 DETECTOR(2, 2, 1) rec[-1]
+TICK
+RX 8 3 1 5
 """
     )
 
@@ -602,7 +616,7 @@ CX 8 7 5 6 3 4 1 2
 TICK
 S 4 9 10 7 6 2 0
 TICK
-MRX 8 3 1 5
+MX 8 3 1 5
 DETECTOR(3, 1, 1) rec[-4]
 DETECTOR(2, 1, 1) rec[-3] rec[-5]
 DETECTOR(1, 0, 1) rec[-2]
@@ -679,12 +693,14 @@ CX 3 1 5 6 9 11
 TICK
 CX 1 0 9 8 6 7 4 5 2 3
 TICK
-MRX 9 4 2 6 1
+MX 9 4 2 6 1
 DETECTOR(3, 1, 1) rec[-5]
 DETECTOR(2, 1, 1) rec[-4] rec[-6]
 DETECTOR(1, 0, 1) rec[-3]
 DETECTOR(2, 2, 1) rec[-2]
 DETECTOR(0, 1, 1) rec[-1]
+TICK
+RX 9 4 2 6 1
 """
     )
 
@@ -747,7 +763,7 @@ CX 1 0 9 8 6 7 4 5 2 3
 TICK
 S 5 10 11 8 7 3 0
 TICK
-MRX 9 4 2 6 1
+MX 9 4 2 6 1
 DETECTOR(3, 1, 1) rec[-5]
 DETECTOR(2, 1, 1) rec[-4] rec[-6]
 DETECTOR(1, 0, 1) rec[-3]
@@ -829,13 +845,15 @@ CX 3 1 5 6 9 12
 TICK
 CX 1 0 9 8 6 7 12 11 4 5 2 3
 TICK
-MRX 12 9 4 2 6 1
+MX 12 9 4 2 6 1
 DETECTOR(4, 1, 1) rec[-6]
 DETECTOR(3, 1, 1) rec[-5]
 DETECTOR(2, 1, 1) rec[-4] rec[-7]
 DETECTOR(1, 0, 1) rec[-3]
 DETECTOR(2, 2, 1) rec[-2]
 DETECTOR(0, 1, 1) rec[-1]
+TICK
+RX 12 9 4 2 6 1
 """
     )
 
@@ -939,8 +957,7 @@ TICK
 # CX sweep[18] 5 sweep[18] 8 sweep[18] 10 sweep[18] 11
 S 5 10 11 8 7 3 0
 TICK
-# added reset after measurement
-MRX 12 9 4 2 6 1
+MX 12 9 4 2 6 1
 DETECTOR(4, 1, 1) rec[-6]
 DETECTOR(3, 1, 1) rec[-5]
 DETECTOR(2, 1, 1) rec[-4] rec[-7]
@@ -1024,7 +1041,7 @@ CX 3 1 5 6 12 13
 TICK
 CX 1 0 9 8 6 7 4 5 2 3 13 10 12 11
 TICK
-MRX 13 12 9 4 2 6 1
+MX 13 12 9 4 2 6 1
 DETECTOR(4, 2, 1) rec[-7]
 DETECTOR(4, 1, 1) rec[-6]
 DETECTOR(3, 1, 1) rec[-5]
@@ -1032,6 +1049,8 @@ DETECTOR(2, 1, 1) rec[-4] rec[-8]
 DETECTOR(1, 0, 1) rec[-3]
 DETECTOR(2, 2, 1) rec[-2]
 DETECTOR(0, 1, 1) rec[-1]
+TICK
+RX 13 12 9 4 2 6 1
 """
     )
 
@@ -1096,8 +1115,7 @@ CX 1 0 9 8 6 7 4 5 2 3 13 10 12 11
 TICK
 S 5 10 11 8 7 3 0
 TICK
-# added reset after measurement
-MRX 13 12 9 4 2 6 1
+MX 13 12 9 4 2 6 1
 DETECTOR(4, 2, 1) rec[-7]
 DETECTOR(4, 1, 1) rec[-6]
 DETECTOR(3, 1, 1) rec[-5]
