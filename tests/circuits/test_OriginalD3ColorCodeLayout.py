@@ -1,11 +1,11 @@
 import pytest
 import stim
 
-from cliffordep.circuits import _OriginalD3ColorCodeLayout
+from cliffordep.circuits import OriginalD3ColorCodeLayout
 
 
-class _ConcreteD3ColorCodeLayout(_OriginalD3ColorCodeLayout):
-    """Concrete subclass of `_OriginalD3ColorCodeLayout` for testing purposes."""
+class _ConcreteD3ColorCodeLayout(OriginalD3ColorCodeLayout):
+    """Concrete subclass of `OriginalD3ColorCodeLayout` for testing purposes."""
     
     DATA_INDICES = (0, 3, 5, 7, 8, 10, 11)
 
@@ -24,9 +24,9 @@ STABILIZER_GENERATORS_RESTRICTED = (
     stim.PauliString('Z2*Z4*Z5*Z6'),
 )
 
-def test_stabilizer_generators_restricted(original_d3_color_code: _OriginalD3ColorCodeLayout):
+def test_stabilizer_generators_restricted(original_d3_color_code: OriginalD3ColorCodeLayout):
     assert original_d3_color_code.STABILIZER_GENERATORS_RESTRICTED == STABILIZER_GENERATORS_RESTRICTED
 
-def test_logicals_restricted(original_d3_color_code: _OriginalD3ColorCodeLayout):
+def test_logicals_restricted(original_d3_color_code: OriginalD3ColorCodeLayout):
     assert original_d3_color_code.LOGICAL_X_RESTRICTED == stim.PauliString('X0*X1*X3')
     assert original_d3_color_code.LOGICAL_Z_RESTRICTED == stim.PauliString('Z0*Z1*Z3')

@@ -1,6 +1,6 @@
 import stim
 
-class _OriginalD3ColorCodeLayout:
+class OriginalD3ColorCodeLayout:
     """Common constants for the distance-3 double cat-check circuit.
     
     Class constants:
@@ -62,7 +62,7 @@ class _OriginalD3ColorCodeLayout:
         )
 
 
-class D3DoubleCatCheckA1(_OriginalD3ColorCodeLayout):
+class D3DoubleCatCheckA1(OriginalD3ColorCodeLayout):
     """The distance-3 double cat-check circuit using 1 ancilla."""
     
     DATA_INDICES = (0, 1, 3, 4, 5, 6, 7)
@@ -218,7 +218,7 @@ OBSERVABLE_INCLUDE(0) rec[-1]
     )
 
 
-class D3DoubleCatCheckA2(_OriginalD3ColorCodeLayout):
+class D3DoubleCatCheckA2(OriginalD3ColorCodeLayout):
     """The distance-3 double cat-check circuit using 2 ancillas."""
 
     DATA_INDICES = (0, 1, 3, 4, 5, 7, 8)
@@ -362,7 +362,7 @@ OBSERVABLE_INCLUDE(0) rec[-1] rec[-9]
     )
 
 
-class D3DoubleCatCheckA3(_OriginalD3ColorCodeLayout):
+class D3DoubleCatCheckA3(OriginalD3ColorCodeLayout):
     """The distance-3 double cat-check circuit using 3 ancillas."""
 
     DATA_INDICES = (0, 2, 4, 5, 6, 8, 9)
@@ -502,7 +502,7 @@ OBSERVABLE_INCLUDE(0) rec[-1] rec[-10]
     )
 
 
-class D3DoubleCatCheckA4(_OriginalD3ColorCodeLayout):
+class D3DoubleCatCheckA4(OriginalD3ColorCodeLayout):
     """The distance-3 double cat-check circuit using 4 ancillas."""
 
     DATA_INDICES = (0, 2, 4, 6, 7, 9, 10)
@@ -646,7 +646,7 @@ OBSERVABLE_INCLUDE(0) rec[-1] rec[-8] rec[-11]
     )
 
 
-class D3DoubleCatCheckA5(_OriginalD3ColorCodeLayout):
+class D3DoubleCatCheckA5(OriginalD3ColorCodeLayout):
     """The distance-3 double cat-check circuit using 5 ancillas."""
 
     DATA_INDICES = (0, 3, 5, 7, 8, 10, 11)
@@ -794,7 +794,7 @@ OBSERVABLE_INCLUDE(0) rec[-1] rec[-8] rec[-9] rec[-12]
     )
 
 
-class D3DoubleCatCheckA6(_OriginalD3ColorCodeLayout):
+class D3DoubleCatCheckA6(OriginalD3ColorCodeLayout):
     """The distance-3 double cat-check circuit using 6 ancillas.
     
     This is the circuit used in the paper.
@@ -992,7 +992,7 @@ OBSERVABLE_INCLUDE(0) rec[-1] rec[-8] rec[-9] rec[-12] rec[-13]
     """
 
 
-class D3DoubleCatCheckA7(_OriginalD3ColorCodeLayout):
+class D3DoubleCatCheckA7(OriginalD3ColorCodeLayout):
     """The distance-3 double cat-check circuit using 7 ancillas."""
 
     DATA_INDICES = (0, 3, 5, 7, 8, 10, 11)
