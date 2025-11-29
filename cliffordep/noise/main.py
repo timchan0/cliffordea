@@ -10,6 +10,8 @@ def uniformly_depolarize(
         noiseless_circuit: stim.Circuit,
         noise_level: float,
         noisy_timeslices: None | Container[int] = None,
+        system_qubit_indices: None | set[int] = None,
+        immune_qubit_indices: None | set[int] = None,
 ):
     """Near-standard circuit depolarizing noise.
 
@@ -28,15 +30,20 @@ def uniformly_depolarize(
     * `noise_level` a float in [0, 1].
     * `noisy_timeslices` an optional iterable of timeslice indices to apply noise to.
     If unspecified, noise is applied to all timeslices, *except the first and last*.
+    * `system_qubit_indices` an optional set of qubit indices to be considered system qubits.
+    If unspecified, all qubits acted upon at least once in the circuit are considered system qubits.
+    * `immune_qubit_indices` an optional set of qubit indices to be considered immune to noise,
+    even if they are operated on.
     """
     if noisy_timeslices is None:
         noisy_timeslices = range(1, noiseless_circuit.num_ticks)
-    system_qubit_indices: set[int] = set()
-    for instruction in noiseless_circuit:
-        if isinstance(instruction, stim.CircuitInstruction):
-            for target in instruction.targets_copy():
-                if (val:=target.qubit_value) is not None:
-                    system_qubit_indices.add(val)
+    if system_qubit_indices is None:
+        system_qubit_indices = set()
+        for instruction in noiseless_circuit:
+            if isinstance(instruction, stim.CircuitInstruction):
+                for target in instruction.targets_copy():
+                    if (val:=target.qubit_value) is not None:
+                        system_qubit_indices.add(val)
     model = NoiseModel(
         idle_depolarization=noise_level,
         any_clifford_1q_rule=NoiseRule(after={"DEPOLARIZE1": noise_level}),
@@ -59,6 +66,7 @@ def uniformly_depolarize(
         noisy_layer = model.noisy_circuit(
                 layer,
                 system_qubit_indices=system_qubit_indices,
+                immune_qubit_indices=immune_qubit_indices,
             ) if timeslice in noisy_timeslices else layer
         noisy_layers.append(noisy_layer)
         
