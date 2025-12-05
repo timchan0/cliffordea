@@ -2,9 +2,11 @@ import cmath
 from collections import defaultdict
 from unittest import mock
 
+import numpy as np
 import pytest
+from stim import PauliString
 
-from cliffordep.pauli_string_tools import CliffordString, FrozenCliffordString, _canonicalize
+from cliffordep.pauli_string_tools import CliffordString, FrozenCliffordString, _canonicalize, SQRT2
 
 _EPSILON = 1e-13
 
@@ -183,3 +185,52 @@ class TestCanonicalize:
         new_terms, new_denominator_squared = _canonicalize(string_2.terms, string_2.denominator_squared)
         assert new_terms == string_1.terms
         assert new_denominator_squared == string_1.denominator_squared
+
+
+class TestGetLogicalAmplitudes:
+
+    WEIGHTS = (3, 7)
+
+    @pytest.fixture(params=WEIGHTS, ids=lambda w: f'X{w}')
+    def logical_x(self, request):
+        return PauliString('X' * request.param)
+    
+    @pytest.fixture(params=WEIGHTS, ids=lambda w: f'Z{w}')
+    def logical_z(self, request):
+        return PauliString('Z' * request.param)
+
+    @pytest.mark.parametrize("weight", WEIGHTS)
+    def test_logical_x(self, weight, logical_x, logical_z):
+        cs = CliffordString({'X' * weight: 1})
+        logical_vector = cs.get_logical_amplitudes(logical_x, logical_z)
+        assert np.array_equal(logical_vector.amplitudes, np.array([0, 1, 0, 0]))
+    
+    @pytest.mark.parametrize("weight", WEIGHTS)
+    def test_logical_z(self, weight, logical_x, logical_z):
+        cs = CliffordString({'Z' * weight: 1})
+        logical_vector = cs.get_logical_amplitudes(logical_x, logical_z)
+        assert np.array_equal(logical_vector.amplitudes, np.array([0, 0, 0, 1]))
+
+    @pytest.mark.parametrize("weight", WEIGHTS)
+    def test_y_tensor_w(self, weight, logical_x, logical_z):
+        cs = CliffordString({'Y' * weight: 1})
+        logical_vector = cs.get_logical_amplitudes(logical_x, logical_z)
+        assert np.array_equal(logical_vector.amplitudes, np.array([0, 0, -1, 0]))
+
+    @pytest.mark.parametrize("weight", WEIGHTS)
+    def test_logical_y(self, weight, logical_x, logical_z):
+        cs = CliffordString({'Y' * weight: -1})
+        logical_vector = cs.get_logical_amplitudes(logical_x, logical_z)
+        assert np.array_equal(logical_vector.amplitudes, np.array([0, 0, 1, 0]))
+
+    @pytest.mark.parametrize("weight", WEIGHTS)
+    def test_logical_H_XY(self, weight, logical_x, logical_z):
+        cs = CliffordString({'X' * weight: 1, 'Y' * weight: -1})
+        logical_vector = cs.get_logical_amplitudes(logical_x, logical_z)
+        assert np.array_equal(logical_vector.amplitudes, np.array([0, 1, 1, 0])/SQRT2)
+
+    @pytest.mark.parametrize("weight", WEIGHTS)
+    def test_logical_iZH_XY(self, weight, logical_x, logical_z):
+        cs = CliffordString({'X' * weight: 1, 'Y' * weight: 1})
+        logical_vector = cs.get_logical_amplitudes(logical_x, logical_z)
+        assert np.array_equal(logical_vector.amplitudes, np.array([0, 1, -1, 0])/SQRT2)

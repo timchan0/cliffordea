@@ -72,12 +72,12 @@ def split_sign(pauli_string: PauliString):
     return pauli_string.sign, forget_sign(pauli_string)
 
 
-def push_through_transversal(pauli_string: str, gate: Literal['T', 'S', 'Z']):
+def push_through_transversal(pauli_string: str, gate: str):
     """Push an _unsigned_ Pauli string through the same gate on each qubit.
     
     Input:
     * `pauli_string` the unsigned Pauli string.
-    * `gate` the gate to push through, either 'T', 'S', or 'Z'.
+    * `gate` the gate to push through, either 'Z', 'S', 'S_DAG', 'T', or 'T_DAG'.
 
     Output:
     * A unitary Clifford string that results from
@@ -298,7 +298,18 @@ class CliffordString:
             pauli_string = PauliString(term)
             signature: tuple[bool, bool] = tuple(
                 not pauli_string.commutes(logical) for logical in (logical_x, logical_z)) # type: ignore
-            amplitudes[SIGNATURE_TO_INDEX[signature]] += amplitude
+            if signature == (False, False):
+                representative = PauliString(len(term))
+            elif signature == (False, True):
+                representative = logical_x
+            elif signature == (True, True):
+                representative = 1j * logical_x * logical_z
+            else:  # (True, False)
+                representative = logical_z
+            quotient = pauli_string * representative
+            # TODO: generalize this to color code of distance greater than 3
+            sign = quotient.sign * 1j**len(quotient.pauli_indices("Y"))
+            amplitudes[SIGNATURE_TO_INDEX[signature]] += sign * amplitude
         return LogicalVector(amplitudes / self.denominator_squared**0.5)
 
 
