@@ -31,7 +31,17 @@ PUSH_THROUGH_S: dict[str, tuple[str, ...]] = {
     'Z': ('Z',),
 }
 """A map from each Pauli to the unnormalized superposition of Paulis
-after pushing through a S gate.
+after pushing through an S gate.
+"""
+
+PUSH_THROUGH_S_DAG: dict[str, tuple[str, ...]] = {
+    '_': ('I',),
+    'X': ('-Y',),
+    'Y': ('X',),
+    'Z': ('Z',),
+}
+"""A map from each Pauli to the unnormalized superposition of Paulis
+after pushing through an S dagger gate.
 """
 
 PUSH_THROUGH_T: dict[str, tuple[str, ...]] = {
@@ -55,11 +65,12 @@ after pushing through a T dagger gate.
 """
 
 PUSH_THROUGH_MAP: dict[str, dict[str, tuple[str, ...]]] = {
-    'T': PUSH_THROUGH_T,
-    'S': PUSH_THROUGH_S,
     'Z': PUSH_THROUGH_Z,
+    'S': PUSH_THROUGH_S,
+    'S_DAG': PUSH_THROUGH_S_DAG,
+    'T': PUSH_THROUGH_T,
     'T_DAG': PUSH_THROUGH_T_DAG,
-}  # TODO: test against PauliString.after
+}
 
 
 def forget_sign(pauli_string: PauliString):

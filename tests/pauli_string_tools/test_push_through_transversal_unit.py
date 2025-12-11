@@ -1,7 +1,8 @@
 import pytest
+import stim
 from stim import PauliString
 
-from cliffordep.pauli_string_tools import push_through_transversal, CliffordString, _tensor_paulis
+from cliffordep.pauli_string_tools import push_through_transversal, CliffordString, _tensor_paulis, split_sign
 
 
 @pytest.mark.parametrize("gate", ["T", "S", "Z"])
@@ -141,3 +142,12 @@ class TestZGate:
         ps = "-X"
         with pytest.raises(KeyError):
             push_through_transversal(ps, gate=self.GATE)
+
+
+@pytest.mark.parametrize("gate", ["Z", "S", "S_DAG"])
+@pytest.mark.parametrize("ps", ["_", "X", "Y", "Z"])
+def test_against_pauli_string_after(gate, ps):
+    instruction = stim.CircuitInstruction(gate, [0])
+    after = PauliString(ps).after(instruction)
+    sign, unsigned_ps = split_sign(after)
+    assert push_through_transversal(ps, gate=gate).terms == {unsigned_ps: sign}
