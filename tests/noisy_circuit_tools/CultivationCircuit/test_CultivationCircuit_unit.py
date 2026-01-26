@@ -17,13 +17,8 @@ class TestMeasurementToDetectors:
 class TestNoiselessLayers:
 
     def test_empty_layer(self):
-        circuit = CultivationCircuit(
-            noisy_circuit=stim.Circuit("""TICK
-            R 0"""),
-            stabilizer_generators=(stim.PauliString(),),
-            logical_x=stim.PauliString(),
-            logical_z=stim.PauliString(),
-        )
+        circuit = CultivationCircuit(noisy_circuit=stim.Circuit("""TICK
+            R 0"""))
         assert circuit._noiseless_layers == [stim.Circuit(), stim.Circuit("R 0")]
 
     def test_multiple_qubits_and_detectors(self, multi_qubit_detector_circuit: CultivationCircuit):

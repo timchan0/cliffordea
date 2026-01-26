@@ -71,23 +71,23 @@ class FaultCombinatorExclusive(BaseExclusiveCombinator):
     faults that cause that syndrome.
     """
 
-    def __init__(
-            self,
-            circuit: CultivationCircuit,
-            print_progress: bool = False,
-    ) -> None:
+    def __init__(self, noisy_circuit, print_progress=False):
+        _circuit = CultivationCircuit(noisy_circuit=noisy_circuit)
         _basis: defaultdict[
             tuple[bool, ...], defaultdict[str, Counter[ErrorLocation]]
         ] = defaultdict(lambda: defaultdict(Counter))
-        for error_location, group in circuit.group_error_events_by_location().items():
+        for error_location, group in _circuit.group_error_events_by_location().items():
             for error_event in group:
-                syndrome, effect = circuit.get_syndrome_and_effect(error_event)
+                syndrome, effect = _circuit.get_syndrome_and_effect(error_event)
                 tuple_syndrome = tuple(syndrome)
                 _basis[tuple_syndrome][effect][error_location] += 1
         self.basis = {syndrome: dict(effect_map) for syndrome, effect_map in _basis.items()}
         if print_progress:
             print(f"Finished enumerating all faults. Found {self.syndrome_count} distinct syndromes.")
-        super().__init__(circuit, print_progress)
+        self.circuit = _circuit
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.circuit})"
 
     @property
     def syndrome_count(self) -> int:

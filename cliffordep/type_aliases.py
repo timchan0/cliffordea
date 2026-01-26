@@ -43,3 +43,5 @@ The probability of the fault is the probability of an odd number of its events o
 """
 
 FaultBagMixed = tuple[Counter[float], Counter[float], Counter[float]]
+
+LogicalTriple = tuple[float, float, set[frozenset[int]]]

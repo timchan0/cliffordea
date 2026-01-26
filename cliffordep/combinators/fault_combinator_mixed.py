@@ -3,6 +3,8 @@ import itertools
 import math
 from typing import Literal
 
+import stim
+
 from cliffordep.combinators._base import BaseFaultCombinator
 from cliffordep.noisy_circuit_tools_mixture import CultivationCircuitMixture
 from cliffordep.combinators.fault_combinator_exclusive import get_trivial_syndrome_combinations
@@ -22,24 +24,25 @@ class FaultCombinatorMixed(BaseFaultCombinator):
     
     def __init__(
             self,
-            circuit: CultivationCircuitMixture,
+            noisy_circuit: stim.Circuit,
             print_progress: bool = False,
             replace_s_with: Literal['T', 'S', 'Z'] = 'S',
     ):
         """Input:
-        * `circuit` the `CultivationCircuitMixture` to analyze.
+        * `noisy_circuit` the `CultivationCircuitMixture` to analyze.
         * `print_progress` whether to print progress.
         * `replace_s_with` the unitary to push through if `unitary` is an S gate.
         Also affects S dagger gates.
         """
+        _circuit = CultivationCircuitMixture(noisy_circuit=noisy_circuit)
         _basis: defaultdict[
             tuple[bool, ...], dict[FrozenCliffordString, int]
         ] = defaultdict(dict)
         _index_to_bag: defaultdict[int, list[Counter[float]]] = defaultdict(lambda: [Counter(), Counter(), Counter()])
-        for (_, process_name, _), group in circuit.group_error_events_by_location().items():
+        for (_, process_name, _), group in _circuit.group_error_events_by_location().items():
             process_class = self._classify(process_name)
             for error_event in group:
-                mixture = circuit.get_syndrome_and_effect(error_event, replace_s_with=replace_s_with)
+                mixture = _circuit.get_syndrome_and_effect(error_event, replace_s_with=replace_s_with)
                 for syndrome, submixture in mixture.submixtures.items():
                     for normalized_effect, probability in submixture.items():
                         assert normalized_effect.mutable_copy().norm_squared == 1
@@ -51,7 +54,10 @@ class FaultCombinatorMixed(BaseFaultCombinator):
             index: tuple(bag) for index, bag in _index_to_bag.items()}
         if print_progress:
             print(f"Finished enumerating all faults. {str(self)}")
-        super().__init__(circuit, print_progress=print_progress)
+        self.circuit = _circuit
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.circuit})"
     
 
     def _get_undetected_configurations_for_length(
@@ -145,5 +151,5 @@ class FaultCombinatorMixed(BaseFaultCombinator):
         return dict(result)
     
 
-    def get_index_to_odds(self, noise_level: float):
+    def get_index_to_odds(self, noise_level):
         raise NotImplementedError

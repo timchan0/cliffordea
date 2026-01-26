@@ -1,24 +1,9 @@
 import stim
 
+_DATA_QUBIT_COUNT = 7
+
 class OriginalD3ColorCodeLayout:
-    """Common constants for the distance-3 double cat-check circuit.
-    
-    Class constants:
-    * `DATA_INDICES` the indices of the data qubits.
-    * `ANCILLA_INDICES` the indices of the ancilla qubits.
-    * `FULL_CIRCUIT` the full double check circuit.
-    * `INNER_CIRCUIT` the double check circuit _within_ the transversal T gates:
-        * The first timeslice of this circuit is an MPP measurement of all data qubits,
-        which the first logical H_XY measurement is checked against.
-        * If the ancilla qubit is used again after measurement,
-        the measurement should be MR instead of M (or MRX instead of MX).
-        When M/MX/MY is applied to a qubit,
-        this indicates the qubit will no longer be used
-        so the noise model will no longer apply noise to it.
-        * The last timeslice of this circuit is a reset of all non-data qubits.
-        This is important as it lowers the number of errors that must be enumerated,
-        thus improving the numeric performance considerably.
-    """
+    """Common constants for the distance-3 double cat-check circuit."""
 
     _STABILIZER_GENERATOR_INDICES = (
         (0, 1, 2, 4),
@@ -34,32 +19,54 @@ class OriginalD3ColorCodeLayout:
     in the order given by `DATA_INDICES`.
     """
 
-    STABILIZER_GENERATORS_RESTRICTED = tuple(
-        stim.PauliString('*'.join(f'{basis}{index}' for index in indices))
-        for indices in _STABILIZER_GENERATOR_INDICES
-        for basis in ('X', 'Z')
-    )
-    """Generators restricted to the 7 data qubits
+    _MAJORITY_INDICES = (0, 2, 3, 6)
+    """Indices of the qubits that have S applied to them for logical S gate
     in the order given by `DATA_INDICES`.
     """
 
+    CIRCUIT: stim.Circuit
+    """The full double check circuit."""
     INNER_CIRCUIT: stim.Circuit
+    """The double check circuit _within_ the transversal T gates:
+    * The first timeslice of this circuit is an MPP measurement of all data qubits,
+    which the first logical H_XY measurement is checked against.
+    * If the ancilla qubit is used again after measurement,
+    the measurement should be MR instead of M (or MRX instead of MX).
+    When M/MX/MY is applied to a qubit,
+    this indicates the qubit will no longer be used
+    so the noise model will no longer apply noise to it.
+    * The last timeslice of this circuit is a reset of all non-data qubits.
+    This is important as it lowers the number of errors that must be enumerated,
+    thus improving the numeric performance considerably.
+    """
+    DATA_INDICES: tuple[int, ...]
+    """The indices of the data qubits."""
+    ANCILLA_INDICES: tuple[int, ...]
+    """The indices of the ancilla qubits."""
 
     def __init__(self):
-        self.DATA_INDICES: tuple[int, ...]
-        self.STABILIZER_GENERATORS = tuple(
-        stim.PauliString('*'.join(f'{basis}{self.DATA_INDICES[index]}' for index in indices))
-        for indices in self._STABILIZER_GENERATOR_INDICES
-        for basis in ('X', 'Z')
-    )
+        logical_identity = stim.PauliString(self.INNER_CIRCUIT.num_qubits)
+        self.STABILIZER_GENERATORS = {basis: tuple(stim.PauliString(
+            '*'.join(f'{basis}{self.DATA_INDICES[index]}' for index in indices)
+        ) * logical_identity for indices in self._STABILIZER_GENERATOR_INDICES) for basis in ('X', 'Z')}
+        self.STABILIZER_GENERATORS_RESTRICTED = {basis: tuple(stim.PauliString(
+            basis if data_index in indices else '_' for data_index in range(_DATA_QUBIT_COUNT))
+        for indices in self._STABILIZER_GENERATOR_INDICES) for basis in ('X', 'Z')}
+        """Generators restricted to the 7 data qubits
+        in the order given by `DATA_INDICES`.
+        """
         (self.LOGICAL_X_RESTRICTED, self.LOGICAL_Z_RESTRICTED) = tuple(
-            stim.PauliString('*'.join(f'{basis}{index}' for index in self._LOGICAL_INDICES))
+            stim.PauliString(basis if data_index in self._LOGICAL_INDICES else '_' for data_index in range(_DATA_QUBIT_COUNT))
             for basis in ('X', 'Z')
         )
         (self.LOGICAL_X, self.LOGICAL_Z) = tuple(
-            stim.PauliString('*'.join(f'{basis}{self.DATA_INDICES[index]}' for index in self._LOGICAL_INDICES))
+            stim.PauliString('*'.join(f'{basis}{self.DATA_INDICES[index]}' for index in self._LOGICAL_INDICES)) * logical_identity
             for basis in ('X', 'Z')
         )
+        _majority_indices_unrestricted = {self.DATA_INDICES[index] for index in self._MAJORITY_INDICES} 
+        self.LOGICAL_S: stim.Circuit = stim.Circuit()
+        self.LOGICAL_S.append('S', _majority_indices_unrestricted)
+        self.LOGICAL_S.append('S_DAG', set(self.DATA_INDICES) - _majority_indices_unrestricted)
 
 
 class D3DoubleCatCheckA1(OriginalD3ColorCodeLayout):

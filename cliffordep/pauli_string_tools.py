@@ -2,7 +2,6 @@
 
 import cmath
 from collections import defaultdict
-from collections.abc import Sequence
 from dataclasses import dataclass
 import itertools
 import math
@@ -67,11 +66,11 @@ after pushing through a T dagger gate.
 PUSH_THROUGH_MAP: dict[str, dict[str, tuple[str, ...]]] = {
     'Z': PUSH_THROUGH_Z,
     'S': PUSH_THROUGH_S,
-    'S_DAG': PUSH_THROUGH_S_DAG,
     'T': PUSH_THROUGH_T,
+    'Z_DAG': PUSH_THROUGH_Z,
+    'S_DAG': PUSH_THROUGH_S_DAG,
     'T_DAG': PUSH_THROUGH_T_DAG,
 }
-
 
 def forget_sign(pauli_string: PauliString):
     """Convert a `stim.PauliString` to a string without the global phase."""
@@ -81,26 +80,6 @@ def forget_sign(pauli_string: PauliString):
 def split_sign(pauli_string: PauliString):
     """Split a Pauli string into its sign and the unsigned part."""
     return pauli_string.sign, forget_sign(pauli_string)
-
-
-def push_through_transversal(pauli_string: str, gate: str):
-    """Push an _unsigned_ Pauli string through the same gate on each qubit.
-    
-    Input:
-    * `pauli_string` the unsigned Pauli string.
-    * `gate` the gate to push through, either 'Z', 'S', 'S_DAG', 'T', or 'T_DAG'.
-
-    Output:
-    * A unitary Clifford string that results from
-    pushing the input through a `gate` on each qubit.
-    """
-    map = PUSH_THROUGH_MAP[gate]
-    options: list[tuple[str, ...]] = [map[pauli] for pauli in pauli_string]
-    terms: dict[str, complex] = {}
-    for pauli_tuple in itertools.product(*options):
-        sign, child = split_sign(_tensor_paulis(*pauli_tuple))
-        terms[child] = sign
-    return CliffordString(terms)
 
 
 def _tensor_paulis(*paulis: str):
@@ -168,6 +147,11 @@ def _canonicalize(terms: dict[str, complex], denominator_squared: float):
     else:
         new_denominator_squared = 1
     return new_terms, new_denominator_squared
+
+
+def _boolean_array_to_int(array: np.ndarray) -> int:
+    """Convert a 1D boolean numpy array to an integer."""
+    return int(''.join(array.astype(int).astype(str)), 2)
 
 
 class CliffordString:
@@ -261,7 +245,7 @@ class CliffordString:
         )
 
 
-    def postselect_from_stabilizers(self, stabilizer_generators: Sequence[PauliString]):
+    def postselect_from_stabilizers(self, stabilizer_generators: dict[str, tuple[stim.PauliString, ...]]):
         """Kill all terms that do not commute with the stabilizers.
         
         Input:
@@ -273,7 +257,11 @@ class CliffordString:
         killed: set[str] = set()
         for term in self.terms.keys():
             pauli_string = PauliString(term)
-            if not all(pauli_string.commutes(stabilizer) for stabilizer in stabilizer_generators):
+            if not all(
+                pauli_string.commutes(generator)
+                for generator_list in stabilizer_generators.values()
+                for generator in generator_list
+            ):
                 killed.add(term)
         for term in killed:
             del self.terms[term]

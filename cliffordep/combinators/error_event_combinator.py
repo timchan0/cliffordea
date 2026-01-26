@@ -31,21 +31,21 @@ class ErrorEventCombinator(BaseExclusiveCombinator):
         - `effect` a string representing the resultant Pauli operator of the fault.
     """
 
-    def __init__(
-            self,
-            circuit: CultivationCircuit,
-            print_progress: bool = False,
-    ):
+    def __init__(self, noisy_circuit, print_progress=False):
+        _circuit = CultivationCircuit(noisy_circuit=noisy_circuit)
         _basis: defaultdict[
             ErrorLocation, dict[ErrorEvent, tuple[npt.NDArray[np.bool_], str]]] = defaultdict(dict)
-        for source, group in circuit.group_error_events_by_location().items():
+        for source, group in _circuit.group_error_events_by_location().items():
             for error_event in group:
-                syndrome, effect = circuit.get_syndrome_and_effect(error_event)
+                syndrome, effect = _circuit.get_syndrome_and_effect(error_event)
                 _basis[source][error_event] = (syndrome, effect)
         self.basis = dict(_basis)
         if print_progress:
             print(f"Finished enumerating all faults.")
-        super().__init__(circuit, print_progress)
+        self.circuit = _circuit
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.circuit})"
 
 
     def _get_undetected_configurations_for_length(

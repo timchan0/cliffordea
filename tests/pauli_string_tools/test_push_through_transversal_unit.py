@@ -2,20 +2,23 @@ import pytest
 import stim
 from stim import PauliString
 
-from cliffordep.pauli_string_tools import push_through_transversal, CliffordString, _tensor_paulis, split_sign
+from cliffordep.logical_analyzers import _TransversalGate
+from cliffordep.pauli_string_tools import CliffordString, _tensor_paulis, split_sign
 
 
 @pytest.mark.parametrize("gate", ["T", "S", "Z"])
 def test_identity(gate):
     ps = "__"
-    result = push_through_transversal(ps, gate=gate)
+    transversal_gate = _TransversalGate(2*gate)
+    result = transversal_gate.conjugate(ps)
     assert isinstance(result, CliffordString)
     assert dict(result.terms) == {ps: 1}
 
-@pytest.mark.parametrize("gate", ["T", "S", "Z"])
-def test_empty(gate):
+
+def test_empty():
     ps = ''
-    result = push_through_transversal(ps, gate=gate)
+    transversal_gate = _TransversalGate('')
+    result = transversal_gate.conjugate(ps)
     assert dict(result.terms) == {ps: 1}
 
 
@@ -41,107 +44,110 @@ class TestTensorPaulis:
 
 class TestTGate:
 
-    GATE = "T"
-
+    T_TENSOR_1 = _TransversalGate("T")
+    T_TENSOR_2 = _TransversalGate("TT")
+    
     def test_x(self):
         ps = "X"
-        result = push_through_transversal(ps, gate=self.GATE)
+        result = self.T_TENSOR_1.conjugate(ps)
         assert dict(result.terms) == {"X": 1, "Y": 1}
 
     def test_y(self):
         ps = "Y"
-        result = push_through_transversal(ps, gate=self.GATE)
+        result = self.T_TENSOR_1.conjugate(ps)
         assert dict(result.terms) == {"X": -1, "Y": 1}
 
     def test_z(self):
         ps = "Z"
-        result = push_through_transversal(ps, gate=self.GATE)
+        result = self.T_TENSOR_1.conjugate(ps)
         assert dict(result.terms) == {"Z": 1}
 
     def test_mixed(self):
         ps = "X_"
-        result = push_through_transversal(ps, gate=self.GATE)
+        result = self.T_TENSOR_2.conjugate(ps)
         assert dict(result.terms) == {"X_": 1, "Y_": 1}
 
     def test_two_qubits(self):
         ps = "XY"
-        result = push_through_transversal(ps, gate=self.GATE)
+        result = self.T_TENSOR_2.conjugate(ps)
         assert dict(result.terms) == {"XX": -1, "XY": 1, "YX": -1, "YY": 1}
 
     def test_sign_rejected(self):
         ps = "-X"
         with pytest.raises(KeyError):
-            push_through_transversal(ps, gate=self.GATE)
+            self.T_TENSOR_1.conjugate(ps)
 
 
 class TestSGate:
 
-    GATE = "S"
+    S_TENSOR_1 = _TransversalGate("S")
+    S_TENSOR_2 = _TransversalGate("SS")
 
     def test_x(self):
         ps = "X"
-        result = push_through_transversal(ps, gate=self.GATE)
+        result = self.S_TENSOR_1.conjugate(ps)
         assert dict(result.terms) == {"Y": 1}
 
     def test_y(self):
         ps = "Y"
-        result = push_through_transversal(ps, gate=self.GATE)
+        result = self.S_TENSOR_1.conjugate(ps)
         assert dict(result.terms) == {"X": -1}
 
     def test_z(self):
         ps = "Z"
-        result = push_through_transversal(ps, gate=self.GATE)
+        result = self.S_TENSOR_1.conjugate(ps)
         assert dict(result.terms) == {"Z": 1}
 
     def test_mixed(self):
         ps = "X_"
-        result = push_through_transversal(ps, gate=self.GATE)
+        result = self.S_TENSOR_2.conjugate(ps)
         assert dict(result.terms) == {"Y_": 1}
 
     def test_two_qubits(self):
         ps = "XY"
-        result = push_through_transversal(ps, gate=self.GATE)
+        result = self.S_TENSOR_2.conjugate(ps)
         assert dict(result.terms) == {"YX": -1}
 
     def test_sign_rejected(self):
         ps = "-X"
         with pytest.raises(KeyError):
-            push_through_transversal(ps, gate=self.GATE)
+            self.S_TENSOR_1.conjugate(ps)
 
 
 class TestZGate:
 
-    GATE = "Z"
+    Z_TENSOR_1 = _TransversalGate("Z")
+    Z_TENSOR_2 = _TransversalGate("ZZ")
 
     def test_x(self):
         ps = "X"
-        result = push_through_transversal(ps, gate=self.GATE)
+        result = self.Z_TENSOR_1.conjugate(ps)
         assert dict(result.terms) == {"X": -1}
 
     def test_y(self):
         ps = "Y"
-        result = push_through_transversal(ps, gate=self.GATE)
+        result = self.Z_TENSOR_1.conjugate(ps)
         assert dict(result.terms) == {"Y": -1}
 
     def test_z(self):
         ps = "Z"
-        result = push_through_transversal(ps, gate=self.GATE)
+        result = self.Z_TENSOR_1.conjugate(ps)
         assert dict(result.terms) == {"Z": 1}
 
     def test_mixed(self):
         ps = "X_"
-        result = push_through_transversal(ps, gate=self.GATE)
+        result = self.Z_TENSOR_2.conjugate(ps)
         assert dict(result.terms) == {"X_": -1}
 
     def test_two_qubits(self):
         ps = "XY"
-        result = push_through_transversal(ps, gate=self.GATE)
+        result = self.Z_TENSOR_2.conjugate(ps)
         assert dict(result.terms) == {"XY": 1}
 
     def test_sign_rejected(self):
         ps = "-X"
         with pytest.raises(KeyError):
-            push_through_transversal(ps, gate=self.GATE)
+            self.Z_TENSOR_1.conjugate(ps)
 
 
 @pytest.mark.parametrize("gate", ["Z", "S", "S_DAG"])
@@ -150,4 +156,5 @@ def test_against_pauli_string_after(gate, ps):
     instruction = stim.CircuitInstruction(gate, [0])
     after = PauliString(ps).after(instruction)
     sign, unsigned_ps = split_sign(after)
-    assert push_through_transversal(ps, gate=gate).terms == {unsigned_ps: sign}
+    transversal_gate = _TransversalGate([gate])
+    assert transversal_gate.conjugate(ps).terms == {unsigned_ps: sign}

@@ -1,36 +1,21 @@
 """Module for enumerating faults in noisy stim circuits."""
 
 from collections import defaultdict
-from collections.abc import Sequence
 from functools import cached_property
-from typing import Literal
+from typing import final
 
 import stim
 
 from cliffordep.noiseless_circuit_tools import split_by_ticks
 from cliffordep.constants import DEPOLARIZE2_ERROR_EVENTS
 from cliffordep.type_aliases import ErrorEvent, ErrorLocation
-from cliffordep.pauli_string_tools import push_through_transversal
 
 
 class BaseCultivationCircuit:
-    """A class representing a noisy stim circuit with methods to analyze faults.
-    
-    Instance attributes:
-    * `noisy_circuit` a `stim.Circuit` annotated with noise.
-    * `STABILIZER_GENERATORS` the generators of the stabilizer group.
-    * `LOGICAL_X` a Pauli string representing a logical X operator.
-    * `LOGICAL_Z` ditto for Z.
-    """
+    """A class representing a noisy stim circuit with methods to analyze faults."""
 
-
-    def __init__(
-            self,
-            noisy_circuit: stim.Circuit,
-            stabilizer_generators: Sequence[stim.PauliString],
-            logical_x: stim.PauliString,
-            logical_z: stim.PauliString,
-    ) -> None:
+    @final
+    def __init__(self, noisy_circuit: stim.Circuit) -> None:
         tagged_circuit = stim.Circuit()
         """Each measurement instruction is tagged with the index of its first measurement."""
         measurement_index = 0
@@ -45,18 +30,11 @@ class BaseCultivationCircuit:
             )
             measurement_index += measurement_count
         self.noisy_circuit = tagged_circuit
-        self.STABILIZER_GENERATORS = stabilizer_generators
-        self.LOGICAL_X = logical_x
-        self.LOGICAL_Z = logical_z
+        """The `stim.Circuit` annotated with noise."""
 
 
     def __repr__(self):
-        return f"""{self.__class__.__name__}(
-        noisy_circuit={self.noisy_circuit},
-        stabilizer_generators={self.STABILIZER_GENERATORS},
-        logical_x={self.LOGICAL_X},
-        logical_z={self.LOGICAL_Z}
-    )"""
+        return f"""{self.__class__.__name__}(noisy_circuit={self.noisy_circuit})"""
 
 
     @cached_property
@@ -130,12 +108,3 @@ class BaseCultivationCircuit:
                                         stim.target_pauli(target_2.value, basis_2),
                                     )))
         return dict(_events)
-
-
-    def string_to_logical_vector(self, cultivated_state: Literal['T', 'S', 'Z'], pauli_string: str):
-        gate = cultivated_state if cultivated_state == 'Z' else f'{cultivated_state}_DAG'
-        clifford = push_through_transversal(pauli_string, gate=gate)
-        clifford.postselect_from_stabilizers(self.STABILIZER_GENERATORS)
-        logical_vector = clifford.get_logical_amplitudes(self.LOGICAL_X, self.LOGICAL_Z)
-        logical_vector.transfer_xy_to_iz(logical_state=cultivated_state)
-        return logical_vector

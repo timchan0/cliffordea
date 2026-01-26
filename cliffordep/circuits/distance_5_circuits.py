@@ -11,16 +11,20 @@ class OriginalD5ColorCodeLayout:
     """Indices of the stabilizer generators."""
 
     INNER_CIRCUIT: stim.Circuit
+    TRANSVERSAL_S: stim.Circuit
 
     def __init__(self):
         self.DATA_INDICES: tuple[int, ...]
-        self.STABILIZER_GENERATORS = tuple(
-        stim.PauliString('*'.join(f'{basis}{index}' for index in indices))
-        for indices in self._UNRESTRICTED_STABILIZER_GENERATOR_INDICES
-        for basis in ('X', 'Z')
-    )
+        self.STABILIZER_GENERATORS = {basis: tuple(stim.PauliString(
+            basis if index in indices else '_' for index in range(self.INNER_CIRCUIT.num_qubits)
+        ) for indices in self._UNRESTRICTED_STABILIZER_GENERATOR_INDICES
+        ) for basis in ('X', 'Z')}
+        self.STABILIZER_GENERATORS_RESTRICTED = {basis: tuple(stim.PauliString(
+            basis if index in indices else '_' for index in self.DATA_INDICES
+        ) for indices in self._UNRESTRICTED_STABILIZER_GENERATOR_INDICES
+        ) for basis in ('X', 'Z')}
         (self.LOGICAL_X, self.LOGICAL_Z) = tuple(
-            stim.PauliString('*'.join(f'{basis}{index}' for index in self.DATA_INDICES))
+            stim.PauliString(basis if index in self.DATA_INDICES else '_' for index in range(self.INNER_CIRCUIT.num_qubits))
             for basis in ('X', 'Z')
         )
 
@@ -305,3 +309,10 @@ OBSERVABLE_INCLUDE(0) rec[-1] rec[-20] rec[-21] rec[-22] rec[-23] rec[-24] rec[-
     """Copied from the Stim file in `make_chunk_d5_double_cat_check()`
     in `code/src/cultiv/_construction/_cultivation_stage.py`.
     """
+
+    LOGICAL_S = stim.Circuit(
+"""
+S 0 5 7 14 16 18 20 29 31 36
+S_DAG 9 11 13 22 24 26 34 32 3
+"""
+    )

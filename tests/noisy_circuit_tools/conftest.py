@@ -12,23 +12,18 @@ def d3_double_cat_check_grouped_by_location(noisy_d3_double_cat_check: Cultivati
 
 
 @pytest.fixture
-def d3_double_cat_check_fault_source_combinator(noisy_d3_double_cat_check: CultivationCircuit) -> FaultCombinatorExclusive:
+def d3_double_cat_check_fault_source_combinator(noisy_d3_double_cat_check_circuit: stim.Circuit):
     """Exclusive fault combinator for the distance-3 double cat check circuit."""
-    combinator = FaultCombinatorExclusive(noisy_d3_double_cat_check)
+    combinator = FaultCombinatorExclusive(noisy_d3_double_cat_check_circuit)
     return combinator
 
 
 @pytest.fixture
 def multi_qubit_detector_circuit():
-    return CultivationCircuit(
-        noisy_circuit=stim.Circuit("""
+    return CultivationCircuit(noisy_circuit=stim.Circuit("""
             CX 0 1
             TICK
             MZ 0 1
             DETECTOR rec[-2]
             DETECTOR rec[-1]
-        """),
-        stabilizer_generators=(stim.PauliString(),),
-        logical_x=stim.PauliString(),
-        logical_z=stim.PauliString(),
-    )
+        """))
