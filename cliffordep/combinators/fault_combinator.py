@@ -9,7 +9,7 @@ import pandas as pd
 
 from cliffordep.combinators._base import BaseFaultCombinator
 from cliffordep.noisy_circuit_tools import CultivationCircuit
-from cliffordep.combinators.fault_combinator_exclusive import get_trivial_syndrome_combinations
+from cliffordep.combinators._base import get_trivial_syndrome_combinations
 from cliffordep.pauli_string_tools import forget_sign
 from cliffordep.type_aliases import FaultBag, ErrorEvent, LogicalTriple
 from cliffordep import noiseless_circuit_tools

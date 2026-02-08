@@ -3,36 +3,12 @@ from collections import Counter, defaultdict
 from collections.abc import Iterable
 import math
 
-import numpy as np
-import numpy.typing as npt
 import stim
 
 from cliffordep.noisy_circuit_tools import CultivationCircuit
 from cliffordep.pauli_string_tools import forget_sign
 from cliffordep.type_aliases import EffectMap, ErrorLocation
-from cliffordep.combinators._base import BaseExclusiveCombinator
-
-
-def get_trivial_syndrome_combinations(
-        syndromes: Iterable[tuple[bool, ...]],
-        length: int,
-) -> list[Counter[tuple[bool, ...]]]:
-    """Find all combinations of `length` syndromes that result in a trivial syndrome.
-
-    Input:
-    * `syndromes` an iterable of syndromes.
-    * `length` the length of combinations to find.
-    """
-    # TODO: find a basis for the kernel of the parity check matrix then take combinations of basis vectors
-    if length == 0:
-        return [Counter()]
-    trivial_combos: list[Counter[tuple[bool, ...]]] = []
-    combos = itertools.combinations_with_replacement(syndromes, length)
-    for combo in combos:
-        resultant_syndrome: npt.NDArray[np.int_] = np.array(combo).sum(axis=0) % 2
-        if not any(resultant_syndrome):
-            trivial_combos.append(Counter(combo))
-    return trivial_combos
+from cliffordep.combinators._base import BaseExclusiveCombinator, get_trivial_syndrome_combinations
 
 
 def error_event_count(process_name: str) -> int:

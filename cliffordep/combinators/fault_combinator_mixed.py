@@ -7,7 +7,7 @@ import stim
 
 from cliffordep.combinators._base import BaseFaultCombinator
 from cliffordep.noisy_circuit_tools_mixture import CultivationCircuitMixture
-from cliffordep.combinators.fault_combinator_exclusive import get_trivial_syndrome_combinations
+from cliffordep.combinators._base import get_trivial_syndrome_combinations
 from cliffordep.pauli_string_tools import FrozenCliffordString
 from cliffordep.type_aliases import FaultBagMixed
 
