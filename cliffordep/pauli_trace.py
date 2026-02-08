@@ -6,25 +6,22 @@ Public API:
 """
 
 import itertools
-from typing import Sequence
+from typing import Sequence, Literal
 from fractions import Fraction
 
 import numpy as np
-
 
 # --------------------------
 # Validation & basic helpers
 # --------------------------
 
-def _validate_symplectic_inputs(px: Sequence[np.ndarray],
-                                pz: Sequence[np.ndarray],
-                                signs: Sequence[int],
-                                qubit_count: int):
+def _validate_symplectic_inputs(
+    px: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
+    pz: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
+    signs: Sequence[int],
+    qubit_count: int,
+):
     """Validate and convert inputs to numpy arrays (dtype=uint8)."""
-    # if len(px) != len(pz):
-    #     raise ValueError(
-    #         f"px and pz must have same length; got {len(px)} and {len(pz)}"
-    #     )
     pauli_count = len(px)
     try:
         px_array = np.array(px, dtype=np.uint8).reshape((pauli_count, qubit_count))
@@ -33,15 +30,7 @@ def _validate_symplectic_inputs(px: Sequence[np.ndarray],
         raise ValueError(
             f"Could not interpret px/pz as m x qubit_count binary arrays: {exc}"
         ) from exc
-    # if not np.all((px_array == 0) | (px_array == 1)):
-    #     raise ValueError("px must be binary (0/1)")
-    # if not np.all((pz_array == 0) | (pz_array == 1)):
-    #     raise ValueError("pz must be binary (0/1)")
-    # if len(signs) != pauli_count:
-    #     raise ValueError(f"signs must have length {pauli_count}, got {len(signs)}")
-    signs_array = np.array(signs, dtype=np.uint8)
-    # if not np.all((signs_array == 0) | (signs_array == 1)):
-    #     raise ValueError("signs must be bits 0 or 1")
+    signs_array: np.ndarray[tuple[int], np.dtype[np.uint8]] = np.array(signs, dtype=np.uint8)
     return pauli_count, px_array, pz_array, signs_array
 
 
@@ -50,13 +39,16 @@ def _validate_symplectic_inputs(px: Sequence[np.ndarray],
 # --------------------------
 
 
-def gf2_nullspace_basis(matrix: np.ndarray) -> np.ndarray:
+def _gf2_kernel_basis(
+        matrix: np.ndarray[tuple[int, int], np.dtype[np.uint8]]
+) -> np.ndarray[tuple[int, int], np.dtype[np.uint8]]:
     """
-    Compute a GF(2) basis for the nullspace of `matrix` (shape p x q).
-    Returns array B of shape (q, k) whose columns span the nullspace:
+    Compute a GF(2) basis for the kernel of a matrix.
+    
+    :param matrix: A p x q matrix.
+    :return basis: A q x k matrix B whose columns span the kernel:
         matrix @ x = 0  <=>  x = B @ y for some y in GF(2)^k.
     """
-    matrix = matrix.copy().astype(np.uint8)
     row_count, col_count = matrix.shape
     reduced = matrix.copy()
     row = 0
@@ -82,7 +74,7 @@ def gf2_nullspace_basis(matrix: np.ndarray) -> np.ndarray:
                 reduced[r, :] ^= reduced[row, :]
         row += 1
     free_cols = [c for c in range(col_count) if c not in pivot_cols]
-    basis = []
+    basis: list[np.ndarray[tuple[int], np.dtype[np.uint8]]] = []
     for f in free_cols:
         vec = np.zeros(col_count, dtype=np.uint8)
         vec[f] = 1
@@ -101,10 +93,10 @@ def gf2_nullspace_basis(matrix: np.ndarray) -> np.ndarray:
 
 
 # --------------------------
-# Symplectic omega (packed)
+# Pairing matrix (packed)
 # --------------------------
 
-def pack_bits_to_uint64(bit_array: np.ndarray) -> np.ndarray:
+def _pack_bits_to_uint64(bit_array: np.ndarray[tuple[int, int], np.dtype[np.uint8]]):
     """
     Pack binary 2D array (m x qubit_count) into shape (m, word_count) of uint64 words.
     Words pack little-endian bit order within each 64-bit word.
@@ -119,45 +111,60 @@ def pack_bits_to_uint64(bit_array: np.ndarray) -> np.ndarray:
     return out
 
 
-def _popcount_uint64_word(word: np.uint64) -> int:
+def _popcount_uint64_word(word: np.uint64):
     """Return popcount of a single uint64 word."""
-    return int(int(word).bit_count())
+    return int(word).bit_count()
 
 
-def _popcount_and_mod2_word(a_word: np.uint64, b_word: np.uint64) -> int:
+def _popcount_and_mod2_word(a_word: np.uint64, b_word: np.uint64):
     """Return popcount(a_word & b_word) mod 2."""
     return _popcount_uint64_word(a_word & b_word) & 1
 
 
-def symplectic_omega_from_packed(px_packed: np.ndarray, pz_packed: np.ndarray):
+def _get_pairing_matrix_from_packed(
+        px_packed: np.ndarray[tuple[int, int], np.dtype[np.uint64]],
+        pz_packed: np.ndarray[tuple[int, int], np.dtype[np.uint64]],
+):
     """
-    Compute omega parity matrix from packed px/pz arrays (uint64 arrays).
-    omega[i,j] = z_i·x_j mod 2.
+    Compute pairing matrix from packed px/pz arrays (uint64 arrays).
+    
     Implemented using wordwise popcounts.
+    
+    :param px_packed: m x w array of X components,
+        where m is the Pauli count and w is the word count.
+    :param pz_packed: m x w array of Z components.
+    :return pairing_matrix: m x m matrix P where P_{ij} = z_i·x_j mod 2.
     """
     pauli_count, word_count = px_packed.shape
-    omega = np.zeros((pauli_count, pauli_count), dtype=np.uint8)
+    pairing_matrix = np.zeros((pauli_count, pauli_count), dtype=np.uint8)
     for i in range(pauli_count):
-        xi = px_packed[i]
         zi = pz_packed[i]
         for j in range(pauli_count):
             xj = px_packed[j]
-            zj = pz_packed[j]
             parity = 0
             for w in range(word_count):
                 parity ^= _popcount_and_mod2_word(zi[w], xj[w])
-            omega[i, j] = parity & 1
-    return omega
+            pairing_matrix[i, j] = parity & 1
+    return pairing_matrix
 
 
-def symplectic_omega(px_array: np.ndarray, pz_array: np.ndarray) -> np.ndarray:
+def _get_pairing_matrix(
+        px_array: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
+        pz_array: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
+):
     """
-    Compute omega using numpy matrix products (simple and vectorized).
+    Compute pairing matrix using numpy matrix products (simple and vectorized).
+
     For large qubit_count, prefer the packed-word version.
-    omega[i,j] = z_i·x_j mod 2.
+    
+    :param px_array: m x n array of X components,
+        where m is the Pauli count and n is the qubit count.
+    :param pz_array: m x n array of Z components.
+    :return pairing_matrix: m x m matrix P where P_{ij} = z_i·x_j mod 2.
     """
-    omega = (pz_array @ px_array.T) & 1
-    return omega
+    pairing_matrix: np.ndarray[tuple[int, int], np.dtype[np.uint8]] = (
+        pz_array @ px_array.T) & 1 # type: ignore
+    return pairing_matrix
 
 
 # --------------------------
@@ -165,51 +172,57 @@ def symplectic_omega(px_array: np.ndarray, pz_array: np.ndarray) -> np.ndarray:
 # --------------------------
 
 
-def deterministic_count_from_congruence(a_symmetric: np.ndarray, linear: np.ndarray, constant: int, target: int) -> int:
+def _deterministic_count_from_congruence(
+    a_symmetric: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
+    linear: np.ndarray[tuple[int], np.dtype[np.uint8]],
+    constant: Literal[0, 1],
+    target: Literal[0, 1],
+) -> int:
     """
     Deterministic counting without enumeration:
     count y in GF(2)^k satisfying y^T a_symmetric y + linear^T y + constant = target (mod 2).
     """
-    a = a_symmetric.copy().astype(np.uint8)
-    b = linear.copy().astype(np.uint8)
-    k = int(a.shape[0])
+    a = a_symmetric.copy()
+    b = linear.copy()
+    k, _ = a.shape
 
     if k == 0:
-        return 1 if ((constant ^ target) & 1) == 0 else 0
+        return constant ^ target ^ 1
 
     # Over GF(2), y_i^2 = y_i, so any diagonal terms can be moved into the linear term.
     # This makes the quadratic part alternating (zero diagonal).
-    diag = np.diag(a).copy()
-    if np.any(diag):
-        b ^= diag
-        np.fill_diagonal(a, 0)
+    b ^= np.diag(a)
+    np.fill_diagonal(a, 0)
 
     # Compute character sum S = sum_y (-1)^{q(y)+b^T y + constant}.
     # Then counts are:
-    #   N(target) = (2^k + (-1)^target * (-1)^constant * S_qb) / 2
+    #   N(target) = (2^k + (-1)^(target + constant) * S_qb) / 2
     # where S_qb = sum_y (-1)^{q(y)+b^T y}.
     s_qb = _character_sum_quadratic_gf2_alternating(a, b)
     if s_qb == 0:
         # Balanced: exactly half solutions.
         return 2 ** (k - 1)
 
-    s_total = s_qb if (constant & 1) == 0 else -s_qb
-    if (target & 1) == 1:
+    s_total = -s_qb if constant else s_qb
+    if target:
         s_total = -s_total
     return (2 ** k + s_total) // 2
 
 
-def _character_sum_quadratic_gf2_alternating(a_alternating: np.ndarray, linear: np.ndarray) -> int:
+def _character_sum_quadratic_gf2_alternating(
+        a_alternating: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
+        linear: np.ndarray[tuple[int], np.dtype[np.uint8]],
+) -> int:
     """Compute S = sum_{y in GF(2)^k} (-1)^{ y^T A y + linear^T y }.
 
-    Assumes A is symmetric over GF(2) with zero diagonal (an alternating quadratic form
-    in the representation used by this module).
+    :param a_alternating: Symmetric matrix A over GF(2) with zero diagonal
+    (an alternating quadratic form in the representation used by this module).
 
     Returns an integer in {0, ±2^t}.
     """
-    a = a_alternating.copy().astype(np.uint8)
-    b = linear.copy().astype(np.uint8)
-    k = int(a.shape[0])
+    a = a_alternating.copy()
+    b = linear.copy()
+    k, _ = a.shape
     if k == 0:
         return 1
 
@@ -231,7 +244,7 @@ def _character_sum_quadratic_gf2_alternating(a_alternating: np.ndarray, linear: 
         if pivot_i is None:
             break
 
-        # Move pivot pair to positions (0,1).
+        # Move pivot pair to positions (0, 1).
         if pivot_i != 0:
             a[[0, pivot_i], :] = a[[pivot_i, 0], :]
             a[:, [0, pivot_i]] = a[:, [pivot_i, 0]]
@@ -256,7 +269,7 @@ def _character_sum_quadratic_gf2_alternating(a_alternating: np.ndarray, linear: 
                 a[t, :] ^= a[0, :]
                 b[t] ^= b[0]
 
-        # Now (0,1) is an isolated J-block.
+        # Now (0, 1) is an isolated J-block.
         arf ^= int(b[0] & b[1])
         pairs += 1
 
@@ -281,19 +294,31 @@ def _character_sum_quadratic_gf2_alternating(a_alternating: np.ndarray, linear: 
     return -magnitude if (arf & 1) else magnitude
 
 
-def count_solutions_quadratic(a_symmetric: np.ndarray, linear: np.ndarray, constant: int,
-                              target: int, enum_threshold: int = 22, mode: str = 'auto') -> int:
+def _count_solutions_quadratic(
+    a_symmetric: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
+    linear: np.ndarray[tuple[int], np.dtype[np.uint8]],
+    constant: Literal[0, 1],
+    target: Literal[0, 1],
+    enum_threshold: int = 22,
+    mode: Literal['auto', 'deterministic', 'brute'] = 'auto',
+) -> int:
     """
     Hybrid counting wrapper.
-    mode:
-      - 'auto' : brute force for k <= enum_threshold, deterministic otherwise
-      - 'deterministic' : always deterministic
-      - 'brute' : always brute force
+    
+    :param constant: Constant term in the quadratic Boolean function.
+    :param target: Target value of the quadratic Boolean function.
+    :param mode: Mode to count solutions:
+      1. 'auto' uses brute force for k <= enum_threshold, deterministic otherwise,
+      2. 'deterministic' uses always deterministic,
+      3. 'brute' uses always brute force.
+
+    :return solution_count: Number of y in GF(2)^k satisfying
+        y^T a_symmetric y + linear^T y + constant = target (mod 2).
     """
     k = a_symmetric.shape[0]
     if mode == 'brute':
-        cnt = 0
-        for bits in itertools.product([0, 1], repeat=k):
+        out = 0
+        for bits in itertools.product((0, 1), repeat=k):
             y = np.array(bits, dtype=np.uint8)
             val = 0
             for a in range(k):
@@ -301,19 +326,18 @@ def count_solutions_quadratic(a_symmetric: np.ndarray, linear: np.ndarray, const
                     if a_symmetric[a, b] and y[a] and y[b]:
                         val ^= 1
             val ^= (int(linear @ y) & 1)
-            val ^= constant & 1
-            if val == (target & 1):
-                cnt += 1
-        return cnt
+            val ^= constant
+            if val == target:
+                out += 1
+        return out
     elif mode == 'auto':
         if k <= enum_threshold:
-            return count_solutions_quadratic(a_symmetric, linear, constant, target, enum_threshold, mode='brute')
+            return _count_solutions_quadratic(a_symmetric, linear, constant, target, enum_threshold, mode='brute')
         else:
-            return deterministic_count_from_congruence(a_symmetric, linear, constant, target)
+            return _deterministic_count_from_congruence(a_symmetric, linear, constant, target)
     elif mode == 'deterministic':
-        return deterministic_count_from_congruence(a_symmetric, linear, constant, target)
-    else:
-        raise ValueError(f"Unknown mode {mode!r}; expected 'auto', 'deterministic', or 'brute'.")
+        return _deterministic_count_from_congruence(a_symmetric, linear, constant, target)
+    raise ValueError(f"Unknown mode {mode!r}; expected 'auto', 'deterministic', or 'brute'.")
 
 
 # --------------------------
@@ -321,72 +345,82 @@ def count_solutions_quadratic(a_symmetric: np.ndarray, linear: np.ndarray, const
 # --------------------------
 
 def trace_of_projector_product_symplectic(
-    px: Sequence[np.ndarray],
-    pz: Sequence[np.ndarray],
+    px: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
+    pz: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
     signs: Sequence[int],
     qubit_count: int,
     enum_threshold: int = 22,
-    mode: str = 'auto',
-    use_packed_omega: bool = True
+    mode: Literal['auto', 'deterministic', 'brute'] = 'auto',
+    use_packed: bool = True,
 ):
     """
-    Compute exactly T = tr( prod_i (I + P_i)/2 ) for Paulis P_i given in symplectic form.
-    Args:
-      px, pz: length-m lists/arrays of qubit_count-bit vectors (X- and Z- components).
-      signs : length-m list/array of bits (0 => +1, 1 => -1).
-      qubit_count: number of qubits.
-      enum_threshold: threshold when mode='auto' decides to brute force.
-      mode  : 'auto'|'deterministic'|'brute'.
-      use_packed_omega: use 64-bit-word packing for large qubit_count (faster).
-    Returns:
-      integer trace T.
+    Compute exactly T = tr[ prod_i (I + P_i)/2 ] for Paulis P_i given in symplectic form.
+    
+    :param px: Length-m sequence of n-bit vectors (X component).
+    :param pz: Length-m sequence of n-bit vectors (Z component).
+    :param signs: Length-m sequence of bits (0 => +1, 1 => -1).
+    :param qubit_count: Number n of qubits.
+    :param enum_threshold: Threshold when mode='auto' decides to brute force.
+    :param mode: Mode to count solutions:
+        1. 'auto' uses brute force for k <= enum_threshold, deterministic otherwise,
+        2. 'deterministic' uses always deterministic,
+        3. 'brute' uses always brute force.
+    :param use_packed: When constructing the pairing matrix,
+        use 64-bit-word packing for large n (faster).
+    :return trace: The trace T.
     """
-    pauli_count, px_array, pz_array, signs_array = _validate_symplectic_inputs(px, pz, signs, qubit_count)
-    if use_packed_omega and qubit_count > 64:
-        px_packed = pack_bits_to_uint64(px_array)
-        pz_packed = pack_bits_to_uint64(pz_array)
-        omega = symplectic_omega_from_packed(px_packed, pz_packed)
+    pauli_count, px_array, pz_array, signs_array = _validate_symplectic_inputs(
+        px, pz, signs, qubit_count)
+    if use_packed and qubit_count > 64:
+        px_packed = _pack_bits_to_uint64(px_array)
+        pz_packed = _pack_bits_to_uint64(pz_array)
+        pairing_matrix = _get_pairing_matrix_from_packed(px_packed, pz_packed)
     else:
-        omega = symplectic_omega(px_array, pz_array)
+        pairing_matrix = _get_pairing_matrix(px_array, pz_array)
     # Solve linear constraint: V^T x = 0
-    V = np.concatenate([px_array, pz_array], axis=1).astype(np.uint8)
-    nullspace_basis = gf2_nullspace_basis(V.T)  # m x k
-    k = nullspace_basis.shape[1]
-    B = nullspace_basis.astype(np.uint8)
-    if k == 0:
-        N_plus = 1
-        N_minus = 0
-        numerator = (2 ** qubit_count) * (N_plus - N_minus)
-        denominator = 2 ** pauli_count
-        return Fraction(numerator, denominator)
-    linear_y = (B.T @ signs_array) % 2
-    # Build cross-term accumulation
-    cross_C = np.zeros((k, k), dtype=np.uint8)
-    for i in range(pauli_count):
-        bi = B[i, :]
-        if not bi.any():
-            continue
-        for j in range(i + 1, pauli_count):
-            if omega[i, j] == 0:
+    paulis_in_bsf: np.ndarray[tuple[int, int], np.dtype[np.uint8]] = np.concatenate(
+        [px_array, pz_array], axis=1).astype(np.uint8)  # m x 2n matrix V
+    kernel_basis = _gf2_kernel_basis(paulis_in_bsf.T)  # m x k matrix B
+    _, nullity = kernel_basis.shape
+    if nullity == 0:
+        size_of_0_set = 1
+    else:
+        linear_y: np.ndarray[tuple[int], np.dtype[np.uint8]] = (
+            kernel_basis.T @ signs_array) & 1 # type: ignore
+        # Build cross-term accumulation
+        cross_C = np.zeros((nullity, nullity), dtype=np.uint8)
+        for i in range(pauli_count):
+            bi = kernel_basis[i, :]
+            if not bi.any():
                 continue
-            bj = B[j, :]
-            if not bj.any():
-                continue
-            cross_C ^= np.outer(bi, bj).astype(np.uint8)
-    # a_symmetric: symmetric k x k with zero diagonal (cross-term coefficients)
-    a_symmetric = np.zeros((k, k), dtype=np.uint8)
-    diag_C = np.zeros(k, dtype=np.uint8)
-    for a in range(k):
-        diag_C[a] = int(cross_C[a, a] & 1)
-        for b in range(a + 1, k):
-            val = (cross_C[a, b] ^ cross_C[b, a]) & 1
-            a_symmetric[a, b] = val
-            a_symmetric[b, a] = val
-    linear_total = (linear_y ^ diag_C) & 1
-    constant = 0
-    N_plus = count_solutions_quadratic(a_symmetric, linear_total, constant, target=0,
-                                       enum_threshold=enum_threshold, mode=mode)
-    numerator = (2 ** qubit_count) * (2*N_plus - (1 << k))
+            for j in range(i + 1, pauli_count):
+                if pairing_matrix[i, j] == 0:
+                    continue
+                bj = kernel_basis[j, :]
+                if not bj.any():
+                    continue
+                cross_C ^= np.outer(bi, bj).astype(np.uint8)
+        # a_symmetric: symmetric k x k with zero diagonal (cross-term coefficients)
+        a_symmetric = np.zeros((nullity, nullity), dtype=np.uint8)
+        diag_C = np.zeros(nullity, dtype=np.uint8)
+        for a in range(nullity):
+            diag_C[a] = int(cross_C[a, a] & 1)
+            for b in range(a + 1, nullity):
+                val = (cross_C[a, b] ^ cross_C[b, a]) & 1
+                a_symmetric[a, b] = val
+                a_symmetric[b, a] = val
+        linear_total: np.ndarray[tuple[int], np.dtype[np.uint8]] = (
+            linear_y ^ diag_C) & 1 # type: ignore
+        constant = 0
+        size_of_0_set = _count_solutions_quadratic(
+            a_symmetric,
+            linear_total,
+            constant,
+            target=0,
+            enum_threshold=enum_threshold,
+            mode=mode,
+        )
+    numerator = (2 ** qubit_count) * (2*size_of_0_set - 2**nullity)
     denominator = 2 ** pauli_count
     return Fraction(numerator, denominator)
 
@@ -396,36 +430,47 @@ def trace_of_projector_product_symplectic(
 # --------------------------
 
 def brute_force_trace_symplectic(
-    px: Sequence[np.ndarray],
-    pz: Sequence[np.ndarray],
+    px: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
+    pz: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
     signs: Sequence[int],
-    qubit_count: int
+    qubit_count: int,
 ):
     """
     Brute force expansion over all subsets (for testing small instances).
-    Returns (T, N_plus, N_minus).
+
+    :param px: See `trace_of_projector_product_symplectic`.
+    :param pz: See `trace_of_projector_product_symplectic`.
+    :param signs: See `trace_of_projector_product_symplectic`.
+    :param qubit_count: See `trace_of_projector_product_symplectic`.
+
+    :return trace: The trace.
+    :return size_of_0_set: Number of subsets giving +1 overall sign.
+    :return size_of_1_set: Number of subsets giving -1 overall sign.
     """
-    pauli_count, px_array, pz_array, signs_array = _validate_symplectic_inputs(px, pz, signs, qubit_count)
-    V = np.concatenate([px_array, pz_array], axis=1).astype(np.uint8)
-    omega = symplectic_omega(px_array, pz_array)
-    N_plus = 0
-    N_minus = 0
+    pauli_count, px_array, pz_array, signs_array = _validate_symplectic_inputs(
+        px, pz, signs, qubit_count)
+    paulis_in_bsf = np.concatenate([px_array, pz_array], axis=1).astype(np.uint8)
+    pairing_matrix = _get_pairing_matrix(px_array, pz_array)
+    size_of_0_set = 0
+    size_of_1_set = 0
     for mask in range(1 << pauli_count):
-        x = np.array([(mask >> idx) & 1 for idx in range(pauli_count)], dtype=np.uint8)
-        if np.any((V.T @ x) % 2):
+        # pauli_selector is a vector x of length m indicating which Paulis are included
+        pauli_selector = np.array([
+            (mask >> i) & 1 for i in range(pauli_count)], dtype=np.uint8)
+        if np.any((paulis_in_bsf.T @ pauli_selector) % 2):
             continue
-        s = int((signs_array @ x) & 1)
-        q = 0
+        external_sign_product = int((signs_array @ pauli_selector) & 1)
+        internal_sign_product = 0
         for i in range(pauli_count):
-            if x[i] == 0:
+            if not pauli_selector[i]:
                 continue
             for j in range(i + 1, pauli_count):
-                if x[j] == 1 and omega[i, j] == 1:
-                    q ^= 1
-        sigma = (s ^ q) & 1
-        if sigma == 0:
-            N_plus += 1
+                if pauli_selector[j] and pairing_matrix[i, j]:
+                    internal_sign_product ^= 1
+        total_sign = (external_sign_product ^ internal_sign_product) & 1
+        if total_sign:
+            size_of_1_set += 1
         else:
-            N_minus += 1
-    T = Fraction((2 ** qubit_count) * (N_plus - N_minus), 2 ** pauli_count)
-    return T, N_plus, N_minus
+            size_of_0_set += 1
+    T = Fraction((2 ** qubit_count) * (size_of_0_set - size_of_1_set), 2 ** pauli_count)
+    return T, size_of_0_set, size_of_1_set
