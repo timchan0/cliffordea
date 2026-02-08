@@ -23,6 +23,7 @@ def get_trivial_syndrome_combinations(
     * `syndromes` an iterable of syndromes.
     * `length` the length of combinations to find.
     """
+    # TODO: find a basis for the kernel of the parity check matrix then take combinations of basis vectors
     if length == 0:
         return [Counter()]
     trivial_combos: list[Counter[tuple[bool, ...]]] = []

@@ -60,12 +60,10 @@ class _TransversalGate:
         """
         Push an _unsigned_ Pauli string through the transversal gate.
         
-        :param self: the transversal gate.
-        :param pauli_string: the unsigned Pauli string to be conjugated.
-        :type pauli_string: str
+        :param pauli_string: The unsigned Pauli string to be conjugated.
         :return tableau: The resulting tableau after conjugation.
-        :rtype: stim.Tableau
-        :raises ValueError: if the length of the Pauli string does not match the length of the transversal gate.
+        :raises ValueError: If the length of the Pauli string
+            does not match the length of the transversal gate.
         """
         return sum((stim.Tableau.from_named_gate(self._PUSH_THROUGH_MAP[physical_gate][pauli])
             for physical_gate, pauli in zip(self.PHYSICAL_GATES, pauli_string, strict=True)),
@@ -78,12 +76,10 @@ class _TransversalGate:
         """
         Push an _unsigned_ Pauli string through the transversal gate.
         
-        :param self: the transversal gate.
-        :param pauli_string: the unsigned Pauli string to be conjugated.
-        :type pauli_string: str
+        :param pauli_string: The unsigned Pauli string to be conjugated.
         :return clifford_string: The resulting Clifford string after conjugation.
-        :rtype: CliffordString
-        :raises ValueError: if the length of the Pauli string does not match the length of the transversal gate.
+        :raises ValueError: If the length of the Pauli string
+            does not match the length of the transversal gate.
         """
         options: list[tuple[str, ...]] = [
             PUSH_THROUGH_MAP[physical_gate][pauli] for physical_gate, pauli
@@ -150,8 +146,10 @@ class LogicalAnalyzer(abc.ABC):
 
         :param cultivated_state: the cultivated state, either 'T', 'S', or 'Z'.
         :param unsigned_pauli_string: a string representing the Pauli error without sign,
-        restricted to the data qubits.
-        :return: a tuple containing the acceptance probability and logical fidelity.
+            restricted to the data qubits.
+        :return acceptance_probability: The probability the resulting state yields a trivial syndrome
+            when all stabilizer generators are noiselessly measured.
+        :return logical_fidelity: The fidelity of the resulting state to the target logical state.
         """
 
     @overload
@@ -179,14 +177,14 @@ class LogicalAnalyzer(abc.ABC):
         """Return all the information needed to reconstruct the logical error probability for any noise level.
 
         :param configurations: the output of the `get_undetected_configurations()` method
-        from `BaseFaultCombinator` or `BaseExclusiveCombinator`.
+            from `BaseFaultCombinator` or `BaseExclusiveCombinator`.
         :param cultivated_state: the target logical state cultivated.
         :param print_progress: whether to print progress.
 
-        :return: A list of maps, one for each order. Each one maps from each error
+        :return kept_strings: A list of maps, one for each degree. Each one maps from each error
             (as an unsigned Pauli string) to a pair containing:
-            - the resulting logical vector,
-            - a counter of denominators OR a set of fault configurations
+            1. the resulting logical vector,
+            2. a counter of denominators OR a set of fault configurations
             (each represented by a frozen set of fault indices).
         """
         if print_progress:
@@ -224,18 +222,17 @@ class LogicalAnalyzer(abc.ABC):
 
         Helper for `get_kept_strings`.
 
-        Input:
         :param combinations_of_order: a map from each effect to a counter of denominators
-        OR a map from each effect to a set of frozen sets of fault indices.
-        Each denominator divides (noise level)^order to equal
-        the probability an instance of that undetected combination occurs.
+            OR a map from each effect to a set of frozen sets of fault indices.
+            Each denominator divides (noise level)^order to equal
+            the probability an instance of that undetected combination occurs.
         :param cultivated_state: the target logical state cultivated.
         :param order: an optional parameter used only for printing progress.
 
-        :return: A map from each error (as an unsigned Pauli string)
+        :return kept_strings_of_order: A map from each error (as an unsigned Pauli string)
             to a pair containing:
-            - the resulting logical vector,
-            - a counter of denominators OR a set of fault configurations
+            1. the resulting logical vector,
+            2. a counter of denominators OR a set of fault configurations
             (each represented by a frozen set of fault indices).
         """
         strings: dict[str, tuple[float, float, Counter[int] | set[frozenset[int]]]] = {}
@@ -271,8 +268,8 @@ class TableauLogicalAnalyzer(LogicalAnalyzer):
     @override
     def __init__(self, data_indices, stabilizer_generators, logical_s):
         super().__init__(data_indices, stabilizer_generators, logical_s)
-        _stabilizer_bsf_x: list[np.ndarray] = []
-        _stabilizer_bsf_z: list[np.ndarray] = []
+        _stabilizer_bsf_x: list[np.ndarray[tuple[int], np.dtype[np.bool_]]] = []
+        _stabilizer_bsf_z: list[np.ndarray[tuple[int], np.dtype[np.bool_]]] = []
         _stabilizer_bsf_signs: list[Literal[0, 1]] = []
         for generator_list in stabilizer_generators.values():
             for generator in generator_list:
@@ -313,12 +310,13 @@ class TableauLogicalAnalyzer(LogicalAnalyzer):
             before_transversal: stim.PauliString,
             after_transversal: stim.Tableau,
     ) -> float:
-        """Calculate the probability the Clifford error results in the stabilizer measurements all being +1.
+        """Calculate the acceptance probability
 
         :param before_transversal: the error before being pushed through the transversal gates.
         :param after_transversal: the Clifford circuit after being pushed through the transversal gates.
 
-        :return: the acceptance probability as a float between 0 and 1.
+        :return acceptance_probability: the probability (as a float between 0 and 1)
+            that the Clifford error results in the stabilizer measurements all being +1.
         """
         # transform the Z stabilizers
         for z_generator in self.STABILIZER_GENERATORS['Z']:
