@@ -386,9 +386,7 @@ def trace_of_projector_product_symplectic(
     constant = 0
     N_plus = count_solutions_quadratic(a_symmetric, linear_total, constant, target=0,
                                        enum_threshold=enum_threshold, mode=mode)
-    N_minus = count_solutions_quadratic(a_symmetric, linear_total, constant, target=1,
-                                        enum_threshold=enum_threshold, mode=mode)
-    numerator = (2 ** qubit_count) * (N_plus - N_minus)
+    numerator = (2 ** qubit_count) * (2*N_plus - (1 << k))
     denominator = 2 ** pauli_count
     return Fraction(numerator, denominator)
 
