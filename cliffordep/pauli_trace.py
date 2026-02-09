@@ -405,19 +405,16 @@ def trace_of_projector_product_symplectic(
     else:
         linear_y: np.ndarray[tuple[int], np.dtype[np.uint8]] = (
             kernel_basis.T @ signs_array) & 1 # type: ignore
-        # Build cross-term accumulation
         cross_C = _get_cross_term_accumulation(pairing_matrix, kernel_basis)
         # a_symmetric: symmetric k x k with zero diagonal (cross-term coefficients)
         a_symmetric = np.zeros((nullity, nullity), dtype=np.uint8)
-        diag_C = np.zeros(nullity, dtype=np.uint8)
         for a in range(nullity):
-            diag_C[a] = int(cross_C[a, a] & 1)
             for b in range(a + 1, nullity):
                 val = (cross_C[a, b] ^ cross_C[b, a]) & 1
                 a_symmetric[a, b] = val
                 a_symmetric[b, a] = val
         linear_total: np.ndarray[tuple[int], np.dtype[np.uint8]] = (
-            linear_y ^ diag_C) & 1 # type: ignore
+            linear_y ^ np.diagonal(cross_C)) & 1 # type: ignore
         constant = 0
         size_of_0_set = _count_solutions_quadratic(
             a_symmetric,
