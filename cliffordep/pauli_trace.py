@@ -179,10 +179,17 @@ def _get_cross_term_accumulation(
     
     :param pairing_matrix: m x m pairing matrix P where P_{ij} = z_i·x_j mod 2.
     :param kernel_basis: m x k basis matrix B for the kernel of the Pauli matrix V.
-    :return cross_C: k x k matrix C where C_{ab} = sum_{i<j} P_{ij} B_{ia} B_{jb}  (mod 2).
-        Alternatively, C = B^T strict_upper_triangle(P) B.
+    :return cross_C: The k x k matrix C over GF(2)
+        where C_{ab} = sum_{i<j} P_{ij} B_{ia} B_{jb}  (mod 2).
+        Equivalently, C = B^T strict_upper_triangle(P) B.
     """
     return (kernel_basis.T @ np.triu(pairing_matrix, k=1) @ kernel_basis) % 2
+
+
+def _get_a_symmetric(cross_C: np.ndarray[tuple[int, int], np.dtype[np.uint8]]):
+    """Get the hollow symmetric k x k matrix A = C + C^T from cross-term accumulation matrix C."""
+    out: np.ndarray[tuple[int, int], np.dtype[np.uint8]] = cross_C ^ cross_C.T
+    return out
 
 
 # --------------------------
@@ -406,15 +413,8 @@ def trace_of_projector_product_symplectic(
         linear_y: np.ndarray[tuple[int], np.dtype[np.uint8]] = (
             kernel_basis.T @ signs_array) & 1 # type: ignore
         cross_C = _get_cross_term_accumulation(pairing_matrix, kernel_basis)
-        # a_symmetric: symmetric k x k with zero diagonal (cross-term coefficients)
-        a_symmetric = np.zeros((nullity, nullity), dtype=np.uint8)
-        for a in range(nullity):
-            for b in range(a + 1, nullity):
-                val = (cross_C[a, b] ^ cross_C[b, a]) & 1
-                a_symmetric[a, b] = val
-                a_symmetric[b, a] = val
-        linear_total: np.ndarray[tuple[int], np.dtype[np.uint8]] = (
-            linear_y ^ np.diagonal(cross_C)) & 1 # type: ignore
+        a_symmetric = _get_a_symmetric(cross_C)
+        linear_total: np.ndarray[tuple[int], np.dtype[np.uint8]] = linear_y ^ np.diagonal(cross_C)
         constant = 0
         size_of_0_set = _count_solutions_quadratic(
             a_symmetric,
