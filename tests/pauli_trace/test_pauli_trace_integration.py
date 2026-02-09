@@ -94,8 +94,8 @@ def test_repeated_paulis():
 
 @pytest.mark.parametrize("qubit_count", range(1, 5))
 def test_minus_identity(qubit_count):
-    px = [np.zeros(qubit_count)]
-    pz = [np.zeros(qubit_count)]
+    px = [np.zeros(qubit_count, dtype=int)]
+    pz = [np.zeros(qubit_count, dtype=int)]
     signs = [1]
     t = trace_of_projector_product_symplectic(px, pz, signs, qubit_count)
     assert t == 0

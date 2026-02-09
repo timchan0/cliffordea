@@ -168,6 +168,24 @@ def _get_pairing_matrix(
 
 
 # --------------------------
+# Cross-term accumulation
+# --------------------------
+
+def _get_cross_term_accumulation(
+        pairing_matrix: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
+        kernel_basis: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
+) -> np.ndarray[tuple[int, int], np.dtype[np.uint8]]:
+    """Compute the cross-term accumulation matrix C.
+    
+    :param pairing_matrix: m x m pairing matrix P where P_{ij} = z_i·x_j mod 2.
+    :param kernel_basis: m x k basis matrix B for the kernel of the Pauli matrix V.
+    :return cross_C: k x k matrix C where C_{ab} = sum_{i<j} P_{ij} B_{ia} B_{jb}  (mod 2).
+        Alternatively, C = B^T strict_upper_triangle(P) B.
+    """
+    return (kernel_basis.T @ np.triu(pairing_matrix, k=1) @ kernel_basis) % 2
+
+
+# --------------------------
 # Congruence reduction & deterministic counting
 # --------------------------
 
@@ -388,18 +406,7 @@ def trace_of_projector_product_symplectic(
         linear_y: np.ndarray[tuple[int], np.dtype[np.uint8]] = (
             kernel_basis.T @ signs_array) & 1 # type: ignore
         # Build cross-term accumulation
-        cross_C = np.zeros((nullity, nullity), dtype=np.uint8)
-        for i in range(pauli_count):
-            bi = kernel_basis[i, :]
-            if not bi.any():
-                continue
-            for j in range(i + 1, pauli_count):
-                if pairing_matrix[i, j] == 0:
-                    continue
-                bj = kernel_basis[j, :]
-                if not bj.any():
-                    continue
-                cross_C ^= np.outer(bi, bj).astype(np.uint8)
+        cross_C = _get_cross_term_accumulation(pairing_matrix, kernel_basis)
         # a_symmetric: symmetric k x k with zero diagonal (cross-term coefficients)
         a_symmetric = np.zeros((nullity, nullity), dtype=np.uint8)
         diag_C = np.zeros(nullity, dtype=np.uint8)
