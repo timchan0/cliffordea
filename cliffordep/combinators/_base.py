@@ -1,6 +1,6 @@
 import abc
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from functools import cache
 import itertools
 import math
@@ -323,21 +323,20 @@ def _sum_odds(
 def get_trivial_syndrome_combinations(
         syndromes: Iterable[tuple[bool, ...]],
         length: int,
-) -> list[Counter[tuple[bool, ...]]]:
+) -> Iterator[Counter[tuple[bool, ...]]]:
     """Find all combinations of g syndromes that result in a trivial syndrome.
 
     :param syndromes: An iterable of syndromes.
     :param length: The length g of combinations to find.
-    :return trivial_combos: A list of counters, each one mapping a syndrome to
-    the number of times it appears in the combination that sums to the trivial syndrome.
+    :return trivial_combos: An iterator of counters, each one mapping
+        a syndrome to the number of times it appears in the combination.
     """
     # TODO: find a basis for the kernel of the parity check matrix then take combinations of basis vectors
     if length == 0:
-        return [Counter()]
-    trivial_combos: list[Counter[tuple[bool, ...]]] = []
+        yield Counter()
+        return
     combos = itertools.combinations_with_replacement(syndromes, length)
     for combo in combos:
         resultant_syndrome: npt.NDArray[np.int_] = np.array(combo).sum(axis=0) % 2
         if not any(resultant_syndrome):
-            trivial_combos.append(Counter(combo))
-    return trivial_combos
+            yield Counter(combo)
