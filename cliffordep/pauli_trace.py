@@ -320,16 +320,19 @@ def _character_sum_quadratic_gf2_alternating(
 
 
 def _count_solutions_quadratic(
-    a_symmetric: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
+    cross_C: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
     linear: np.ndarray[tuple[int], np.dtype[np.uint8]],
     constant: Literal[0, 1],
     target: Literal[0, 1],
     enum_threshold: int = 22,
     mode: Literal['auto', 'deterministic', 'brute'] = 'auto',
-) -> int:
+):
     """
-    Hybrid counting wrapper.
+    Count solutions y in GF(2)^k of a quadratic Boolean equation.
     
+    :param cross_C: A cross-term accumulation matrix
+        in GF(2)^{k x k} defining the quadratic part.
+    :param linear: Vector in GF(2)^k defining the linear part.
     :param constant: Constant term in the quadratic Boolean function.
     :param target: Target value of the quadratic Boolean function.
     :param mode: Mode to count solutions:
@@ -340,29 +343,20 @@ def _count_solutions_quadratic(
     :return solution_count: Number of y in GF(2)^k satisfying
         y^T a_symmetric y + linear^T y + constant = target (mod 2).
     """
-    k = a_symmetric.shape[0]
-    if mode == 'brute':
+    k, _ = cross_C.shape
+    if mode == 'brute' or (mode == 'auto' and k <= enum_threshold):
         out = 0
         for bits in itertools.product((0, 1), repeat=k):
             y = np.array(bits, dtype=np.uint8)
-            val = 0
-            for a in range(k):
-                for b in range(a + 1, k):
-                    if a_symmetric[a, b] and y[a] and y[b]:
-                        val ^= 1
-            val ^= (int(linear @ y) & 1)
-            val ^= constant
-            if val == target:
-                out += 1
+            function_val = constant
+            function_val ^= int(linear @ y) & 1
+            function_val ^= int(y.T @ cross_C @ y) & 1
+            out += (function_val ^ target ^ 1)
         return out
-    elif mode == 'auto':
-        if k <= enum_threshold:
-            return _count_solutions_quadratic(a_symmetric, linear, constant, target, enum_threshold, mode='brute')
-        else:
-            return _deterministic_count_from_congruence(a_symmetric, linear, constant, target)
-    elif mode == 'deterministic':
-        return _deterministic_count_from_congruence(a_symmetric, linear, constant, target)
-    raise ValueError(f"Unknown mode {mode!r}; expected 'auto', 'deterministic', or 'brute'.")
+    else:
+        a_symmetric = _get_a_symmetric(cross_C)
+        linear_total: np.ndarray[tuple[int], np.dtype[np.uint8]] = linear ^ np.diagonal(cross_C)
+        return _deterministic_count_from_congruence(a_symmetric, linear_total, constant, target)
 
 
 # --------------------------
@@ -410,16 +404,14 @@ def trace_of_projector_product_symplectic(
     if nullity == 0:
         size_of_0_set = 1
     else:
-        linear_y: np.ndarray[tuple[int], np.dtype[np.uint8]] = (
+        constant = 0
+        linear: np.ndarray[tuple[int], np.dtype[np.uint8]] = (
             kernel_basis.T @ signs_array) & 1 # type: ignore
         cross_C = _get_cross_term_accumulation(pairing_matrix, kernel_basis)
-        a_symmetric = _get_a_symmetric(cross_C)
-        linear_total: np.ndarray[tuple[int], np.dtype[np.uint8]] = linear_y ^ np.diagonal(cross_C)
-        constant = 0
         size_of_0_set = _count_solutions_quadratic(
-            a_symmetric,
-            linear_total,
-            constant,
+            cross_C=cross_C,
+            linear=linear,
+            constant=constant,
             target=0,
             enum_threshold=enum_threshold,
             mode=mode,
