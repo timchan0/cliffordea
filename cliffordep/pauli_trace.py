@@ -198,54 +198,53 @@ def _get_a_symmetric(cross_C: np.ndarray[tuple[int, int], np.dtype[np.uint8]]):
 
 
 def _deterministic_count_from_congruence(
-    a_symmetric: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
+    hollow_symmetric: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
     linear: np.ndarray[tuple[int], np.dtype[np.uint8]],
     constant: Literal[0, 1],
     target: Literal[0, 1],
 ) -> int:
     """
-    Deterministic counting without enumeration:
-    count y in GF(2)^k satisfying y^T a_symmetric y + linear^T y + constant = target (mod 2).
+    Deterministic counting without enumeration.
+
+    Does not modify the input arrays.
+
+    :param hollow_symmetric: Hollow symmetric matrix A in GF(2)^{k x k} defining the quadratic part.
+    :param linear: Vector in GF(2)^k defining the linear part.
+    :param constant: Constant term in the quadratic Boolean function.
+    :param target: Target value of the quadratic Boolean function.
+    :return solution_count: Number of y in GF(2)^k satisfying
+        y^T hollow_symmetric y + linear^T y + constant = target (mod 2).
     """
-    a = a_symmetric.copy()
-    b = linear.copy()
-    k, _ = a.shape
+    k, _ = hollow_symmetric.shape
 
     if k == 0:
         return constant ^ target ^ 1
 
-    # Over GF(2), y_i^2 = y_i, so any diagonal terms can be moved into the linear term.
-    # This makes the quadratic part alternating (zero diagonal).
-    b ^= np.diag(a)
-    np.fill_diagonal(a, 0)
-
-    # Compute character sum S = sum_y (-1)^{q(y)+b^T y + constant}.
+    # Compute character sum S = sum_y (-1)^{q(y) + b^T y + constant}.
     # Then counts are:
     #   N(target) = (2^k + (-1)^(target + constant) * S_qb) / 2
-    # where S_qb = sum_y (-1)^{q(y)+b^T y}.
-    s_qb = _character_sum_quadratic_gf2_alternating(a, b)
+    # where S_qb = sum_y (-1)^{q(y) + b^T y}.
+    s_qb = _character_sum_quadratic_gf2_alternating(hollow_symmetric, linear)
     if s_qb == 0:
         # Balanced: exactly half solutions.
         return 2 ** (k - 1)
-
-    s_total = -s_qb if constant else s_qb
-    if target:
-        s_total = -s_total
+    s_total = (-1) ** (target ^ constant) * s_qb
     return (2 ** k + s_total) // 2
 
 
 def _character_sum_quadratic_gf2_alternating(
-        a_alternating: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
+        hollow_symmetric: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
         linear: np.ndarray[tuple[int], np.dtype[np.uint8]],
 ) -> int:
     """Compute S = sum_{y in GF(2)^k} (-1)^{ y^T A y + linear^T y }.
 
-    :param a_alternating: Symmetric matrix A over GF(2) with zero diagonal
-    (an alternating quadratic form in the representation used by this module).
+    Does not modify the input arrays.
 
-    Returns an integer in {0, ±2^t}.
+    :param hollow_symmetric: Hollow symmetric matrix A in GF(2)^{k x k} defining the quadratic part.
+    :param linear: Vector in GF(2)^k defining the linear part.
+    :return character_sum: An integer in {0, ±2^t}.
     """
-    a = a_alternating.copy()
+    a = hollow_symmetric.copy()
     b = linear.copy()
     k, _ = a.shape
     if k == 0:
@@ -354,6 +353,8 @@ def _count_solutions_quadratic(
             out += (function_val ^ target ^ 1)
         return out
     else:
+        # Over GF(2), y_i^2 = y_i, so any diagonal terms in cross_C can be moved into the linear term.
+        # This makes the quadratic part alternating (zero diagonal).
         a_symmetric = _get_a_symmetric(cross_C)
         linear_total: np.ndarray[tuple[int], np.dtype[np.uint8]] = linear ^ np.diagonal(cross_C)
         return _deterministic_count_from_congruence(a_symmetric, linear_total, constant, target)
