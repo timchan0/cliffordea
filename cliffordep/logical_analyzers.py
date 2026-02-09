@@ -266,7 +266,15 @@ class TableauLogicalAnalyzer(LogicalAnalyzer):
     """Analyzes Clifford errors as Clifford gates."""
 
     @override
-    def __init__(self, data_indices, stabilizer_generators, logical_s):
+    def __init__(
+        self,
+        data_indices: tuple[int, ...],
+        stabilizer_generators: dict[str, tuple[stim.PauliString, ...]],
+        logical_s: stim.Circuit,
+        enum_threshold: int = 22,
+        mode: Literal['brute', 'deterministic', 'auto'] = 'deterministic',
+        use_packed: bool = True,
+    ):
         super().__init__(data_indices, stabilizer_generators, logical_s)
         _stabilizer_bsf_x: list[np.ndarray[tuple[int], np.dtype[np.bool_]]] = []
         _stabilizer_bsf_z: list[np.ndarray[tuple[int], np.dtype[np.bool_]]] = []
@@ -294,6 +302,9 @@ class TableauLogicalAnalyzer(LogicalAnalyzer):
         )
         self.TABLEAU = stim.Tableau.from_stabilizers(self.LOGICAL_ZERO_GENERATORS)
         self.INVERSE_TABLEAU = self.TABLEAU.inverse()
+        self.enum_threshold = enum_threshold
+        self.mode: Literal['brute', 'deterministic', 'auto'] = mode
+        self.use_packed = use_packed
 
 
     def analyze(self, cultivated_state, unsigned_pauli_string):
@@ -340,7 +351,9 @@ class TableauLogicalAnalyzer(LogicalAnalyzer):
             pz,
             signs,
             qubit_count=len(self.DATA_INDICES),
-            mode='deterministic',
+            enum_threshold=self.enum_threshold,
+            mode=self.mode,
+            use_packed=self.use_packed,
         )
         return float(stabilizer_trace/2)
 

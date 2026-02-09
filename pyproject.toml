@@ -1,6 +1,6 @@
 [project]
 name = "cliffordep"
-version = "0.18.8"
+version = "0.18.9"
 description = "A Python package to analyze the propagation of Clifford errors."
 authors = [{name="Tim Chan", email="timwlc@icloud.com"}]
 dependencies = [
