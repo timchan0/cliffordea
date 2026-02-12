@@ -196,42 +196,6 @@ def _get_a_symmetric(cross_C: np.ndarray[tuple[int, int], np.dtype[np.uint8]]):
 # Congruence reduction & deterministic counting
 # --------------------------
 
-
-def _deterministic_count_from_congruence(
-    hollow_symmetric: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
-    linear: np.ndarray[tuple[int], np.dtype[np.uint8]],
-    constant: Literal[0, 1],
-    target: Literal[0, 1],
-) -> int:
-    """
-    Deterministic counting without enumeration.
-
-    Does not modify the input arrays.
-
-    :param hollow_symmetric: Hollow symmetric matrix A in GF(2)^{k x k} defining the quadratic part.
-    :param linear: Vector in GF(2)^k defining the linear part.
-    :param constant: Constant term in the quadratic Boolean function.
-    :param target: Target value of the quadratic Boolean function.
-    :return solution_count: Number of y in GF(2)^k satisfying
-        y^T hollow_symmetric y + linear^T y + constant = target (mod 2).
-    """
-    k, _ = hollow_symmetric.shape
-
-    if k == 0:
-        return constant ^ target ^ 1
-
-    # Compute character sum S = sum_y (-1)^{q(y) + b^T y + constant}.
-    # Then counts are:
-    #   N(target) = (2^k + (-1)^(target + constant) * S_qb) / 2
-    # where S_qb = sum_y (-1)^{q(y) + b^T y}.
-    s_qb = _character_sum_quadratic_gf2_alternating(hollow_symmetric, linear)
-    if s_qb == 0:
-        # Balanced: exactly half solutions.
-        return 2 ** (k - 1)
-    s_total = (-1) ** (target ^ constant) * s_qb
-    return (2 ** k + s_total) // 2
-
-
 def _character_sum_quadratic_gf2_alternating(
         hollow_symmetric: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
         linear: np.ndarray[tuple[int], np.dtype[np.uint8]],
@@ -318,46 +282,32 @@ def _character_sum_quadratic_gf2_alternating(
     return -magnitude if (arf & 1) else magnitude
 
 
-def _count_solutions_quadratic(
-    cross_C: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
-    linear: np.ndarray[tuple[int], np.dtype[np.uint8]],
+def _count_roots_quadratic(
+    matrix: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
+    vector: np.ndarray[tuple[int], np.dtype[np.uint8]],
     constant: Literal[0, 1],
-    target: Literal[0, 1],
-    enum_threshold: int = 22,
-    mode: Literal['auto', 'deterministic', 'brute'] = 'auto',
 ):
     """
-    Count solutions y in GF(2)^k of a quadratic Boolean equation.
-    
-    :param cross_C: A cross-term accumulation matrix
-        in GF(2)^{k x k} defining the quadratic part.
-    :param linear: Vector in GF(2)^k defining the linear part.
-    :param constant: Constant term in the quadratic Boolean function.
-    :param target: Target value of the quadratic Boolean function.
-    :param mode: Mode to count solutions:
-      1. 'auto' uses brute force for k <= enum_threshold, deterministic otherwise,
-      2. 'deterministic' uses always deterministic,
-      3. 'brute' uses always brute force.
+    Brute-force count roots y in GF(2)^k of a quadratic Boolean function.
 
-    :return solution_count: Number of y in GF(2)^k satisfying
-        y^T a_symmetric y + linear^T y + constant = target (mod 2).
+    Does not modify the input arrays.
+    
+    :param matrix: Matrix in GF(2)^{k x k} defining the quadratic part.
+    :param vector: Vector in GF(2)^k defining the linear part.
+    :param constant: Scalar in GF(2) defining the constant term.
+
+    :return root_count: Number of y in GF(2)^k satisfying
+        y^T matrix y + vector^T y + constant = 0 (mod 2).
     """
-    k, _ = cross_C.shape
-    if mode == 'brute' or (mode == 'auto' and k <= enum_threshold):
-        out = 0
-        for bits in itertools.product((0, 1), repeat=k):
-            y = np.array(bits, dtype=np.uint8)
-            function_val = constant
-            function_val ^= int(linear @ y) & 1
-            function_val ^= int(y.T @ cross_C @ y) & 1
-            out += (function_val ^ target ^ 1)
-        return out
-    else:
-        # Over GF(2), y_i^2 = y_i, so any diagonal terms in cross_C can be moved into the linear term.
-        # This makes the quadratic part alternating (zero diagonal).
-        a_symmetric = _get_a_symmetric(cross_C)
-        linear_total: np.ndarray[tuple[int], np.dtype[np.uint8]] = linear ^ np.diagonal(cross_C)
-        return _deterministic_count_from_congruence(a_symmetric, linear_total, constant, target)
+    k, _ = matrix.shape
+    root_count = 0
+    for bits in itertools.product((0, 1), repeat=k):
+        y = np.array(bits, dtype=np.uint8)
+        function_val = constant
+        function_val ^= int(vector @ y) & 1
+        function_val ^= int(y.T @ matrix @ y) & 1
+        root_count += (function_val ^ 1)
+    return root_count
 
 
 # --------------------------
@@ -403,21 +353,25 @@ def trace_of_projector_product_symplectic(
     kernel_basis = _gf2_kernel_basis(paulis_in_bsf.T)  # m x k matrix B
     _, nullity = kernel_basis.shape
     if nullity == 0:
-        size_of_0_set = 1
+        numerator = 2 ** qubit_count
     else:
-        constant = 0
         linear: np.ndarray[tuple[int], np.dtype[np.uint8]] = (
             kernel_basis.T @ signs_array) & 1 # type: ignore
         cross_C = _get_cross_term_accumulation(pairing_matrix, kernel_basis)
-        size_of_0_set = _count_solutions_quadratic(
-            cross_C=cross_C,
-            linear=linear,
-            constant=constant,
-            target=0,
-            enum_threshold=enum_threshold,
-            mode=mode,
-        )
-    numerator = (2 ** qubit_count) * (2*size_of_0_set - 2**nullity)
+        if mode == 'brute' or (mode == 'auto' and nullity <= enum_threshold):
+            root_count = _count_roots_quadratic(
+                matrix=cross_C,
+                vector=linear,
+                constant=0,
+            )
+            numerator = (2 ** qubit_count) * (2*root_count - 2**nullity)
+        else:
+            # Over GF(2), y_i^2 = y_i, so any diagonal terms in cross_C can be moved into the linear term.
+            # This makes the quadratic part alternating (zero diagonal).
+            a_symmetric = _get_a_symmetric(cross_C)
+            linear_total: np.ndarray[tuple[int], np.dtype[np.uint8]] = linear ^ np.diagonal(cross_C)
+            s_qb = _character_sum_quadratic_gf2_alternating(a_symmetric, linear_total)
+            numerator = (2 ** qubit_count) * s_qb
     denominator = 2 ** pauli_count
     return Fraction(numerator, denominator)
 

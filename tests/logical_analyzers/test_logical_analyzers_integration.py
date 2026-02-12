@@ -25,13 +25,18 @@ def both_analyzers():
         data_indices=circuit.DATA_INDICES,
         stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
         logical_s=circuit.LOGICAL_S,
+        # mode='brute',
     )
     configurations = combinator.get_undetected_configurations(max_order=max_order)
     return superposition_analyzer, tableau_analyzer, configurations
 
 
 @pytest.mark.parametrize("state", ['S', 'T'])
-def test_superposition_vs_tableau(state, both_analyzers):
+def test_superposition_vs_tableau(state, both_analyzers: tuple[
+    SuperpositionLogicalAnalyzer,
+    TableauLogicalAnalyzer,
+    list[dict[str, set[frozenset[int]]]],
+]):
     superposition_analyzer, tableau_analyzer, configurations = both_analyzers
     kept_strings_1 = superposition_analyzer.get_kept_strings(
         configurations=configurations,
