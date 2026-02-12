@@ -282,6 +282,66 @@ def _character_sum_quadratic_gf2_alternating(
     return -magnitude if (arf & 1) else magnitude
 
 
+def _nonnegative_character_sum(
+        hollow_symmetric: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
+        linear: np.ndarray[tuple[int], np.dtype[np.uint8]],
+) -> int:
+    """Compute a nonnegative quadratic character sum via one GF(2) elimination.
+
+    Computes
+        S = sum_{y in GF(2)^k} (-1)^{y^T A y + linear^T y}
+    for an *alternating* quadratic form i.e. A is hollow symmetric
+    i.e. A = A^T and diag(A) = 0.
+
+    For alternating A, the sum is either 0 or a power of two.
+    Let r = rank(A) then:
+    * If A x = linear is inconsistent, S = 0.
+    * Otherwise, |S| = 2^{k - r/2}.
+
+    This routine returns the nonnegative value (0 or 2^{k-r/2}).
+    If you need the sign (the Arf invariant), use `_character_sum_quadratic_gf2_alternating`.
+
+    Does not modify the input arrays.
+
+    :param hollow_symmetric: Hollow symmetric matrix A in GF(2)^{k x k} defining the quadratic part.
+    :param linear: Vector in GF(2)^k defining the linear part.
+    :return character_sum_nonnegative: An integer in {0, 2^t}.
+    """
+    k, _ = hollow_symmetric.shape
+    if k == 0:
+        return 1
+
+    # Gaussian elimination over GF(2) on the augmented system [A | b].
+    augmented = np.empty((k, k + 1), dtype=np.uint8)
+    augmented[:, :k] = hollow_symmetric
+    augmented[:, k] = linear
+    pivot_row = 0
+    rank_a = 0
+    for col in range(k):
+        if pivot_row >= k:
+            break
+        pivots = np.flatnonzero(augmented[pivot_row:, col])
+        if pivots.size == 0:
+            continue
+        r = pivot_row + int(pivots[0])
+        if r != pivot_row:
+            augmented[[pivot_row, r], :] = augmented[[r, pivot_row], :]
+
+        below = np.flatnonzero(augmented[pivot_row + 1:, col]) + (pivot_row + 1)
+        if below.size:
+            augmented[below, col:] ^= augmented[pivot_row, col:]
+
+        pivot_row += 1
+        rank_a += 1
+
+    # Inconsistency check: any zero row in A-part with RHS = 1.
+    zero_rows = ~np.any(augmented[:, :k], axis=1)
+    if np.any(augmented[zero_rows, k]):
+        return 0
+    
+    return 2 ** (k - (rank_a // 2))
+
+
 def _count_roots_quadratic(
     matrix: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
     vector: np.ndarray[tuple[int], np.dtype[np.uint8]],
@@ -322,6 +382,7 @@ def trace_of_projector_product_symplectic(
     enum_threshold: int = 22,
     mode: Literal['auto', 'deterministic', 'brute'] = 'auto',
     use_packed: bool = True,
+    assume_nonnegative: bool = False,
 ):
     """
     Compute exactly T = tr[ prod_i (I + P_i)/2 ] for Paulis P_i given in symplectic form.
@@ -337,6 +398,16 @@ def trace_of_projector_product_symplectic(
         3. 'brute' uses always brute force.
     :param use_packed: When constructing the pairing matrix,
         use 64-bit-word packing for large n (faster).
+    :param assume_nonnegative: Whether to assume the result is nonnegative.
+        If True, the quadratic character sum is computed via
+        one GF(2) Gaussian elimination on an augmented matrix.
+        This can be faster, but will give the wrong answer if the result is actually negative.
+
+        Note: nonnegativity is not automatic for an arbitrary product of projectors when the
+        projectors do not commute (the product need not be Hermitian/PSD). This flag is intended
+        for use-cases where the returned trace is known to be nonnegative (e.g.
+        when all Pauli projectors mutually commute so the product is itself a projector, or
+        when the expression is derived from a bona fide probability).
     :return trace: The trace T.
     """
     pauli_count, px_array, pz_array, signs_array = _validate_symplectic_inputs(
@@ -370,7 +441,10 @@ def trace_of_projector_product_symplectic(
             # This makes the quadratic part alternating (zero diagonal).
             a_symmetric = _get_a_symmetric(cross_C)
             linear_total: np.ndarray[tuple[int], np.dtype[np.uint8]] = linear ^ np.diagonal(cross_C)
-            s_qb = _character_sum_quadratic_gf2_alternating(a_symmetric, linear_total)
+            if assume_nonnegative:
+                s_qb = _nonnegative_character_sum(a_symmetric, linear_total)
+            else:
+                s_qb = _character_sum_quadratic_gf2_alternating(a_symmetric, linear_total)
             numerator = (2 ** qubit_count) * s_qb
     denominator = 2 ** pauli_count
     return Fraction(numerator, denominator)

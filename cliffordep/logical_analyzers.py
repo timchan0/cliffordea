@@ -354,6 +354,7 @@ class TableauLogicalAnalyzer(LogicalAnalyzer):
             enum_threshold=self.enum_threshold,
             mode=self.mode,
             use_packed=self.use_packed,
+            assume_nonnegative=True,
         )
         return float(stabilizer_trace/2)
 
