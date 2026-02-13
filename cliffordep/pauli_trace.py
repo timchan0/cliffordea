@@ -15,7 +15,7 @@ import numpy as np
 # Validation & basic helpers
 # --------------------------
 
-def _validate_symplectic_inputs(
+def _validate_inputs(
     px: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
     pz: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
     signs: Sequence[int],
@@ -196,7 +196,7 @@ def _get_a_symmetric(cross_C: np.ndarray[tuple[int, int], np.dtype[np.uint8]]):
 # Congruence reduction & deterministic counting
 # --------------------------
 
-def _character_sum_quadratic_gf2_alternating(
+def _character_sum(
         hollow_symmetric: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
         linear: np.ndarray[tuple[int], np.dtype[np.uint8]],
 ) -> int:
@@ -374,7 +374,7 @@ def _count_roots_quadratic(
 # High-level API
 # --------------------------
 
-def trace_of_projector_product_symplectic(
+def projector_product_trace(
     px: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
     pz: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
     signs: Sequence[int],
@@ -385,7 +385,7 @@ def trace_of_projector_product_symplectic(
     assume_nonnegative: bool = False,
 ):
     """
-    Compute exactly T = tr[ prod_i (I + P_i)/2 ] for Paulis P_i given in symplectic form.
+    Compute exactly T = tr[ prod_i (I + P_i)/2 ] for Paulis P_i given in binary symplectic form.
     
     :param px: Length-m sequence of n-bit vectors (X component).
     :param pz: Length-m sequence of n-bit vectors (Z component).
@@ -410,7 +410,7 @@ def trace_of_projector_product_symplectic(
         when the expression is derived from a bona fide probability).
     :return trace: The trace T.
     """
-    pauli_count, px_array, pz_array, signs_array = _validate_symplectic_inputs(
+    pauli_count, px_array, pz_array, signs_array = _validate_inputs(
         px, pz, signs, qubit_count)
     if use_packed and qubit_count > 64:
         px_packed = _pack_bits_to_uint64(px_array)
@@ -444,7 +444,7 @@ def trace_of_projector_product_symplectic(
             if assume_nonnegative:
                 s_qb = _nonnegative_character_sum(a_symmetric, linear_total)
             else:
-                s_qb = _character_sum_quadratic_gf2_alternating(a_symmetric, linear_total)
+                s_qb = _character_sum(a_symmetric, linear_total)
             numerator = (2 ** qubit_count) * s_qb
     denominator = 2 ** pauli_count
     return Fraction(numerator, denominator)
@@ -454,7 +454,7 @@ def trace_of_projector_product_symplectic(
 # Utility: brute force verifier (small sizes)
 # --------------------------
 
-def brute_force_trace_symplectic(
+def brute_force_project_product_trace(
     px: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
     pz: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
     signs: Sequence[int],
@@ -472,7 +472,7 @@ def brute_force_trace_symplectic(
     :return size_of_0_set: Number of subsets giving +1 overall sign.
     :return size_of_1_set: Number of subsets giving -1 overall sign.
     """
-    pauli_count, px_array, pz_array, signs_array = _validate_symplectic_inputs(
+    pauli_count, px_array, pz_array, signs_array = _validate_inputs(
         px, pz, signs, qubit_count)
     paulis_in_bsf = np.concatenate([px_array, pz_array], axis=1).astype(np.uint8)
     pairing_matrix = _get_pairing_matrix(px_array, pz_array)

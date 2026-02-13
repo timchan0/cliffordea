@@ -2,7 +2,7 @@ import numpy as np
 
 import pytest
 
-from cliffordep.pauli_trace import _character_sum_quadratic_gf2_alternating, _nonnegative_character_sum, brute_force_trace_symplectic, trace_of_projector_product_symplectic
+from cliffordep.pauli_trace import _character_sum, _nonnegative_character_sum, brute_force_project_product_trace, projector_product_trace
 
 
 @pytest.mark.parametrize("assume_nonnegative", [False, True])
@@ -28,20 +28,20 @@ def test_small_random(assume_nonnegative: bool):
                 px.append(xv)
                 pz.append(zv)
                 signs.append(random.randint(0, 1))
-            tab, _, _ = brute_force_trace_symplectic(px, pz, signs, qubit_count)
-            tdet = trace_of_projector_product_symplectic(px, pz, signs, qubit_count, mode='deterministic', assume_nonnegative=assume_nonnegative)
+            tab, _, _ = brute_force_project_product_trace(px, pz, signs, qubit_count)
+            tdet = projector_product_trace(px, pz, signs, qubit_count, mode='deterministic', assume_nonnegative=assume_nonnegative)
             if assume_nonnegative:
                 assert abs(tab) == tdet
             else:
                 assert tab == tdet
-            tbrute = trace_of_projector_product_symplectic(px, pz, signs, qubit_count, mode='brute', assume_nonnegative=assume_nonnegative)
+            tbrute = projector_product_trace(px, pz, signs, qubit_count, mode='brute', assume_nonnegative=assume_nonnegative)
             assert tab == tbrute
 
 
 @pytest.mark.parametrize("assume_nonnegative", [False, True])
 def test_four_yys(assume_nonnegative: bool):
     y_count = 2
-    tdet = trace_of_projector_product_symplectic(
+    tdet = projector_product_trace(
         px=[np.array([1, 1]) for _ in range(y_count)],
         pz=[np.array([1, 1]) for _ in range(y_count)],
         signs=[0 for _ in range(y_count)],
@@ -69,13 +69,13 @@ def test_commuting_case(assume_nonnegative: bool):
     px.extend(px[:2])
     pz.extend(pz[:2])
     signs.extend([0, 0])
-    t = trace_of_projector_product_symplectic(px, pz, signs, qubit_count, mode='deterministic', assume_nonnegative=assume_nonnegative)
+    t = projector_product_trace(px, pz, signs, qubit_count, mode='deterministic', assume_nonnegative=assume_nonnegative)
     assert t == 2 ** qubit_count // (2 ** rank)
 
 
 def test_invalid_inputs():
     try:
-        _ = trace_of_projector_product_symplectic([np.array([0, 1])], [np.array([0])], [0], qubit_count=2)
+        _ = projector_product_trace([np.array([0, 1])], [np.array([0])], [0], qubit_count=2)
         raise AssertionError("Should have raised ValueError")
     except ValueError:
         pass
@@ -87,7 +87,7 @@ def test_x_z(assume_nonnegative: bool):
     px = [np.array([1]), np.array([0])]
     pz = [np.array([0]), np.array([1])]
     signs = [0, 0]
-    t = trace_of_projector_product_symplectic(px, pz, signs, qubit_count, assume_nonnegative=assume_nonnegative)
+    t = projector_product_trace(px, pz, signs, qubit_count, assume_nonnegative=assume_nonnegative)
     assert t == 1/2
 
 
@@ -97,7 +97,7 @@ def test_repeated_paulis(assume_nonnegative: bool):
     px = [np.array([1, 0]), np.array([1, 0])]
     pz = [np.array([0, 0]), np.array([0, 0])]
     signs = [0, 0]
-    t = trace_of_projector_product_symplectic(px, pz, signs, qubit_count, assume_nonnegative=assume_nonnegative)
+    t = projector_product_trace(px, pz, signs, qubit_count, assume_nonnegative=assume_nonnegative)
     assert t == 2
 
 
@@ -110,9 +110,9 @@ def test_assume_nonnegative_flag_path():
     pz = [np.array([1]), np.array([1])]
     signs = [0, 0]
 
-    t_default = trace_of_projector_product_symplectic(
+    t_default = projector_product_trace(
         px, pz, signs, qubit_count, mode='deterministic')
-    t_fast = trace_of_projector_product_symplectic(
+    t_fast = projector_product_trace(
         px, pz, signs, qubit_count, mode='deterministic', assume_nonnegative=True)
     assert t_default == t_fast
     assert t_fast == 1
@@ -124,7 +124,7 @@ def test_minus_identity(qubit_count, assume_nonnegative: bool):
     px = [np.zeros(qubit_count, dtype=int)]
     pz = [np.zeros(qubit_count, dtype=int)]
     signs = [1]
-    t = trace_of_projector_product_symplectic(px, pz, signs, qubit_count, assume_nonnegative=assume_nonnegative)
+    t = projector_product_trace(px, pz, signs, qubit_count, assume_nonnegative=assume_nonnegative)
     assert t == 0
 
 @pytest.mark.parametrize("assume_nonnegative", [False, True])
@@ -132,7 +132,7 @@ def test_xzxz(assume_nonnegative: bool):
     px = [np.array([k]) for k in (1, 0, 1, 0)]
     pz = [np.array([k]) for k in (0, 1, 0, 1)]
     signs = [0, 0, 0, 0]
-    t = trace_of_projector_product_symplectic(px, pz, signs, qubit_count=1, assume_nonnegative=assume_nonnegative)
+    t = projector_product_trace(px, pz, signs, qubit_count=1, assume_nonnegative=assume_nonnegative)
     assert t == 1/4
 
 
@@ -148,6 +148,6 @@ class TestCharacterSumQuadraticGF2Alternating:
                 a = upper ^ upper.T
                 linear = rng.integers(0, 2, size=(k,), dtype=np.uint8)
 
-                s_full = _character_sum_quadratic_gf2_alternating(a, linear)
+                s_full = _character_sum(a, linear)
                 s_nonneg = _nonnegative_character_sum(a, linear)
                 assert s_nonneg == abs(s_full)

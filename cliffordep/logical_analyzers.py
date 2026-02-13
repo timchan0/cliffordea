@@ -8,7 +8,7 @@ import numpy as np
 import stim
 
 from cliffordep.pauli_string_tools import PUSH_THROUGH_MAP, CliffordString, _tensor_paulis, split_sign
-from cliffordep.pauli_trace import trace_of_projector_product_symplectic
+from cliffordep.pauli_trace import projector_product_trace
 from cliffordep.type_aliases import LogicalTriple
 
 
@@ -252,6 +252,13 @@ class LogicalAnalyzer(abc.ABC):
 
 
 def extract_sign(pauli_string: stim.PauliString) -> Literal[0, 1]:
+    """Extract the power of -1 from a completely real Pauli string.
+    
+    :param pauli_string: A Pauli string P with sign ±1 and an even number of Y tensor factors.
+    :return sign: such that P = (-1)^sign [X string] [Z string].
+    :raises ValueError: If the Pauli string has an imaginary sign,
+        or if it has an odd number of Y tensor factors.
+    """
     try:
         external = {(1+0j): 0, (-1+0j): 1}[pauli_string.sign]
     except KeyError:
@@ -346,7 +353,7 @@ class TableauLogicalAnalyzer(LogicalAnalyzer):
             px.append(xs)
             pz.append(zs)
             signs.append(extract_sign(transformed_generator))
-        stabilizer_trace = trace_of_projector_product_symplectic(
+        stabilizer_trace = projector_product_trace(
             px,
             pz,
             signs,
