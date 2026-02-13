@@ -1,9 +1,7 @@
 import numpy as np
 
-from cliffordep.pauli_trace import (
-    _get_cross_term_accumulation,
-    _get_a_symmetric,
-)
+from cliffordep.pauli_trace._character_summers import _get_a_symmetric
+from cliffordep.pauli_trace.main import _get_cross_term_accumulation
 
 
 class TestGetCrossTermAccumulation:

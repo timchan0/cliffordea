@@ -2,7 +2,8 @@ import numpy as np
 
 import pytest
 
-from cliffordep.pauli_trace import NoAssumptions, Nonnegative, brute_force_projector_product_trace, ProjectorProductTracer
+from cliffordep.pauli_trace._assumers import NoAssumptions, Nonnegative
+from cliffordep.pauli_trace.main import brute_force_projector_product_trace, ProjectorProductTracer
 
 
 @pytest.fixture(params=[False, True])
