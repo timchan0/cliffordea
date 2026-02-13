@@ -8,7 +8,7 @@ import numpy as np
 import stim
 
 from cliffordep.pauli_string_tools import PUSH_THROUGH_MAP, CliffordString, _tensor_paulis, split_sign
-from cliffordep.pauli_trace import projector_product_trace
+from cliffordep.pauli_trace import ProjectorProductTracer
 from cliffordep.type_aliases import LogicalTriple
 
 
@@ -278,8 +278,7 @@ class TableauLogicalAnalyzer(LogicalAnalyzer):
         data_indices: tuple[int, ...],
         stabilizer_generators: dict[str, tuple[stim.PauliString, ...]],
         logical_s: stim.Circuit,
-        enum_threshold: int = 22,
-        mode: Literal['brute', 'deterministic', 'auto'] = 'deterministic',
+        mode: Literal['brute', 'deterministic'] = 'deterministic',
         use_packed: bool = True,
     ):
         super().__init__(data_indices, stabilizer_generators, logical_s)
@@ -309,9 +308,11 @@ class TableauLogicalAnalyzer(LogicalAnalyzer):
         )
         self.TABLEAU = stim.Tableau.from_stabilizers(self.LOGICAL_ZERO_GENERATORS)
         self.INVERSE_TABLEAU = self.TABLEAU.inverse()
-        self.enum_threshold = enum_threshold
-        self.mode: Literal['brute', 'deterministic', 'auto'] = mode
-        self.use_packed = use_packed
+        self.PROJECTOR_PRODUCT_TRACER = ProjectorProductTracer(
+            mode=mode,
+            use_packed=use_packed,
+            assume_nonnegative=True,
+        )
 
 
     def analyze(self, cultivated_state, unsigned_pauli_string):
@@ -353,15 +354,7 @@ class TableauLogicalAnalyzer(LogicalAnalyzer):
             px.append(xs)
             pz.append(zs)
             signs.append(extract_sign(transformed_generator))
-        stabilizer_trace = projector_product_trace(
-            px,
-            pz,
-            signs,
-            enum_threshold=self.enum_threshold,
-            mode=self.mode,
-            use_packed=self.use_packed,
-            assume_nonnegative=True,
-        )
+        stabilizer_trace = self.PROJECTOR_PRODUCT_TRACER.trace(px, pz, signs)
         return float(stabilizer_trace/2)
 
 
