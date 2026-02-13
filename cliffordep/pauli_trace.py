@@ -2,7 +2,7 @@
 Trace of a product of Pauli projector factors (I + P)/2.
 
 Public API:
-    trace_of_projector_product_symplectic
+    projector_product_trace
 """
 
 import itertools
@@ -19,19 +19,17 @@ def _validate_inputs(
     px: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
     pz: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
     signs: Sequence[int],
-    qubit_count: int,
 ):
     """Validate and convert inputs to numpy arrays (dtype=uint8)."""
-    pauli_count = len(px)
     try:
-        px_array = np.array(px, dtype=np.uint8).reshape((pauli_count, qubit_count))
-        pz_array = np.array(pz, dtype=np.uint8).reshape((pauli_count, qubit_count))
+        px_array: np.ndarray[tuple[int, int], np.dtype[np.uint8]] = np.array(px, dtype=np.uint8)
+        pz_array: np.ndarray[tuple[int, int], np.dtype[np.uint8]] = np.array(pz, dtype=np.uint8)
     except Exception as exc:
         raise ValueError(
             f"Could not interpret px/pz as m x qubit_count binary arrays: {exc}"
         ) from exc
     signs_array: np.ndarray[tuple[int], np.dtype[np.uint8]] = np.array(signs, dtype=np.uint8)
-    return pauli_count, px_array, pz_array, signs_array
+    return px_array, pz_array, signs_array
 
 
 # --------------------------
@@ -45,8 +43,8 @@ def _gf2_kernel_basis(
     """
     Compute a GF(2) basis for the kernel of a matrix.
     
-    :param matrix: A p x q matrix.
-    :return basis: A q x k matrix B whose columns span the kernel:
+    :param matrix: A p x m matrix.
+    :return basis: An m x k matrix B whose columns span the kernel:
         matrix @ x = 0  <=>  x = B @ y for some y in GF(2)^k.
     """
     row_count, col_count = matrix.shape
@@ -299,7 +297,7 @@ def _nonnegative_character_sum(
     * Otherwise, |S| = 2^{k - r/2}.
 
     This routine returns the nonnegative value (0 or 2^{k-r/2}).
-    If you need the sign (the Arf invariant), use `_character_sum_quadratic_gf2_alternating`.
+    If you need the sign (the Arf invariant), use `_character_sum`.
 
     Does not modify the input arrays.
 
@@ -378,7 +376,6 @@ def projector_product_trace(
     px: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
     pz: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
     signs: Sequence[int],
-    qubit_count: int,
     enum_threshold: int = 22,
     mode: Literal['auto', 'deterministic', 'brute'] = 'auto',
     use_packed: bool = True,
@@ -386,11 +383,12 @@ def projector_product_trace(
 ):
     """
     Compute exactly T = tr[ prod_i (I + P_i)/2 ] for Paulis P_i given in binary symplectic form.
+
+    Let m be the number of Paulis and n be the number of qubits.
     
     :param px: Length-m sequence of n-bit vectors (X component).
     :param pz: Length-m sequence of n-bit vectors (Z component).
     :param signs: Length-m sequence of bits (0 => +1, 1 => -1).
-    :param qubit_count: Number n of qubits.
     :param enum_threshold: Threshold when mode='auto' decides to brute force.
     :param mode: Mode to count solutions:
         1. 'auto' uses brute force for k <= enum_threshold, deterministic otherwise,
@@ -410,8 +408,8 @@ def projector_product_trace(
         when the expression is derived from a bona fide probability).
     :return trace: The trace T.
     """
-    pauli_count, px_array, pz_array, signs_array = _validate_inputs(
-        px, pz, signs, qubit_count)
+    px_array, pz_array, signs_array = _validate_inputs(px, pz, signs)
+    pauli_count, qubit_count = px_array.shape
     if use_packed and qubit_count > 64:
         px_packed = _pack_bits_to_uint64(px_array)
         pz_packed = _pack_bits_to_uint64(pz_array)
@@ -458,24 +456,24 @@ def brute_force_project_product_trace(
     px: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
     pz: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
     signs: Sequence[int],
-    qubit_count: int,
 ):
     """
     Brute force expansion over all subsets (for testing small instances).
 
-    :param px: See `trace_of_projector_product_symplectic`.
-    :param pz: See `trace_of_projector_product_symplectic`.
-    :param signs: See `trace_of_projector_product_symplectic`.
-    :param qubit_count: See `trace_of_projector_product_symplectic`.
+    :param px: See `projector_product_trace`.
+    :param pz: See `projector_product_trace`.
+    :param signs: See `projector_product_trace`.
+    :param qubit_count: See `projector_product_trace`.
 
     :return trace: The trace.
     :return size_of_0_set: Number of subsets giving +1 overall sign.
     :return size_of_1_set: Number of subsets giving -1 overall sign.
     """
-    pauli_count, px_array, pz_array, signs_array = _validate_inputs(
-        px, pz, signs, qubit_count)
-    paulis_in_bsf = np.concatenate([px_array, pz_array], axis=1).astype(np.uint8)
+    px_array, pz_array, signs_array = _validate_inputs(px, pz, signs)
+    pauli_count, qubit_count = px_array.shape
     pairing_matrix = _get_pairing_matrix(px_array, pz_array)
+    paulis_in_bsf: np.ndarray[tuple[int, int], np.dtype[np.uint8]] = np.concatenate(
+        [px_array, pz_array], axis=1).astype(np.uint8)  # m x 2n matrix V
     size_of_0_set = 0
     size_of_1_set = 0
     for mask in range(1 << pauli_count):

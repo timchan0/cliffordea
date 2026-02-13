@@ -357,7 +357,6 @@ class TableauLogicalAnalyzer(LogicalAnalyzer):
             px,
             pz,
             signs,
-            qubit_count=len(self.DATA_INDICES),
             enum_threshold=self.enum_threshold,
             mode=self.mode,
             use_packed=self.use_packed,
