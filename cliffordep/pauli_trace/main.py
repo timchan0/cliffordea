@@ -18,9 +18,16 @@ from cliffordep.pauli_trace._character_summers import BruteForceCharacterSummer,
 def _validate_inputs(
     px: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
     pz: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
-    signs: Sequence[int],
+    j_powers: Sequence[Literal[0, 1, 2, 3]],
 ):
-    """Validate and convert inputs to numpy arrays (dtype=uint8)."""
+    """Validate and convert inputs to numpy arrays (dtype=uint8).
+    
+    :return px_array: m x n matrix of X components.
+    :return pz_array: m x n matrix of Z components.
+    :return signs_array: Length-m vector of integers in {0, 1} such that
+        P_i = 1j^{a + 2*signs_array[i]} * [X string] * [Z string],
+        for some a in {0, 1}.
+    """
     try:
         px_array: np.ndarray[tuple[int, int], np.dtype[np.uint8]] = np.array(px, dtype=np.uint8)
         pz_array: np.ndarray[tuple[int, int], np.dtype[np.uint8]] = np.array(pz, dtype=np.uint8)
@@ -28,7 +35,7 @@ def _validate_inputs(
         raise ValueError(
             f"Could not interpret px/pz as m x qubit_count binary arrays: {exc}"
         ) from exc
-    signs_array: np.ndarray[tuple[int], np.dtype[np.uint8]] = np.array(signs, dtype=np.uint8)
+    signs_array: np.ndarray[tuple[int], np.dtype[np.uint8]] = np.array(j_powers, dtype=np.uint8) // 2
     return px_array, pz_array, signs_array
 
 
@@ -223,7 +230,7 @@ class ProjectorProductTracer:
         self,
         px: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
         pz: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
-        signs: Sequence[int],
+        j_powers: Sequence[Literal[0, 1, 2, 3]],
     ):
         """
         Compute exactly T = tr[ prod_i (I + P_i)/2 ] for Paulis P_i given in binary symplectic form.
@@ -232,10 +239,11 @@ class ProjectorProductTracer:
         
         :param px: Length-m sequence of n-bit vectors (X component).
         :param pz: Length-m sequence of n-bit vectors (Z component).
-        :param signs: Length-m sequence of bits (0 => +1, 1 => -1).
+        :param j_powers: Length-m sequence of integers such that
+            P_i = 1j^j_powers[i] * [X string] * [Z string].
         :return trace: The trace T.
         """
-        px_array, pz_array, signs_array = _validate_inputs(px, pz, signs)
+        px_array, pz_array, signs_array = _validate_inputs(px, pz, j_powers)
         pauli_count, qubit_count = px_array.shape
         if self.USE_PACKED and qubit_count > 64:
             px_packed = _pack_bits_to_uint64(px_array)
@@ -266,21 +274,21 @@ class ProjectorProductTracer:
 def brute_force_projector_product_trace(
     px: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
     pz: Sequence[np.ndarray[tuple[int], np.dtype[np.bool_]]],
-    signs: Sequence[int],
+    j_powers: Sequence[Literal[0, 1, 2, 3]],
 ):
     """
     Brute force expansion over all subsets (for testing small instances).
 
     :param px: See `ProjectorProductTracer.trace`.
     :param pz: See `ProjectorProductTracer.trace`.
-    :param signs: See `ProjectorProductTracer.trace`.
+    :param j_powers: See `ProjectorProductTracer.trace`.
     :param qubit_count: See `ProjectorProductTracer.trace`.
 
     :return trace: The trace.
     :return size_of_0_set: Number of subsets giving +1 overall sign.
     :return size_of_1_set: Number of subsets giving -1 overall sign.
     """
-    px_array, pz_array, signs_array = _validate_inputs(px, pz, signs)
+    px_array, pz_array, signs_array = _validate_inputs(px, pz, j_powers)
     pauli_count, qubit_count = px_array.shape
     pairing_matrix = _get_pairing_matrix(px_array, pz_array)
     paulis_in_bsf: np.ndarray[tuple[int, int], np.dtype[np.uint8]] = np.concatenate(

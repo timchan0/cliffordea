@@ -1,5 +1,6 @@
-import numpy as np
+from typing import Literal
 
+import numpy as np
 import pytest
 
 from cliffordep.pauli_trace._assumers import NoAssumptions, Nonnegative
@@ -23,7 +24,7 @@ def test_small_random(deterministic_tracer: ProjectorProductTracer, brute_tracer
             pauli_count = random.randint(1, min(7, 2 * qubit_count + 3))
             px = []
             pz = []
-            signs = []
+            j_powers: list[Literal[0, 1, 2, 3]] = []
             for _ in range(pauli_count):
                 xv = [random.randint(0, 1) for _ in range(qubit_count)]
                 zv = [random.randint(0, 1) for _ in range(qubit_count)]
@@ -36,14 +37,14 @@ def test_small_random(deterministic_tracer: ProjectorProductTracer, brute_tracer
                 
                 px.append(xv)
                 pz.append(zv)
-                signs.append(random.randint(0, 1))
-            tab, _, _ = brute_force_projector_product_trace(px, pz, signs)
-            tdet = deterministic_tracer.trace(px, pz, signs)
+                j_powers.append(random.choice((0, 2)))
+            tab, _, _ = brute_force_projector_product_trace(px, pz, j_powers)
+            tdet = deterministic_tracer.trace(px, pz, j_powers)
             if deterministic_tracer.ASSUME_NONNEGATIVE:
                 assert abs(tab) == tdet
             else:
                 assert tab == tdet
-            tbrute = brute_tracer.trace(px, pz, signs)
+            tbrute = brute_tracer.trace(px, pz, j_powers)
             assert tab == tbrute
 
 
@@ -52,7 +53,7 @@ def test_four_yys(deterministic_tracer: ProjectorProductTracer):
     tdet = deterministic_tracer.trace(
         px=[np.array([1, 1]) for _ in range(qubit_count)],
         pz=[np.array([1, 1]) for _ in range(qubit_count)],
-        signs=[0 for _ in range(qubit_count)],
+        j_powers=[0 for _ in range(qubit_count)],
     )
     assert tdet == 2
 
@@ -62,18 +63,18 @@ def test_commuting_case(deterministic_tracer: ProjectorProductTracer):
     rank = 3
     px = []
     pz = []
-    signs = []
+    j_powers: list[Literal[0, 1, 2, 3]] = []
     for i in range(rank):
         x = [0] * qubit_count
         z = [0] * qubit_count
         z[i] = 1
         px.append(x)
         pz.append(z)
-        signs.append(0)
+        j_powers.append(0)
     px.extend(px[:2])
     pz.extend(pz[:2])
-    signs.extend([0, 0])
-    t = deterministic_tracer.trace(px, pz, signs)
+    j_powers.extend([0, 0])
+    t = deterministic_tracer.trace(px, pz, j_powers)
     assert t == 2 ** qubit_count // (2 ** rank)
 
 
@@ -85,27 +86,27 @@ def test_invalid_inputs(deterministic_tracer: ProjectorProductTracer):
 def test_x_z(deterministic_tracer: ProjectorProductTracer):
     px = [np.array([1]), np.array([0])]
     pz = [np.array([0]), np.array([1])]
-    signs = [0, 0]
-    t = deterministic_tracer.trace(px, pz, signs)
+    j_powers = (0, 0)
+    t = deterministic_tracer.trace(px, pz, j_powers)
     assert t == 1/2
 
 
 def test_repeated_paulis(deterministic_tracer: ProjectorProductTracer):
     px = [np.array([1, 0]), np.array([1, 0])]
     pz = [np.array([0, 0]), np.array([0, 0])]
-    signs = [0, 0]
-    t = deterministic_tracer.trace(px, pz, signs)
+    j_powers = (0, 0)
+    t = deterministic_tracer.trace(px, pz, j_powers)
     assert t == 2
 
 
 def test_assume_nonnegative_flag_path(deterministic_tracer: ProjectorProductTracer):
     # Choose px=0 so pairing_matrix is zero => cross_C = 0.
-    # Choose signs=0 so linear = 0.
+    # Choose j_power=0 so linear = 0.
     # Then the quadratic character sum is S = 2^k >= 0, so the opt-in fast path is valid.
     px = [np.array([0]), np.array([0])]
     pz = [np.array([1]), np.array([1])]
-    signs = [0, 0]
-    trace = deterministic_tracer.trace(px, pz, signs)
+    j_power = (0, 0)
+    trace = deterministic_tracer.trace(px, pz, j_power)
     assert trace == 1
 
 
@@ -113,15 +114,15 @@ def test_assume_nonnegative_flag_path(deterministic_tracer: ProjectorProductTrac
 def test_minus_identity(qubit_count, deterministic_tracer: ProjectorProductTracer):
     px = [np.zeros(qubit_count, dtype=int)]
     pz = [np.zeros(qubit_count, dtype=int)]
-    signs = [1]
-    t = deterministic_tracer.trace(px, pz, signs)
+    j_powers = (2,)
+    t = deterministic_tracer.trace(px, pz, j_powers)
     assert t == 0
 
 def test_xzxz(deterministic_tracer: ProjectorProductTracer):
     px = [np.array([k]) for k in (1, 0, 1, 0)]
     pz = [np.array([k]) for k in (0, 1, 0, 1)]
-    signs = [0, 0, 0, 0]
-    t = deterministic_tracer.trace(px, pz, signs)
+    j_powers = (0, 0, 0, 0)
+    t = deterministic_tracer.trace(px, pz, j_powers)
     assert t == 1/4
 
 

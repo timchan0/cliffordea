@@ -251,22 +251,20 @@ class LogicalAnalyzer(abc.ABC):
         return strings
 
 
-def extract_sign(pauli_string: stim.PauliString) -> Literal[0, 1]:
-    """Extract the power of -1 from a completely real Pauli string.
+def extract_j_power(pauli_string: stim.PauliString) -> Literal[0, 1, 2, 3]:
+    """Extract the power of 1j from a Pauli string.
     
-    :param pauli_string: A Pauli string P with sign ±1 and an even number of Y tensor factors.
-    :return sign: such that P = (-1)^sign [X string] [Z string].
-    :raises ValueError: If the Pauli string has an imaginary sign,
-        or if it has an odd number of Y tensor factors.
+    :param pauli_string: A signed Pauli string P.
+    :return power: such that P = 1j^power [X string] [Z string].
     """
-    try:
-        external = {(1+0j): 0, (-1+0j): 1}[pauli_string.sign]
-    except KeyError:
-        raise ValueError("Pauli string has sign that is not ±1.")
-    y_weight = len(pauli_string.pauli_indices('Y'))
-    assert y_weight % 2 == 0, "Pauli string has imaginary sign."
-    internal = y_weight // 2
-    return (external + internal) % 2 # type: ignore
+    external = {
+        (1+0j): 0,
+        (0+1j): 1,
+        (-1+0j): 2,
+        (0-1j): 3,
+    }[pauli_string.sign]
+    internal = len(pauli_string.pauli_indices('Y'))
+    return (external + internal) % 4 # type: ignore
 
 
 class TableauLogicalAnalyzer(LogicalAnalyzer):
@@ -284,22 +282,24 @@ class TableauLogicalAnalyzer(LogicalAnalyzer):
         super().__init__(data_indices, stabilizer_generators, logical_s)
         _stabilizer_bsf_x: list[np.ndarray[tuple[int], np.dtype[np.bool_]]] = []
         _stabilizer_bsf_z: list[np.ndarray[tuple[int], np.dtype[np.bool_]]] = []
-        _stabilizer_bsf_signs: list[Literal[0, 1]] = []
+        _stabilizer_j_powers: list[Literal[0, 1, 2, 3]] = []
         for generator_list in stabilizer_generators.values():
             for generator in generator_list:
                 xs, zs = generator.to_numpy()
                 # xs, zs = self.INVERSE_TABLEAU(generator).to_numpy()
                 _stabilizer_bsf_x.append(xs)
                 _stabilizer_bsf_z.append(zs)
-                _stabilizer_bsf_signs.append(extract_sign(generator))
+                _stabilizer_j_powers.append(extract_j_power(generator))
         self.STABILIZER_BSF_X = _stabilizer_bsf_x
-        """A list of binary vectors representing the
-        X component of _all_ the stabilizer generators in binary symplectic form."""
+        """Binary vectors representing the X component of _all_ the
+        stabilizer generators in binary symplectic form.
+        """
         self.STABILIZER_BSF_Z = _stabilizer_bsf_z
-        """A list of binary vectors representing the
-        Z component of _all_ the stabilizer generators in binary symplectic form."""
-        self.STABILIZER_BSF_SIGNS = _stabilizer_bsf_signs
-        """A list of integers representing the sign of each stabilizer generator."""
+        """Binary vectors representing the Z component of _all_ the
+        stabilizer generators in binary symplectic form.
+        """
+        self.STABILIZER_J_POWERS = _stabilizer_j_powers
+        """The power of each stabilizer generator such that P = 1j^power [X string] [Z string]."""
 
         self.LOGICAL_ZERO_GENERATORS = (
             *stabilizer_generators['X'],
@@ -342,7 +342,7 @@ class TableauLogicalAnalyzer(LogicalAnalyzer):
             if not z_generator.commutes(before_transversal):
                 return 0
         # transform the X stabilizers
-        px, pz, signs = self.STABILIZER_BSF_X.copy(), self.STABILIZER_BSF_Z.copy(), self.STABILIZER_BSF_SIGNS.copy()
+        px, pz, j_powers = self.STABILIZER_BSF_X.copy(), self.STABILIZER_BSF_Z.copy(), self.STABILIZER_J_POWERS.copy()
         for x_generator in self.STABILIZER_GENERATORS['X']:
             transformed_generator = after_transversal(x_generator)
             if transformed_generator == x_generator:
@@ -353,8 +353,8 @@ class TableauLogicalAnalyzer(LogicalAnalyzer):
             # xs, zs = self.INVERSE_TABLEAU(transformed_generator).to_numpy()
             px.append(xs)
             pz.append(zs)
-            signs.append(extract_sign(transformed_generator))
-        stabilizer_trace = self.PROJECTOR_PRODUCT_TRACER.trace(px, pz, signs)
+            j_powers.append(extract_j_power(transformed_generator))
+        stabilizer_trace = self.PROJECTOR_PRODUCT_TRACER.trace(px, pz, j_powers)
         return float(stabilizer_trace/2)
 
 
