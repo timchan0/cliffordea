@@ -205,8 +205,10 @@ class ProjectorProductTracer:
     ) -> None:
         """
         :param mode: Mode to count solutions:
+            
             * 'deterministic' uses polynomial-time GF(2) elimination,
             * 'brute' uses exponential-time brute force.
+        
         :param use_packed: When constructing the pairing matrix,
             use 64-bit-word packing for large n (faster).
         :param assume_nonnegative: Whether to assume the trace is nonnegative.
