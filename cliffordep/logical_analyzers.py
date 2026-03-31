@@ -145,12 +145,12 @@ class LogicalAnalyzer(abc.ABC):
     def analyze(
             self,
             cultivated_state: Literal['T', 'S', 'Z'],
-            unsigned_pauli_string: str,
+            before_transversal: str,
     ) -> tuple[float, float]:
         """Compute the acceptance probability and logical fidelity of a logical state affected by error.
 
-        :param cultivated_state: the cultivated state, either 'T', 'S', or 'Z'.
-        :param unsigned_pauli_string: a string representing the Pauli error without sign,
+        :param cultivated_state: The cultivated state, either 'T', 'S', or 'Z'.
+        :param before_transversal: A string representing the Pauli error without sign,
             restricted to the data qubits.
         :return acceptance_probability: The probability the resulting state yields a trivial syndrome
             when all stabilizer generators are noiselessly measured.
@@ -188,6 +188,7 @@ class LogicalAnalyzer(abc.ABC):
 
         :return kept_strings: A list of maps, one for each degree. Each one maps from each error
             (as an unsigned Pauli string) to a pair containing:
+            
             1. the resulting logical vector,
             2. a counter of denominators OR a set of fault configurations
             (each represented by a frozen set of fault indices).
@@ -227,15 +228,16 @@ class LogicalAnalyzer(abc.ABC):
 
         Helper for `get_kept_strings`.
 
-        :param combinations_of_order: a map from each effect to a counter of denominators
+        :param combinations_of_order: A map from each effect to a counter of denominators
             OR a map from each effect to a set of frozen sets of fault indices.
             Each denominator divides (noise level)^order to equal
             the probability an instance of that undetected combination occurs.
-        :param cultivated_state: the target logical state cultivated.
-        :param order: an optional parameter used only for printing progress.
+        :param cultivated_state: The target logical state cultivated.
+        :param order: An optional parameter used only for printing progress.
 
         :return kept_strings_of_order: A map from each error (as an unsigned Pauli string)
             to a pair containing:
+            
             1. the resulting logical vector,
             2. a counter of denominators OR a set of fault configurations
             (each represented by a frozen set of fault indices).
@@ -316,16 +318,16 @@ class TableauLogicalAnalyzer(LogicalAnalyzer):
             use_packed=use_packed,
             assume_nonnegative=True,
         )
-        self._PROBABILITY_COMPUTER = (_ShortcutProbabilityComputer if
+        self._PROBABILITY_COMPUTER: _ProbabilityComputer = (_ShortcutProbabilityComputer if
             shortcut_probability_computer else _GeneralProbabilityComputer)(self)
 
 
-    def analyze(self, cultivated_state, unsigned_pauli_string):
-        clifford = self.LOGICAL[cultivated_state](unsigned_pauli_string)
-        pauli_string = stim.PauliString(unsigned_pauli_string)
-        accept_probability = self._PROBABILITY_COMPUTER.get_accept_probability(pauli_string, clifford)
-        logical_fidelity = self.X_TENSOR_N.commutes(pauli_string)
-        # The logical fidelity of a logical X eigenstate suffering from error `pauli_string`
+    def analyze(self, cultivated_state, before_transversal):
+        _before_transversal = stim.PauliString(before_transversal)
+        after_transversal = self.LOGICAL[cultivated_state](before_transversal)
+        accept_probability = self._PROBABILITY_COMPUTER.get_accept_probability(_before_transversal, after_transversal)
+        logical_fidelity = self.X_TENSOR_N.commutes(_before_transversal)
+        # The logical fidelity of a logical X eigenstate suffering from error `_before_transversal`
         return accept_probability, logical_fidelity
 
 
@@ -362,10 +364,10 @@ class _ProbabilityComputer(abc.ABC):
     ) -> float:
         """Calculate the acceptance probability.
 
-        :param before_transversal: the error before being pushed through the transversal gates.
-        :param after_transversal: the Clifford circuit after being pushed through the transversal gates.
+        :param before_transversal: The error before being pushed through the transversal gates.
+        :param after_transversal: The Clifford circuit after being pushed through the transversal gates.
 
-        :return acceptance_probability: the probability (as a float between 0 and 1)
+        :return acceptance_probability: The probability (as a float between 0 and 1)
             that the Clifford error results in the stabilizer measurements all being +1.
         """
 
@@ -418,8 +420,8 @@ class _GeneralProbabilityComputer(_ProbabilityComputer):
 class SuperpositionLogicalAnalyzer(LogicalAnalyzer):
     """Analyzes Clifford errors as superpositions of Paulis."""
 
-    def analyze(self, cultivated_state, unsigned_pauli_string):
-        clifford = self.LOGICAL[cultivated_state].conjugate(unsigned_pauli_string)
+    def analyze(self, cultivated_state, before_transversal):
+        clifford = self.LOGICAL[cultivated_state].conjugate(before_transversal)
         clifford.postselect_from_stabilizers(self.STABILIZER_GENERATORS)
         logical_vector = clifford.get_logical_amplitudes(self.X_TENSOR_N, self.Z_TENSOR_N)
         logical_vector.transfer_xy_to_iz(logical_state=cultivated_state)
