@@ -2,7 +2,6 @@ from cliffordep.combinators import FaultCombinatorExclusive, ErrorEventCombinato
 from cliffordep.logical_analyzers import SuperpositionLogicalAnalyzer, TableauLogicalAnalyzer
 from cliffordep.noiseless_circuit_tools import split_by_ticks, compose_slices, insert_error_events
 from cliffordep.noisy_circuit_tools import CultivationCircuit
-from cliffordep.noisy_circuit_tools_mixture import CultivationCircuitMixture
 from cliffordep.constants import DEPOLARIZE2_ERROR_EVENTS
 from cliffordep.explained_error_tools import insert_circuit_error_locations, insert_explained_errors
 from cliffordep.pauli_string_tools import forget_sign, CliffordString
