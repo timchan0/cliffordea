@@ -2,13 +2,10 @@ import abc
 from collections import Counter
 from collections.abc import Iterable, Iterator
 import itertools
-import math
 
 import numpy as np
 import numpy.typing as npt
 import stim
-
-from cliffordep.type_aliases import LogicalTriple
 
 
 class Combinator(abc.ABC):
@@ -120,27 +117,6 @@ class BaseExclusiveCombinator(Combinator):
     @staticmethod
     def _counter_to_normalized_total(counter: Counter[int]) -> float:
         return sum(count / denominator for denominator, count in counter.items())
-    
-
-def _sum_odds(
-        logical_triples: Iterable[LogicalTriple],
-        index_to_odds: dict[int, float],
-    ) -> tuple[float, float]:
-    """Sum the odds of all configurations in `vector_combo_pairs`.
-    
-    Input:
-    * `logical_triples` an iterable of triples, each containing:
-        - an acceptance probability,
-        - a logical fidelity,
-        - a set of frozen sets of fault indices that defines the combination.
-    * `index_to_odds` a map from each fault index to the odds of it flipping.
-    """
-    i_odds, e_odds = 0, 0
-    for accept_probability, logical_fidelity, set_of_configurations in logical_triples:
-        prob = sum(math.prod(index_to_odds[index] for index in combo) for combo in set_of_configurations)
-        i_odds += accept_probability * logical_fidelity * prob
-        e_odds += accept_probability * (1-logical_fidelity) * prob
-    return i_odds, e_odds
 
 
 def get_trivial_syndrome_combinations(

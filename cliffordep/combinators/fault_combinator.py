@@ -8,7 +8,7 @@ import stim
 import pandas as pd
 
 from cliffordep.noisy_circuit_tools import CultivationCircuit
-from cliffordep.combinators._base import Combinator, _sum_odds, get_trivial_syndrome_combinations
+from cliffordep.combinators._base import Combinator, get_trivial_syndrome_combinations
 from cliffordep.pauli_string_tools import forget_sign
 from cliffordep.type_aliases import FaultBag, ErrorEvent, LogicalTriple
 from cliffordep import noiseless_circuit_tools
@@ -392,3 +392,24 @@ class FaultCombinator(Combinator):
             effects_to_segments = self._get_effect_to_segments(syndrome, count)
             options.append(effects_to_segments)
         return options
+
+
+def _sum_odds(
+        logical_triples: Iterable[LogicalTriple],
+        index_to_odds: dict[int, float],
+    ) -> tuple[float, float]:
+    """Sum the odds of all configurations in `vector_combo_pairs`.
+
+    Input:
+    * `logical_triples` an iterable of triples, each containing:
+        - an acceptance probability,
+        - a logical fidelity,
+        - a set of frozen sets of fault indices that defines the combination.
+    * `index_to_odds` a map from each fault index to the odds of it flipping.
+    """
+    i_odds, e_odds = 0, 0
+    for accept_probability, logical_fidelity, set_of_configurations in logical_triples:
+        prob = sum(math.prod(index_to_odds[index] for index in combo) for combo in set_of_configurations)
+        i_odds += accept_probability * logical_fidelity * prob
+        e_odds += accept_probability * (1-logical_fidelity) * prob
+    return i_odds, e_odds
