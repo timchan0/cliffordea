@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from stim import PauliString
 
-from cliffordep.pauli_string_tools import CliffordString, FrozenCliffordString, _canonicalize, SQRT2
+from cliffordep.pauli_string_tools import CliffordString, _canonicalize, SQRT2
 
 _EPSILON = 1e-13
 
@@ -113,18 +113,6 @@ class TestMul:
         with mock.patch(self._multiply) as mock_multiply:
             _ = string_1 * string_2
             mock_multiply.assert_called_once_with(string_1, string_2)
-
-
-def test_frozen_copy(string_1: CliffordString):
-    with mock.patch(
-        'cliffordep.pauli_string_tools._canonicalize',
-        return_value=(string_1.terms, string_1.denominator_squared)
-    ) as mock_canonicalize:
-        frozen_copy = string_1.frozen_copy()
-        mock_canonicalize.assert_called_once_with(string_1.terms, string_1.denominator_squared)
-    assert isinstance(frozen_copy, FrozenCliffordString)
-    assert frozen_copy.terms == frozenset(string_1.terms.items())
-    assert frozen_copy.denominator_squared == string_1.denominator_squared
 
 
 def test_norm_squared(string_2: CliffordString):

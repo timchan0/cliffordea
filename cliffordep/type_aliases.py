@@ -42,6 +42,4 @@ The probability of each event depends on its class and the noise level in a nont
 The probability of the fault is the probability of an odd number of its events occurring.
 """
 
-FaultBagMixed = tuple[Counter[float], Counter[float], Counter[float]]
-
 LogicalTriple = tuple[float, float, set[frozenset[int]]]

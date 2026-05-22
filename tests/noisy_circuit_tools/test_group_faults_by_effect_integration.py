@@ -4,7 +4,18 @@ import stim
 
 import cliffordep
 from cliffordep.combinators import FaultCombinatorExclusive
-from cliffordep.pauli_string_tools import FrozenCliffordString
+
+
+def _get_anticommuting_paulis(name: str):
+    """Get the set of Paulis that anticommute with the measurement given by `name`."""
+    if 'X' in name:
+        return {'Y', 'Z'}
+    elif 'Y' in name:
+        return {'X', 'Z'}
+    elif 'Z' in name or name in {'M', 'MR'}:
+        return {'X', 'Y'}
+    else:
+        raise NotImplementedError
 
 
 class TestD3DoubleCatCheck():
@@ -28,4 +39,4 @@ class TestD3DoubleCatCheck():
                 prod = string_1 * string_2
                 if not any(name=='MX' for _, name, _ in (faults_1|faults_2).keys()):
                     for index in cliffordep.circuits.D3DoubleCatCheckA6.ANCILLA_INDICES:
-                        assert prod[index] not in FrozenCliffordString._get_anticommuting_paulis('MX')
+                        assert prod[index] not in _get_anticommuting_paulis('MX')
