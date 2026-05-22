@@ -77,7 +77,7 @@ class _TransversalGate:
         Push an _unsigned_ Pauli string through the transversal gate.
         
         :param pauli_string: The unsigned Pauli string to be conjugated.
-        :return clifford_string: The resulting Clifford string after conjugation.
+        :return clifford_string: The resulting Pauli sum after conjugation.
         :raises ValueError: If the length of the Pauli string
             does not match the length of the transversal gate.
         """

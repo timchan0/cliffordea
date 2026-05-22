@@ -16,7 +16,7 @@ from cliffordep import noiseless_circuit_tools
 
 class FaultCombinator(Combinator):
     """Group faults by their syndrome then effect,
-    where all faults are independent and effects are pure Clifford strings.
+    where all faults are independent and effects are pure Pauli sums.
 
     Extends `Combinator`.
 

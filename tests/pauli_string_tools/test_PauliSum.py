@@ -129,7 +129,7 @@ _PRECISION = 12
 
 
 def _canonicalize(terms: dict[str, complex], denominator_squared: float):
-    """Cast a Clifford string into canonical form.
+    """Cast a Pauli sum into canonical form.
 
     Canonical form means:
     * no terms have zero amplitude.
@@ -138,7 +138,7 @@ def _canonicalize(terms: dict[str, complex], denominator_squared: float):
     * all values are rounded to 12 decimal digits.
 
     Input:
-    * `terms, denominator_squared` defines the Clifford string to canonicalize.
+    * `terms, denominator_squared` defines the Pauli sum to canonicalize.
 
     Output:
     * The canonicalized `(terms, denominator_squared)`.

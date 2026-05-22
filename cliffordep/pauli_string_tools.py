@@ -126,10 +126,10 @@ class PauliSum:
         * `terms` a map from each unsigned Pauli string to its unnormalized amplitude.
         Allowed characters in each Pauli string are `'_', 'X', 'Y', 'Z'`.
         If not specified,
-        the Clifford string is assumed to be zero.
+        the Pauli sum is assumed to be zero.
         * `denominator_squared` the divisor of each amplitude, squared.
         If not specified,
-        the Clifford string is automatically normalized to 1.
+        the Pauli sum is automatically normalized to 1.
         """
         self.terms: defaultdict[str, complex] = defaultdict(
             complex, {} if terms is None else terms)
@@ -159,7 +159,7 @@ class PauliSum:
         return self._multiply(lhs, self)
 
     def _scaled(self, scalar: int | float | complex):
-        """Return a scaled copy of the Clifford string."""
+        """Return a scaled copy of the Pauli sum."""
         return PauliSum(
             {term: amplitude * scalar for term, amplitude in self.terms.items()},
             self.denominator_squared,
@@ -167,7 +167,7 @@ class PauliSum:
 
     @staticmethod
     def _multiply(lhs: 'PauliSum', rhs: 'PauliSum'):
-        """Return the product of two Clifford strings."""
+        """Return the product of two Pauli sums."""
         terms: defaultdict[str, complex] = defaultdict(complex)
         for l_term, l_amplitude in lhs.terms.items():
             l_ps = PauliString(l_term)
@@ -182,7 +182,7 @@ class PauliSum:
         return numerator / self.denominator_squared
 
     def normalize(self):
-        """Scale the original Clifford string so that its norm is 1."""
+        """Scale the original Pauli sum so that its norm is 1."""
         self.denominator_squared = sum(abs(amplitude)**2 for amplitude in self.terms.values())
 
 
@@ -208,9 +208,9 @@ class PauliSum:
             del self.terms[term]
 
     def commutes_or_unknown(self, other: PauliString):
-        """Partial predicate for if the Clifford string commutes with a Pauli string.
+        """Partial predicate for if the Pauli sum commutes with a Pauli string.
 
-        When this method returns `True`, the Clifford string definitely commutes with the Pauli string.
+        When this method returns `True`, the Pauli sum definitely commutes with the Pauli string.
         When it returns `None`, the commutation relation is unknown.
         """
         return True if all(PauliString(term).commutes(other) for term in self.terms.keys()) else None
@@ -220,7 +220,7 @@ class PauliSum:
             logical_x: PauliString,
             logical_z: PauliString,
     ):
-        """Return the normalized amplitude of each logical class in the Clifford string.
+        """Return the normalized amplitude of each logical class in the Pauli sum.
 
         Require:
         * `self.terms` contains only terms that commute with all stabilizers
@@ -231,7 +231,7 @@ class PauliSum:
         * `logical_z` ditto for Z.
 
         Output:
-        * A 4-vector of normalized amplitudes for the I, X, Y, Z logical classes in the Clifford string.
+        * A 4-vector of normalized amplitudes for the I, X, Y, Z logical classes in the Pauli sum.
         """
         amplitudes = np.zeros(4, dtype=np.complex128)
         for term, amplitude in self.terms.items():
