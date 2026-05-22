@@ -7,7 +7,7 @@ from typing import Literal, overload, override
 import numpy as np
 import stim
 
-from cliffordep.pauli_string_tools import PUSH_THROUGH_MAP, CliffordString, _tensor_paulis, split_sign
+from cliffordep.pauli_string_tools import PUSH_THROUGH_MAP, CliffordString, tensor_paulis, split_sign
 from cliffordep.pauli_trace import ProjectorProductTracer
 from cliffordep.type_aliases import LogicalTriple
 
@@ -87,7 +87,7 @@ class _TransversalGate:
         ]
         terms: dict[str, complex] = {}
         for pauli_tuple in itertools.product(*options):
-            sign, child = split_sign(_tensor_paulis(*pauli_tuple))
+            sign, child = split_sign(tensor_paulis(*pauli_tuple))
             terms[child] = sign
         return CliffordString(terms)
 

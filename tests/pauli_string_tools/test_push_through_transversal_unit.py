@@ -3,7 +3,7 @@ import stim
 from stim import PauliString
 
 from cliffordep.logical_analyzers import _TransversalGate
-from cliffordep.pauli_string_tools import CliffordString, _tensor_paulis, split_sign
+from cliffordep.pauli_string_tools import CliffordString, tensor_paulis, split_sign
 
 
 @pytest.mark.parametrize("gate", ["T", "S", "Z"])
@@ -25,21 +25,21 @@ def test_empty():
 class TestTensorPaulis:
 
     def test_empty(self):
-        assert _tensor_paulis() == PauliString()
+        assert tensor_paulis() == PauliString()
     
     def test_1(self):
-        assert _tensor_paulis("-iX") == PauliString("-iX")
+        assert tensor_paulis("-iX") == PauliString("-iX")
 
     def test_2(self):
-        assert _tensor_paulis("X", "Y") == PauliString("XY")
-        assert _tensor_paulis("-X", "Y") == PauliString("-XY")
-        assert _tensor_paulis("X", "-Y") == PauliString("-XY")
-        assert _tensor_paulis("-X", "-Y") == PauliString("XY")
-        assert _tensor_paulis("Y", "-iZ") == PauliString("-iYZ")
-        assert _tensor_paulis("iY", "-iZ") == PauliString("YZ")
+        assert tensor_paulis("X", "Y") == PauliString("XY")
+        assert tensor_paulis("-X", "Y") == PauliString("-XY")
+        assert tensor_paulis("X", "-Y") == PauliString("-XY")
+        assert tensor_paulis("-X", "-Y") == PauliString("XY")
+        assert tensor_paulis("Y", "-iZ") == PauliString("-iYZ")
+        assert tensor_paulis("iY", "-iZ") == PauliString("YZ")
 
     def test_3(self):
-        assert _tensor_paulis("-X", "I", "-iZ") == PauliString("iX_Z")
+        assert tensor_paulis("-X", "I", "-iZ") == PauliString("iX_Z")
 
 
 class TestTGate:

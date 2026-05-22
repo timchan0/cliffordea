@@ -1,10 +1,6 @@
 """Module for manipulating Pauli strings."""
 
-import cmath
 from collections import defaultdict
-from dataclasses import dataclass
-import itertools
-import math
 from typing import Literal
 
 import stim
@@ -82,7 +78,7 @@ def split_sign(pauli_string: PauliString):
     return pauli_string.sign, forget_sign(pauli_string)
 
 
-def _tensor_paulis(*paulis: str):
+def tensor_paulis(*paulis: str):
     """Tensor product one or more signed Paulis.
     
     Input:
@@ -92,11 +88,6 @@ def _tensor_paulis(*paulis: str):
     * Their tensor product as a `stim.PauliString`.
     """
     return sum((PauliString(pauli) for pauli in paulis), start=PauliString())
-
-
-def _reset_qubits(effect: str, indices: set[int]):
-    """Reset specified qubits in an effect."""
-    return ''.join('_' if i in indices else c for i, c in enumerate(effect))
 
 
 SIGNATURE_TO_INDEX = {
@@ -109,44 +100,6 @@ SIGNATURE_TO_INDEX = {
 i.e. 'anticommute with (logical X, logical Z)?',
 to the Pauli with that signature.
 """
-
-_PRECISION = 12
-"""Rounding precision for `FrozenCliffordString`."""
-
-
-def _canonicalize(terms: dict[str, complex], denominator_squared: float):
-    """Cast a Clifford string into canonical form.
-    
-    Canonical form means:
-    * no terms have zero amplitude.
-    * the phase of the lexicographically smallest term is 0.
-    * the magnitude of the smallest amplitude is 1.
-    * all values are rounded to 12 decimal digits.
-
-    Input:
-    * `terms, denominator_squared` defines the Clifford string to canonicalize.
-
-    Output:
-    * The canonicalized `(terms, denominator_squared)`.
-
-    Side effects:
-    * None.
-    """
-    new_terms = {term: amplitude for term, amplitude in terms.items() if amplitude}
-    if new_terms:
-        first_term = min(new_terms.keys())
-        first_phase = cmath.phase(new_terms[first_term])
-        phase_factor = cmath.exp(1j * first_phase)
-        smallest_magnitude = min(abs(amplitude) for amplitude in new_terms.values())
-        for term in new_terms.keys():
-            unrounded = new_terms[term] / (phase_factor*smallest_magnitude)
-            real = round(unrounded.real, _PRECISION)
-            imag = round(unrounded.imag, _PRECISION)
-            new_terms[term] = complex(real, imag)
-        new_denominator_squared = round(denominator_squared / smallest_magnitude**2, _PRECISION)
-    else:
-        new_denominator_squared = 1
-    return new_terms, new_denominator_squared
 
 
 def _boolean_array_to_int(array: np.ndarray) -> int:
