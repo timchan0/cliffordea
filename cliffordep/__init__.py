@@ -4,6 +4,6 @@ from cliffordep.noiseless_circuit_tools import split_by_ticks, compose_slices, i
 from cliffordep.noisy_circuit_tools import CultivationCircuit
 from cliffordep.constants import DEPOLARIZE2_ERROR_EVENTS
 from cliffordep.explained_error_tools import insert_circuit_error_locations, insert_explained_errors
-from cliffordep.pauli_string_tools import forget_sign, CliffordString
+from cliffordep.pauli_string_tools import forget_sign, PauliSum
 from cliffordep import noise
 from cliffordep import circuits

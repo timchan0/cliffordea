@@ -3,7 +3,7 @@ import stim
 from stim import PauliString
 
 from cliffordep.logical_analyzers import _TransversalGate
-from cliffordep.pauli_string_tools import CliffordString, tensor_paulis, split_sign
+from cliffordep.pauli_string_tools import PauliSum, tensor_paulis, split_sign
 
 
 @pytest.mark.parametrize("gate", ["T", "S", "Z"])
@@ -11,7 +11,7 @@ def test_identity(gate):
     ps = "__"
     transversal_gate = _TransversalGate(2*gate)
     result = transversal_gate.conjugate(ps)
-    assert isinstance(result, CliffordString)
+    assert isinstance(result, PauliSum)
     assert dict(result.terms) == {ps: 1}
 
 

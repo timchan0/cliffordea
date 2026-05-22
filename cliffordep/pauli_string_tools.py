@@ -107,7 +107,7 @@ def _boolean_array_to_int(array: np.ndarray) -> int:
     return int(''.join(array.astype(int).astype(str)), 2)
 
 
-class CliffordString:
+class PauliSum:
     """An error in the form of a superposition of Pauli strings.
     
     Instance attributes:
@@ -146,27 +146,27 @@ class CliffordString:
         )}]'
     
     def __repr__(self):
-        return f'CliffordString({dict(self.terms)}, {self.denominator_squared})'
+        return f'PauliSum({dict(self.terms)}, {self.denominator_squared})'
 
-    def __mul__(self, rhs: 'int | float | complex | CliffordString'):
+    def __mul__(self, rhs: 'int | float | complex | PauliSum'):
         if isinstance(rhs, (int, float, complex)):
             return self._scaled(rhs)
         return self._multiply(self, rhs)
     
-    def __rmul__(self, lhs: 'int | float | complex | CliffordString'):
+    def __rmul__(self, lhs: 'int | float | complex | PauliSum'):
         if isinstance(lhs, (int, float, complex)):
             return self._scaled(lhs)
         return self._multiply(lhs, self)
 
     def _scaled(self, scalar: int | float | complex):
         """Return a scaled copy of the Clifford string."""
-        return CliffordString(
+        return PauliSum(
             {term: amplitude * scalar for term, amplitude in self.terms.items()},
             self.denominator_squared,
         )
 
     @staticmethod
-    def _multiply(lhs: 'CliffordString', rhs: 'CliffordString'):
+    def _multiply(lhs: 'PauliSum', rhs: 'PauliSum'):
         """Return the product of two Clifford strings."""
         terms: defaultdict[str, complex] = defaultdict(complex)
         for l_term, l_amplitude in lhs.terms.items():
@@ -174,7 +174,7 @@ class CliffordString:
             for r_term, r_amplitude in rhs.terms.items():
                 prod_sign, prod_string = split_sign(l_ps * PauliString(r_term))
                 terms[prod_string] += prod_sign * l_amplitude * r_amplitude
-        return CliffordString(terms, lhs.denominator_squared * rhs.denominator_squared)
+        return PauliSum(terms, lhs.denominator_squared * rhs.denominator_squared)
 
     @property
     def norm_squared(self):
