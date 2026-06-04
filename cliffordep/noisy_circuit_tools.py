@@ -41,17 +41,15 @@ class CultivationCircuit:
     def get_syndrome_and_effect(self, error_event: ErrorEvent):
         """Get the syndrome and the resultant Pauli string after inserting an error event.
         
-        Input:
-        * `error_event` the error event to analyze.
+        :param error_event: The error event to analyze.
 
         Require:
         * No qubit is noisily measured more than once per tick in `self.noisy_circuit`.
 
-        Output:
-        * `syndrome` a tuple of booleans representing the syndrome, where each boolean
-        indicates whether the corresponding detector has been flipped.
-        * `effect` the effect of the error event when propagated to the end of the circuit,
-        as an unsigned Pauli string.
+        :return syndrome: A tuple of booleans representing the syndrome, where each boolean
+            indicates whether the corresponding detector has been flipped.
+        :return effect: The effect of the error event when propagated to the end of the circuit,
+            as an unsigned Pauli string.
         """
         timeslice, name, targets = error_event
         pauli_string = self._error_event_to_pauli_string(name=name, targets=targets)
@@ -99,11 +97,10 @@ class CultivationCircuit:
     def group_error_events_by_location(self):
         """Group all possible error events in a noisy circuit by their error location.
 
-        Output:
-        * A map from a `ErrorLocation` to a list of `ErrorEvent`s.
-        Each list is sorted consistently e.g. the order of error events for DEPOLARIZE2 is
-        II, IX, IY, IZ, XI, XX, XY, XZ, YI, YX, YY, YZ, ZI, ZX, ZY, ZZ
-        for targets A and B, where A < B.
+        :return: A map from a `ErrorLocation` to a list of `ErrorEvent`s.
+            Each list is sorted consistently e.g. the order of error events for DEPOLARIZE2 is
+            II, IX, IY, IZ, XI, XX, XY, XZ, YI, YX, YY, YZ, ZI, ZX, ZY, ZZ
+            for targets A and B, where A < B.
         """
         _events: defaultdict[ErrorLocation, list[ErrorEvent]] = defaultdict(list)
         for timeslice, layer in enumerate(split_by_ticks(self.noisy_circuit)):
@@ -145,14 +142,12 @@ class CultivationCircuit:
     def _error_event_to_pauli_string(self, name: str, targets: tuple[stim.GateTarget, ...]):
         """Convert an error event to a `stim.PauliString`.
         
-        Input:
-        * `name` the name of the error event,
-        which can be 'E', 'X_ERROR', 'Y_ERROR', 'Z_ERROR', 'MX', 'MY', 'MZ'.
-        The measurement faults do not affect the Pauli string.
-        * `targets` a tuple of stim.GateTarget objects representing the qubits the error event acts on.
+        :param name: The name of the error event,
+            which can be 'E', 'X_ERROR', 'Y_ERROR', 'Z_ERROR', 'MX', 'MY', 'MZ'.
+            The measurement faults do not affect the Pauli string.
+        :param targets: A tuple of stim.GateTarget objects representing the qubits the error event acts on.
 
-        Output:
-        * A stim.PauliString representing the error event.
+        :return: A stim.PauliString representing the error event.
         """
         pauli_string = stim.PauliString(self.noisy_circuit.num_qubits)
         if name == 'E':

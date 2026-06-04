@@ -81,11 +81,9 @@ def split_sign(pauli_string: PauliString):
 def tensor_paulis(*paulis: str):
     """Tensor product one or more signed Paulis.
     
-    Input:
-    * `paulis` a (possibly empty) tuple of signed Paulis e.g. ('X', '-iY').
+    :param paulis: A (possibly empty) tuple of signed Paulis e.g. ('X', '-iY').
 
-    Output:
-    * Their tensor product as a `stim.PauliString`.
+    :return: Their tensor product as a `stim.PauliString`.
     """
     return sum((PauliString(pauli) for pauli in paulis), start=PauliString())
 
@@ -108,35 +106,33 @@ def _boolean_array_to_int(array: np.ndarray) -> int:
 
 
 class PauliSum:
-    """An error in the form of a superposition of Pauli strings.
-    
-    Instance attributes:
-    * `terms` the Pauli strings that make up the superposition,
-    in the form of a map from each unsigned Pauli string to its unnormalized amplitude.
-    Allowed characters in each Pauli string are `'_', 'X', 'Y', 'Z'`.
-    * `denominator_squared` the divisor of each amplitude, squared.
-    """
+    """An error in the form of a superposition of Pauli strings."""
 
     def __init__(
             self,
             terms: None | dict[str, complex] = None,
             denominator_squared: None | float = None,
     ):
-        """Input:
-        * `terms` a map from each unsigned Pauli string to its unnormalized amplitude.
-        Allowed characters in each Pauli string are `'_', 'X', 'Y', 'Z'`.
-        If not specified,
-        the Pauli sum is assumed to be zero.
-        * `denominator_squared` the divisor of each amplitude, squared.
-        If not specified,
-        the Pauli sum is automatically normalized to 1.
+        """
+        :param terms: A map from each unsigned Pauli string to its unnormalized amplitude.
+            Allowed characters in each Pauli string are `'_', 'X', 'Y', 'Z'`.
+            If not specified,
+            the Pauli sum is assumed to be zero.
+        :param denominator_squared: The divisor of each amplitude, squared.
+            If not specified,
+            the Pauli sum is automatically normalized to 1.
         """
         self.terms: defaultdict[str, complex] = defaultdict(
             complex, {} if terms is None else terms)
+        """The Pauli strings that make up the superposition,
+        in the form of a map from each unsigned Pauli string to its unnormalized amplitude.
+        Allowed characters in each Pauli string are `'_', 'X', 'Y', 'Z'`.
+        """
         if denominator_squared is None:
             self.denominator_squared: float = sum(
                 abs(amplitude)**2 for amplitude in self.terms.values()
             ) if self.terms else 1
+            """The divisor of each amplitude, squared."""
         else:
             self.denominator_squared = denominator_squared
 
@@ -189,8 +185,7 @@ class PauliSum:
     def postselect_from_stabilizers(self, stabilizer_generators: dict[str, tuple[stim.PauliString, ...]]):
         """Kill all terms that do not commute with the stabilizers.
         
-        Input:
-        * `stabilizer_generators` the generators of the stabilizer group.
+        :param stabilizer_generators: The generators of the stabilizer group.
 
         Side effect:
         * `self.terms` is modified to only include terms that commute with all stabilizers.
@@ -226,12 +221,10 @@ class PauliSum:
         * `self.terms` contains only terms that commute with all stabilizers
         i.e. `self.postselect_from_stabilizers` has been called.
         
-        Input:
-        * `logical_x` a Pauli string representing a logical X operator.
-        * `logical_z` ditto for Z.
+        :param logical_x: A Pauli string representing a logical X operator.
+        :param logical_z: Ditto for Z.
 
-        Output:
-        * A 4-vector of normalized amplitudes for the I, X, Y, Z logical classes in the Pauli sum.
+        :return: A 4-vector of normalized amplitudes for the I, X, Y, Z logical classes in the Pauli sum.
         """
         amplitudes = np.zeros(4, dtype=np.complex128)
         for term, amplitude in self.terms.items():
@@ -290,15 +283,11 @@ and form a basis in the subspace spanned by (X, Y).
 
 
 class LogicalVector:
-    """A vector of amplitudes for each logical class.
-    
-    Instance attributes:
-    * `amplitudes` a 4-vector of normalized amplitudes
-    for the I, X, Y, Z logical classes respectively.
-    """
+    """A vector of amplitudes for each logical class."""
 
     def __init__(self, amplitudes: npt.NDArray[np.complex128]):
         self.amplitudes = amplitudes
+        """A 4-vector of normalized amplitudes for the I, X, Y, Z logical classes respectively."""
 
     def __str__(self):
         return str(self.amplitudes)
@@ -316,13 +305,11 @@ class LogicalVector:
     def probability_of(self, sector: Literal['I', 'X', 'Y', 'Z']):
         """Return the probability of a given logical sector.
 
-        Input:
-        * `sector` the logical sector to get the probability of.
+        :param sector: The logical sector to get the probability of.
 
-        Output:
-        * The probability the logical vector leads to that sector.
-        This is not normalized by the probability mass,
-        and is a real number in the range [0, 1].
+        :return: The probability the logical vector leads to that sector.
+            This is not normalized by the probability mass,
+            and is a real number in the range [0, 1].
         """
         index = {'I': 0, 'X': 1, 'Y': 2, 'Z': 3}[sector]
         amplitude: complex = self.amplitudes[index]
@@ -337,9 +324,8 @@ class LogicalVector:
         
         E.g. if the logical state is T, use the fact that H_XY stabilizes the state.
         
-        Input:
-        * `logical_state` the state this logical vector acts on.
-        * `round_decimals` the number of decimals to round all amplitudes to after transfer.
+        :param logical_state: The state this logical vector acts on.
+        :param round_decimals: The number of decimals to round all amplitudes to after transfer.
 
         Side effect:
         * Transfer all X and Y amplitude in `self.amplitudes` to I and Z amplitude.

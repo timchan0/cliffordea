@@ -25,15 +25,14 @@ def uniformly_depolarize(
 
     Only the qubits that are acted upon at least once are subject to depolarization.
 
-    Input:
-    * `noiseless_circuit` a stim.Circuit without noise.
-    * `noise_level` a float in [0, 1].
-    * `noisy_timeslices` an optional iterable of timeslice indices to apply noise to.
-    If unspecified, noise is applied to all timeslices, *except the first and last*.
-    * `system_qubit_indices` an optional set of qubit indices to be considered system qubits.
-    If unspecified, all qubits acted upon at least once in the circuit are considered system qubits.
-    * `immune_qubit_indices` an optional set of qubit indices to be considered immune to noise,
-    even if they are operated on.
+    :param noiseless_circuit: A stim.Circuit without noise.
+    :param noise_level: A float in [0, 1].
+    :param noisy_timeslices: An optional iterable of timeslice indices to apply noise to.
+        If unspecified, noise is applied to all timeslices, *except the first and last*.
+    :param system_qubit_indices: An optional set of qubit indices to be considered system qubits.
+        If unspecified, all qubits acted upon at least once in the circuit are considered system qubits.
+    :param immune_qubit_indices: An optional set of qubit indices to be considered immune to noise,
+        even if they are operated on.
     """
     if noisy_timeslices is None:
         noisy_timeslices = range(1, noiseless_circuit.num_ticks)

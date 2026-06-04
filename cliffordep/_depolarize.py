@@ -18,14 +18,12 @@ def depolarize_circuit_slice(
 ):
     """Add noise to a circuit slice by inserting depolarizing errors.
 
-    Input:
-    * `circuit_slice` a stim.Circuit object representing a single timeslice
-    i.e. contains no TICKs.
-    * `qubits` which qubits to insert errors on.
-    * `probability` the probability of the error.
+    :param circuit_slice: A stim.Circuit object representing a single timeslice
+        i.e. contains no TICKs.
+    :param qubits: Which qubits to insert errors on.
+    :param probability: The probability of the error.
 
-    Output:
-    * The circuit slice with depolarizing errors inserted after all operations.
+    :return: The circuit slice with depolarizing errors inserted after all operations.
     """
     unaccounted_for: set[int] = set(qubits)
     for instruction in circuit_slice:
@@ -45,14 +43,12 @@ def depolarize_circuit(
 ):
     """Add noise to a circuit by inserting depolarizing errors.
     
-    Input:
-    * `circuit` a stim.Circuit object.
-    * `timeslices` which timeslices to insert errors after.
-    * `qubits` which qubits to insert errors on.
-    * `probability` the probability of the error.
+    :param circuit: A stim.Circuit object.
+    :param timeslices: Which timeslices to insert errors after.
+    :param qubits: Which qubits to insert errors on.
+    :param probability: The probability of the error.
 
-    Output:
-    * The circuit with depolarizing errors after each specified timeslice.
+    :return: The circuit with depolarizing errors after each specified timeslice.
     """
     if timeslices is None:
         timeslices = range(circuit.num_ticks + 1)

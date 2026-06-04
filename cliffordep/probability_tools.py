@@ -4,12 +4,10 @@ from typing import Literal
 def parity_probability(parity: Literal[0, 1], probabilities: Iterable[float]):
     """Calculate the probability of an odd or even number of events occurring.
     
-    Input:
-    * `parity` whether to calculate the probability of an even or odd number of events.
-    * `probabilities` a sequence of probabilities of independent events.
+    :param parity: Whether to calculate the probability of an even or odd number of events.
+    :param probabilities: A sequence of probabilities of independent events.
 
-    Output:
-    * The probability the number of events occurring matches parity.
+    :return: The probability the number of events occurring matches parity.
     """
     # TODO: test against decay factor method
     prob = 1 - parity

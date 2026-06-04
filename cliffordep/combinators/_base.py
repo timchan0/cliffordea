@@ -9,11 +9,7 @@ import stim
 
 
 class Combinator(abc.ABC):
-    """Class to find all fault configurations that are undetectable i.e. lead to trivial syndrome.
-
-    Instance attributes:
-    * `circuit` the noisy circuit to analyze.
-    """
+    """Class to find all fault configurations that are undetectable i.e. lead to trivial syndrome."""
 
     @abc.abstractmethod
     def __init__(
@@ -21,9 +17,9 @@ class Combinator(abc.ABC):
             noisy_circuit: stim.Circuit,
             print_progress: bool = False,
     ):
-        """Input:
-        * `noisy_circuit` the stim circuit to analyze.
-        * `print_progress` whether to print progress.
+        """
+        :param noisy_circuit: The stim circuit to analyze.
+        :param print_progress: Whether to print progress.
         """
 
 
@@ -40,15 +36,14 @@ class BaseExclusiveCombinator(Combinator):
     ):
         """Find all combinations of faults up to `max_degree` that have trivial syndrome.
 
-        Input:
-        * `max_degree` the maximum power of probability to consider.
-        * `print_progress` whether to print progress.
+        :param max_degree: The maximum power of probability to consider.
+        :param print_progress: Whether to print progress.
 
-        Output:
-        * A list whose kth entry is a map
-        from each effect to a counter of denominators.
-        Each denominator divides (noise level)^k to equal
-        the probability an instance of that undetected combination of k faults occurs.
+        :return configurations:
+            A list whose kth entry is a map
+            from each effect to a counter of denominators.
+            Each denominator divides (noise level)^k to equal
+            the probability an instance of that undetected combination of k faults occurs.
         """
         return [self._get_undetected_configurations_for_length(
             length, print_progress) for length in range(max_degree + 1)]
@@ -63,10 +58,9 @@ class BaseExclusiveCombinator(Combinator):
     ) -> float:
         """Calculate the logical error rate per kept shot for a given noise level.
 
-        Input:
-        * `all_string_leads` the output of `get_kept_strings`.
-        * `noise_level` the noise level to analyze.
-        * `print_progress` whether to print progress.
+        :param all_string_leads: The output of `get_kept_strings`.
+        :param noise_level: The noise level to analyze.
+        :param print_progress: Whether to print progress.
         """
         p_odds = noise_level / (1 - noise_level)
         identity_odds, error_odds = 0, 0
@@ -94,14 +88,12 @@ class BaseExclusiveCombinator(Combinator):
 
         Helper for `self.get_undetected_configurations()`.
 
-        Input:
-        * `length` the length of combinations to find.
-        * `print_progress` whether to print progress.
+        :param length: The length of combinations to find.
+        :param print_progress: Whether to print progress.
 
-        Output:
-        * a map from each effect to a counter of denominators.
-        Each denominator divides (noise level)^length to equal
-        the probability an instance of that undetected combination occurs.
+        :return configurations: a map from each effect to a counter of denominators.
+            Each denominator divides (noise level)^length to equal
+            the probability an instance of that undetected combination occurs.
         """
 
 

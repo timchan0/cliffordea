@@ -14,13 +14,11 @@ from cliffordep.combinators._base import BaseExclusiveCombinator, get_trivial_sy
 def error_event_count(process_name: str) -> int:
     """Return the number of error events an error process can make.
 
-    Input:
-    * `process_name` the name of the Stim gate that gives rise to faults.
-    This can be 'DEPOLARIZE1', 'DEPOLARIZE2', 'X_ERROR', 'Y_ERROR', 'Z_ERROR', 'MX', 'MY', 'MZ'.
+    :param process_name: The name of the Stim gate that gives rise to faults.
+        This can be 'DEPOLARIZE1', 'DEPOLARIZE2', 'X_ERROR', 'Y_ERROR', 'Z_ERROR', 'MX', 'MY', 'MZ'.
 
-    Output:
-    * The number of error events the error process can make.
-    This indicates the noise strength divided by the probability of each error event.
+    :return: The number of error events the error process can make.
+        This indicates the noise strength divided by the probability of each error event.
     """
     if process_name in {'X_ERROR', 'Y_ERROR', 'Z_ERROR', 'MX', 'MY', 'MZ'}:
         return 1
@@ -42,10 +40,6 @@ class FaultCombinatorExclusive(BaseExclusiveCombinator):
     so for each trivial syndrome combination,
     this combinator finds all error location combinations
     that correspond to this syndrome combination.
-
-    Additional instance attributes:
-    * `basis` a map from each syndrome to an `EffectMap` containing at its lowest level
-    faults that cause that syndrome.
     """
 
     def __init__(self, noisy_circuit, print_progress=False):
@@ -59,9 +53,13 @@ class FaultCombinatorExclusive(BaseExclusiveCombinator):
                 tuple_syndrome = tuple(syndrome)
                 _basis[tuple_syndrome][effect][error_location] += 1
         self.basis = {syndrome: dict(effect_map) for syndrome, effect_map in _basis.items()}
+        """A map from each syndrome to an `EffectMap` containing at its lowest level
+        faults that cause that syndrome.
+        """
         if print_progress:
             print(f"Finished enumerating all faults. Found {self.syndrome_count} distinct syndromes.")
         self.circuit = _circuit
+        """The noisy circuit to analyze."""
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.circuit})"
@@ -109,17 +107,16 @@ class FaultCombinatorExclusive(BaseExclusiveCombinator):
     def _syndrome_counter_to_options(self, syndrome_counter: Counter[tuple[bool, ...]]):
         """Get valid fault combination segments for each syndrome based on the counts in `syndrome_counter`.
 
-        Input:
-        * `syndrome_counter` dictates for each syndrome
-        how many error locations in `self.basis[syndrome]` should appear in the fault combination.
-        E.g. `{syndrome1: 2, syndrome2: 1}`.
+        :param syndrome_counter: A counter dictating for each syndrome
+            how many error locations in `self.basis[syndrome]` should appear in the fault combination.
+            E.g. `{syndrome1: 2, syndrome2: 1}`.
 
-        Output:
-        * `options` a list of options, one for each item in `syndrome_counter`
-        e.g. `[option1, option2]`.
-        Each option is a map from effect to a counter of valid segments with that effect.
-        e.g. `{effect1: {segment1: 3, segment2: 1}, effect2: {segment3: 5}}`
-        where e.g. `segment1 = {location1, location2}`.
+        :return options:
+            A list of options, one for each item in `syndrome_counter`
+            e.g. `[option1, option2]`.
+            Each option is a map from effect to a counter of valid segments with that effect.
+            e.g. `{effect1: {segment1: 3, segment2: 1}, effect2: {segment3: 5}}`
+            where e.g. `segment1 = {location1, location2}`.
         """
         options: list[dict[str, Counter[frozenset[ErrorLocation]]]] = []
         for syndrome, count in syndrome_counter.items():
@@ -135,15 +132,14 @@ class FaultCombinatorExclusive(BaseExclusiveCombinator):
     ):
         """Get a map from effect to the number of valid fault combinations with that resultant effect.
 
-        Input:
-        * `syndrome` defines the set of faults to take combinations from.
-        * `length` the length of valid fault combinations to consider.
+        :param syndrome: Defines the set of faults to take combinations from.
+        :param length: The length of valid fault combinations to consider.
 
-        Output:
-        * a map from effect to a counter of error location combinations.
-        Each error location combination is a set of unique error locations.
-        Each count is the number of error event combinations from that error location combination
-        with that resultant effect.
+        :return:
+            A map from effect to a counter of error location combinations.
+            Each error location combination is a set of unique error locations.
+            Each count is the number of error event combinations from that error location combination
+            with that resultant effect.
         """
         result: defaultdict[str, Counter[frozenset[ErrorLocation]]] = defaultdict(Counter)
         effect_map = self.basis[syndrome]
@@ -170,20 +166,19 @@ class FaultCombinatorExclusive(BaseExclusiveCombinator):
     def _effect_counter_to_options(effect_map: EffectMap, counter: Counter[str]):
         """Get error location combinations for each effect based on the counts in `counter`.
 
-        Input:
-        * `effect_map` maps each effect to a map from each error location
-        to the number of its faults that cause that syndrome and effect.
-        E.g. `{effect1: {location1: 1, location2: 1, source3: 2}, effect2: {source4: 1}}`.
-        * `counter` dictates for each effect and source map in `effect_map`,
-        how many sources in source map should appear in the fault combination.
-        E.g. `{effect1: 2, effect2: 1}`.
+        :param effect_map: A map from each effect to a map from each error location
+            to the number of its faults that cause that syndrome and effect.
+            E.g. `{effect1: {location1: 1, location2: 1, source3: 2}, effect2: {source4: 1}}`.
+        :param counter: A counter dictating for each effect and source map in `effect_map`,
+            how many sources in source map should appear in the fault combination.
+            E.g. `{effect1: 2, effect2: 1}`.
 
-        Output:
-        * `options` a list of options, one for each item in `counter`
-        e.g. `[option1, option2]`.
-        Each option is an iterable of source combinations
-        e.g. `[((location1, 1), (location2, 1)), ((location1, 1), (source3, 2)), ((location2, 1), (source3, 2))]`.
-        Each source combination is a combination of `count` distinct error locations in `effect_map[effect]`.
+        :return options:
+            A list of options, one for each item in `counter`
+            e.g. `[option1, option2]`.
+            Each option is an iterable of source combinations
+            e.g. `[((location1, 1), (location2, 1)), ((location1, 1), (source3, 2)), ((location2, 1), (source3, 2))]`.
+            Each source combination is a combination of `count` distinct error locations in `effect_map[effect]`.
         """
         options: list[itertools.combinations[tuple[tuple[ErrorLocation, int], ...]]] = []
         for effect, count in counter.items():
@@ -205,13 +200,12 @@ class FaultCombinatorExclusive(BaseExclusiveCombinator):
     ):
         """Update `valid_segments` with a candidate segment of an undetected combination of faults.
 
-        Input:
-        * `valid_segments` a counter of valid segments.
-        Each (valid) segment is a frozen set of (unique) error locations.
-        Each count is the number of fault combinations from that error location combination
-        that can be used as part of the undetected combination.
-        * `candidate` the segment to consider
-        e.g. `[(location1, 1), (location2, 1), (source3, 2)]`.
+        :param valid_segments: A counter of valid segments.
+            Each (valid) segment is a frozen set of (unique) error locations.
+            Each count is the number of fault combinations from that error location combination
+            that can be used as part of the undetected combination.
+        :param candidate: The segment to consider
+            e.g. `[(location1, 1), (location2, 1), (source3, 2)]`.
 
         Side effect:
         * Update `valid_segments` with `candidate` if it is valid i.e. comprises distinct error locations.
@@ -234,18 +228,19 @@ class FaultCombinatorExclusive(BaseExclusiveCombinator):
     ):
         """Update `undetected_configurations` with a candidate undetected combination of faults.
 
-        Input:
-        * `undetected_configurations` the output of `self._get_undetected_configurations_for_length`.
-        * `effect` the resultant (unsigned) Pauli string of the candidate combination.
-        * `candidate` an iterable of segments (whose total length equals that of the candidate combination).
-        Each segment is a pair containing:
-            - a frozenset of error locations,
-            - the number of fault combinations that can be used as part of the undetected combination.
-        E.g. `((frozenset({location1, location2}), 1), (frozenset({source3}), 2))`
-        represents a candidate combination
-        of faults that has the resultant effect `effect` and is made up of two segments
-        where the first segment is made up of two distinct error locations and the second segment is made
-        up of one error location.
+        :param undetected_configurations: The output of `self._get_undetected_configurations_for_length`.
+        :param effect: The resultant (unsigned) Pauli string of the candidate combination.
+        :param candidate: An iterable of segments (whose total length equals that of the candidate combination).
+            Each segment is a pair containing:
+
+                * a frozenset of error locations,
+                * the number of fault combinations that can be used as part of the undetected combination.
+
+            E.g. `((frozenset({location1, location2}), 1), (frozenset({source3}), 2))`
+            represents a candidate combination
+            of faults that has the resultant effect `effect` and is made up of two segments
+            where the first segment is made up of two distinct error locations and the second segment is made
+            up of one error location.
 
         Side effect:
         * Update `undetected_configurations` with the undetected combination of faults if it is valid

@@ -19,11 +19,6 @@ class FaultCombinator(Combinator):
     where all faults are independent and effects are pure Pauli sums.
 
     Extends `Combinator`.
-
-    Instance attributes:
-    * `circuit` the noisy circuit to analyze.
-    * `basis` a map from each syndrome to another map from each effect to a fault index.
-    * `index_to_bag` a map from each fault index to its fault bag.
     """
     
     def __init__(self, noisy_circuit, print_progress=False):
@@ -39,11 +34,14 @@ class FaultCombinator(Combinator):
                 index = _basis[tuple(syndrome)].setdefault(effect, len(_index_to_bag))
                 _index_to_bag[index][process_class] += 1
         self.basis: dict[tuple[bool, ...], dict[str, int]] = dict(_basis) # type: ignore
+        """A map from each syndrome to another map from each effect to a fault index."""
         self.index_to_bag: dict[int, FaultBag] = { # type: ignore
             index: tuple(bag) for index, bag in _index_to_bag.items()}
+        """A map from each fault index to its fault bag."""
         if print_progress:
             print(f"Finished enumerating all faults. {str(self)}")
         self.circuit = _circuit
+        """The noisy circuit to analyze."""
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.circuit})"
@@ -60,10 +58,9 @@ class FaultCombinator(Combinator):
     ) -> float:
         """Calculate the logical error rate per kept shot for a given noise level.
 
-        Input:
-        * `all_string_leads` the output of `get_kept_strings`.
-        * `noise_level` the noise level to analyze.
-        * `print_progress` whether to print progress.
+        :param all_string_leads: The output of `get_kept_strings`.
+        :param noise_level: The noise level to analyze.
+        :param print_progress: Whether to print progress.
         """
         index_to_odds = self.get_index_to_odds(noise_level)
         identity_odds, error_odds = 0, 0
@@ -98,13 +95,11 @@ class FaultCombinator(Combinator):
     ) -> list[dict[str, set[frozenset[int]]]]:
         """Find all combinations of faults up to `max_order` that have trivial syndrome.
 
-        Input:
-        * `max_order` the maximum order of probability to consider.
-        * `print_progress` whether to print progress.
+        :param max_order: The maximum order of probability to consider.
+        :param print_progress: Whether to print progress.
 
-        Output:
-        * A list whose kth entry is a map
-        from each effect to a set of frozen sets of fault indices.
+        :return configurations: A list whose kth entry is a map
+            from each effect to a set of frozen sets of fault indices.
         """
         if print_progress:
             print("Found undetected configurations of length...")
@@ -134,12 +129,10 @@ class FaultCombinator(Combinator):
     def index_to_syndrome_and_effect(self, index: int) -> tuple[tuple[bool, ...], str]:
         """Get the syndrome and effect corresponding to a fault index.
 
-        Input:
-        * `index` the fault index.
+        :param index: The fault index.
 
-        Output:
-        * `syndrome` the syndrome of the fault.
-        * `effect` the effect of the fault.
+        :return syndrome: The syndrome of the fault.
+        :return effect: The effect of the fault.
         """
         for syndrome, effect_dict in self.basis.items():
             for effect, effect_index in effect_dict.items():
@@ -166,12 +159,11 @@ class FaultCombinator(Combinator):
     ):
         """Summarize contribution of each degree to overall probability.
         
-        Input:
-        * `all_kept_strings` a map from cultivated state to an output of `get_kept_strings`.
+        :param all_kept_strings: A map from cultivated state to an output of `get_kept_strings`.
 
-        Output:
-        * A DataFrame whose rows are of the form (cultivated_state, degree)
-        whose columns are [identity_entropy, error_entropy, conditional_probability].
+        :return summary:
+            A DataFrame whose rows are of the form (cultivated_state, degree)
+            whose columns are [identity_entropy, error_entropy, conditional_probability].
         """
         dict_: dict[tuple[str, int], tuple[float, float]] = {}
         for state, strings_for_state in all_kept_strings.items():
@@ -204,19 +196,17 @@ class FaultCombinator(Combinator):
     ):
         """Visualize multiple fault configurations one by one.
         
-        Input:
-        * `configurations` a sequence of fault configurations.
-        Each fault configuration is a frozen set of fault indices.
-        * `probability_increment` the increment in error probability for each fault in the configuration.
-        I.e. all error events of the kth fault have probability `k*probability_increment`.
-        This is used to distinguish error events belonging to different faults.
-        * `diagram_type` the type of diagram to produce. See `stim.Circuit.diagram()` for options.
-        * `**kwargs_for_diagram` other keyword arguments for `stim.Circuit.diagram()`.
+        :param configurations: A sequence of fault configurations.
+            Each fault configuration is a frozen set of fault indices.
+        :param probability_increment: The increment in error probability for each fault in the configuration.
+            I.e. all error events of the kth fault have probability `k*probability_increment`.
+            This is used to distinguish error events belonging to different faults.
+        :param diagram_type: The type of diagram to produce. See `stim.Circuit.diagram()` for options.
+        :param **kwargs_for_diagram: Other keyword arguments for `stim.Circuit.diagram()`.
 
-        Output:
-        * An interactive widget that displays one configuration at a time.
-        For each configuration, shows a diagram of the circuit where each fault in the configuration
-        is represented by all the error events that correspond to it.
+        :return: An interactive widget that displays one configuration at a time.
+            For each configuration, shows a diagram of the circuit where each fault in the configuration
+            is represented by all the error events that correspond to it.
         """
         from ipywidgets import interact, BoundedIntText
         @interact(configuration=BoundedIntText(
@@ -241,12 +231,11 @@ class FaultCombinator(Combinator):
     def _bag_to_entropy(bag: FaultBag) -> float:
         """Convert a fault bag to its entropy contribution.
         
-        Input:
-        * `bag` a `FaultBag`.
+        :param bag: A `FaultBag`.
 
-        Output:
-        * The probability of the fault bag in terms of the noise level,
-        as the noise level tends to zero.
+        :return entropy:
+            The probability of the fault bag in terms of the noise level,
+            as the noise level tends to zero.
         """
         a, b, c = bag
         return a + b/3 + c/15
@@ -256,15 +245,15 @@ class FaultCombinator(Combinator):
     def _classify(process_name: str) -> int:
         """Classify an error process by how many error events it can make.
 
-        Input:
-        * `process_name` the name of the Stim gate that gives rise to error events.
-        This can be 'DEPOLARIZE1', 'DEPOLARIZE2', 'X_ERROR', 'Y_ERROR', 'Z_ERROR', 'MX', 'MY', 'MZ'.
+        :param process_name: The name of the Stim gate that gives rise to error events.
+            This can be 'DEPOLARIZE1', 'DEPOLARIZE2', 'X_ERROR', 'Y_ERROR', 'Z_ERROR', 'MX', 'MY', 'MZ'.
 
-        Output:
-        * An integer indicating the type of error process:
-            * 0 if it makes only 1 error event (X_ERROR, Y_ERROR, Z_ERROR, MX, MY, MZ).
-            * 1 if it makes 3 error events (DEPOLARIZE1).
-            * 2 if it makes 15 error events (DEPOLARIZE2).
+        :return:
+            An integer indicating the type of error process:
+
+                * 0 if it makes only 1 error event (X_ERROR, Y_ERROR, Z_ERROR, MX, MY, MZ).
+                * 1 if it makes 3 error events (DEPOLARIZE1).
+                * 2 if it makes 15 error events (DEPOLARIZE2).
         """
         if process_name in {'X_ERROR', 'Y_ERROR', 'Z_ERROR', 'MX', 'MY', 'MZ'}:
             return 0
@@ -283,12 +272,13 @@ class FaultCombinator(Combinator):
     ) -> float:
         """Return the probability of the independent events of an error location of class `class_`.
 
-        Input:
-        * `class_` the class of the error location.
-        It can be 0, 1, or 2.
-        This depends on the number of independent events
-        that sequentially compose to equal the error location.
-        * `noise_level` a float in [0, 1].
+        :param class_: the class of the error location.
+            It can be 0, 1, or 2.
+            This depends on the number of independent events
+            that sequentially compose to equal the error location.
+        :param noise_level: a float in [0, 1].
+
+        :return: The probability of the independent events.
         """
         p = noise_level
         if class_ == 0:
@@ -308,14 +298,13 @@ class FaultCombinator(Combinator):
     ):
         """Get a map from effect to the configurations with that resultant effect.
         
-        Input:
-        * `syndrome` defines the set of faults to take combinations from.
-        * `length` the length of configurations to consider.
+        :param syndrome: Defines the set of faults to take combinations from.
+        :param length: The length of configurations to consider.
 
-        Output:
-        * a map from effect to a set of configurations.
-        Each configuration is a frozen set of fault indices
-        with that resultant effect.
+        :return:
+            A map from effect to a set of configurations.
+            Each configuration is a frozen set of fault indices
+            with that resultant effect.
         """
         result: defaultdict[str, set[frozenset[int]]] = defaultdict(set)
         fault_set = self.basis[syndrome].items()
@@ -339,12 +328,10 @@ class FaultCombinator(Combinator):
 
         Helper for `self.get_undetected_configurations()`.
 
-        Input:
-        * `length` the length of combinations to find.
-        * `print_progress` whether to print progress.
+        :param length: The length of combinations to find.
+        :param print_progress: Whether to print progress.
 
-        Output:
-        * a map from each effect to a set of frozen sets of fault indices.
+        :return: A map from each effect to a set of frozen sets of fault indices.
         """
         result: defaultdict[str, set[frozenset[int]]] = defaultdict(set)
         if length == 0:
@@ -374,18 +361,17 @@ class FaultCombinator(Combinator):
     ) -> list[dict[str, set[frozenset[int]]]]:
         """Get configuration segments for each syndrome based on the counts in `syndrome_counter`.
         
-        Input:
-        * `syndrome_counter` dictates for each syndrome
-        how many faults in `self.basis[syndrome]` should appear in the configuration.
-        E.g. `{syndrome1: 2, syndrome2: 1}`.
+        :param syndrome_counter: A counter dictating for each syndrome
+            how many faults in `self.basis[syndrome]` should appear in the configuration.
+            E.g. `{syndrome1: 2, syndrome2: 1}`.
 
-        Output:
-        * `options` a list of options, one for each item in `syndrome_counter`
-        e.g. `[option1, option2]`.
-        Each option is a map from effect to a set of frozen sets
-        of fault indices whose combination produces that effect.
-        e.g. `{effect1: {frozenset1, frozenset2}, effect2: {frozenset3}}`
-        where e.g. `frozenset1 = {1, 2}`.
+        :return options:
+            A list of options, one for each item in `syndrome_counter`
+            e.g. `[option1, option2]`.
+            Each option is a map from effect to a set of frozen sets
+            of fault indices whose combination produces that effect.
+            e.g. `{effect1: {frozenset1, frozenset2}, effect2: {frozenset3}}`
+            where e.g. `frozenset1 = {1, 2}`.
         """
         options: list[dict[str, set[frozenset[int]]]] = []
         for syndrome, count in syndrome_counter.items():
@@ -400,12 +386,13 @@ def _sum_odds(
     ) -> tuple[float, float]:
     """Sum the odds of all configurations in `vector_combo_pairs`.
 
-    Input:
-    * `logical_triples` an iterable of triples, each containing:
-        - an acceptance probability,
-        - a logical fidelity,
-        - a set of frozen sets of fault indices that defines the combination.
-    * `index_to_odds` a map from each fault index to the odds of it flipping.
+    :param logical_triples:
+        An iterable of triples, each containing:
+
+            * an acceptance probability,
+            * a logical fidelity,
+            * a set of frozen sets of fault indices that defines the combination.
+    :param index_to_odds: A map from each fault index to the odds of it flipping.
     """
     i_odds, e_odds = 0, 0
     for accept_probability, logical_fidelity, set_of_configurations in logical_triples:

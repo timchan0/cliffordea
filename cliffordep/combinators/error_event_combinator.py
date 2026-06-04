@@ -23,12 +23,6 @@ class ErrorEventCombinator(BaseExclusiveCombinator):
     Finds undetected fault combinations by brute force
     i.e. iterating through all fault combinations
     and recording which ones have trivial syndrome.
-    
-    Additional instance attributes:
-    * `basis` a map from each error location to another map
-    from each of the faults it can produce to a pair containing:
-        - `syndrome` a tuple of booleans representing the syndrome of the fault.
-        - `effect` a string representing the resultant Pauli operator of the fault.
     """
 
     def __init__(self, noisy_circuit, print_progress=False):
@@ -40,9 +34,16 @@ class ErrorEventCombinator(BaseExclusiveCombinator):
                 syndrome, effect = _circuit.get_syndrome_and_effect(error_event)
                 _basis[source][error_event] = (syndrome, effect)
         self.basis = dict(_basis)
+        """A map from each error location to another map
+        from each of the faults it can produce to a pair containing:
+
+            * `syndrome` a tuple of booleans representing the syndrome of the fault.
+            * `effect` a string representing the resultant Pauli operator of the fault.
+        """
         if print_progress:
             print(f"Finished enumerating all faults.")
         self.circuit = _circuit
+        """The noisy circuit to analyze."""
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.circuit})"
@@ -82,11 +83,9 @@ class ErrorEventCombinator(BaseExclusiveCombinator):
     def _any_defects(syndromes: Iterable[npt.NDArray[np.bool_]]) -> bool:
         """Return if any defects exist in the elementwise XOR of an iterable of syndromes.
         
-        Input:
-        * `syndromes` a nonempty iterable of syndromes all of equal length.
+        :param syndromes: A nonempty iterable of syndromes all of equal length.
 
-        Output:
-        * whether any defects exist in their elementwise XOR.
+        :return: Whether any defects exist in their elementwise XOR.
         """
         sum_all: npt.NDArray[np.signedinteger] = sum(syndromes) % 2 # type: ignore
         return any(sum_all)

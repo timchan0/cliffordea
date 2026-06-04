@@ -10,18 +10,16 @@ from cliffordep.noiseless_circuit_tools import split_by_ticks, compose_slices
 def _nest_circuit_error_locations(explained_errors: list[stim.ExplainedError]):
     """Extract the circuit error locations from a list of explained errors.
     
-    Input:
-    * `explained_errors` a list of stim.ExplainedError objects.
-    Each explained error represents a variable node in the Tanner graph
-    i.e. represents a set of detectors that flip due to that error.
-    It may have multiple circuit error locations.
-    Each circuit error location represents a single noise gate in the circuit.
-    For more detail see the docstrings of `stim.ExplainedError` and `stim.CircuitErrorLocation`.
+    :param explained_errors: A list of stim.ExplainedError objects.
+        Each explained error represents a variable node in the Tanner graph
+        i.e. represents a set of detectors that flip due to that error.
+        It may have multiple circuit error locations.
+        Each circuit error location represents a single noise gate in the circuit.
+        For more detail see the docstrings of `stim.ExplainedError` and `stim.CircuitErrorLocation`.
 
-    Output:
-    * `nest` a list of lists of stim.CircuitErrorLocation
-    objects, where each list corresponds to an explained error
-    and contains all circuit error locations for that explained error.
+    :return nest: A list of lists of stim.CircuitErrorLocation
+        objects, where each list corresponds to an explained error
+        and contains all circuit error locations for that explained error.
     """
     nest: list[list[stim.CircuitErrorLocation]] = []
     for explained_error in explained_errors:
@@ -36,13 +34,11 @@ def insert_circuit_error_locations(
 ):
     """Insert circuit error locations into the circuit.
     
-    Input:
-    * `circuit` a stim.Circuit object.
-    * `circuit_error_locations` a list of stim.CircuitErrorLocation objects.
-    * `probability` the probability of the error.
+    :param circuit: A stim.Circuit object.
+    :param circuit_error_locations: A list of stim.CircuitErrorLocation objects.
+    :param probability: The probability of the error.
 
-    Output:
-    * The circuit with the errors inserted at the specified locations.
+    :return: The circuit with the errors inserted at the specified locations.
     """
     circuits = split_by_ticks(circuit)
     for error_location in circuit_error_locations:
@@ -74,17 +70,15 @@ def insert_explained_errors(
     """Make a circuit with the error instance inserted,
     for each instance from the explained errors.
     
-    Input:
-    * `circuit` a stim.Circuit object.
-    * `explained_errors` a list of stim.ExplainedError objects.
-    Each explained error may have multiple circuit error locations.
-    * `probability` the probability of the error.
+    :param circuit: A stim.Circuit object.
+    :param explained_errors: A list of stim.ExplainedError objects.
+        Each explained error may have multiple circuit error locations.
+    :param probability: The probability of the error.
 
-    Output:
-    * `circuits` a list of stim.Circuit objects,
-    each with a different error instance inserted.
-    Each error instance corresponds to a different combination of
-    circuit error locations from the explained errors.
+    :return circuits: A list of stim.Circuit objects,
+        each with a different error instance inserted.
+        Each error instance corresponds to a different combination of
+        circuit error locations from the explained errors.
     """
     circuits: list[stim.Circuit] = []
     basis = _nest_circuit_error_locations(explained_errors)
