@@ -98,12 +98,10 @@ class LogicalAnalyzer(abc.ABC):
     def __init__(
             self,
             data_indices: tuple[int, ...],
-            stabilizer_generators: dict[str, tuple[stim.PauliString, ...]],
             logical_s: stim.Circuit,
     ) -> None:
         """
         :param data_indices: A tuple of integers representing the data qubit indices in ascending order.
-        :param stabilizer_generators: The generators of the stabilizer group restricted to data qubits.
         :param logical_s: A transversal implementation of the logical S gate,
             where indices are in terms of all the physical qubits.
         """
@@ -115,8 +113,6 @@ class LogicalAnalyzer(abc.ABC):
         self.Z_TENSOR_N = stim.PauliString('Z'*len(data_indices))
         """A Pauli string representing Z applied to all data qubits.
         Represents a logical Z operator."""
-        self.STABILIZER_GENERATORS = stabilizer_generators
-        """The generators of the stabilizer group restricted to data qubits."""
         
         _majority_indices: set[int] = set()
         for instruction in logical_s:
@@ -305,7 +301,7 @@ class TableauLogicalAnalyzer(LogicalAnalyzer):
             Without these shortcuts, the distance-5 cultivation analysis takes >7 minutes
             (I interrupted the analysis before it finished).
         """
-        super().__init__(data_indices, stabilizer_generators, logical_s)
+        super().__init__(data_indices, logical_s)
         self.LOGICAL_ZERO_GENERATORS = (
             *stabilizer_generators['X'],
             *stabilizer_generators['Z'],
@@ -313,6 +309,11 @@ class TableauLogicalAnalyzer(LogicalAnalyzer):
         )
         self.TABLEAU = stim.Tableau.from_stabilizers(self.LOGICAL_ZERO_GENERATORS)
         self.INVERSE_TABLEAU = self.TABLEAU.inverse()
+        self.UNENCODED_STABILIZER_GENERATORS = {
+            basis: tuple(self.INVERSE_TABLEAU(generator) for generator in generator_list)
+            for basis, generator_list in stabilizer_generators.items()
+        }
+        """The unencoded generators of the stabilizer group restricted to data qubits."""
         self._PROJECTOR_PRODUCT_TRACER = ProjectorProductTracer(
             mode=mode,
             use_packed=use_packed,
@@ -338,10 +339,9 @@ class _ProbabilityComputer(abc.ABC):
         _stabilizer_bsf_x: list[np.ndarray[tuple[int], np.dtype[np.bool_]]] = []
         _stabilizer_bsf_z: list[np.ndarray[tuple[int], np.dtype[np.bool_]]] = []
         _stabilizer_j_powers: list[Literal[0, 1, 2, 3]] = []
-        for generator_list in logical_analyzer.STABILIZER_GENERATORS.values():
+        for generator_list in logical_analyzer.UNENCODED_STABILIZER_GENERATORS.values():
             for generator in generator_list:
                 xs, zs = generator.to_numpy()
-                # xs, zs = self.INVERSE_TABLEAU(generator).to_numpy()
                 _stabilizer_bsf_x.append(xs)
                 _stabilizer_bsf_z.append(zs)
                 _stabilizer_j_powers.append(extract_j_power(generator))
@@ -377,19 +377,22 @@ class _ShortcutProbabilityComputer(_ProbabilityComputer):
     def get_accept_probability(self, before_transversal, after_transversal):
         analyzer = self.LOGICAL_ANALYZER
         # transform the Z stabilizers
-        for z_generator in analyzer.STABILIZER_GENERATORS['Z']:
-            if not z_generator.commutes(before_transversal):
+        # unencode the error (before transversal) by pushing through the inverse tableau
+        unencoded_before = analyzer.INVERSE_TABLEAU(before_transversal)
+        for z_generator in analyzer.UNENCODED_STABILIZER_GENERATORS['Z']:
+            if not z_generator.commutes(unencoded_before):
                 return 0
         # transform the X stabilizers
         px, pz, j_powers = self.STABILIZER_BSF_X.copy(), self.STABILIZER_BSF_Z.copy(), self.STABILIZER_J_POWERS.copy()
-        for x_generator in analyzer.STABILIZER_GENERATORS['X']:
-            transformed_generator = after_transversal(x_generator)
+        # unencode the error (after transversal) by pushing through the inverse tableau
+        unencoded_after = analyzer.INVERSE_TABLEAU * after_transversal * analyzer.TABLEAU
+        for x_generator in analyzer.UNENCODED_STABILIZER_GENERATORS['X']:
+            transformed_generator = unencoded_after(x_generator)
             if transformed_generator == x_generator:
                 continue
             if transformed_generator == -x_generator:
                 return 0
             xs, zs = transformed_generator.to_numpy()
-            # xs, zs = analyzer.INVERSE_TABLEAU(transformed_generator).to_numpy()
             px.append(xs)
             pz.append(zs)
             j_powers.append(extract_j_power(transformed_generator))
@@ -401,15 +404,16 @@ class _GeneralProbabilityComputer(_ProbabilityComputer):
 
     def get_accept_probability(self, before_transversal, after_transversal):
         analyzer = self.LOGICAL_ANALYZER
+        # unencode the error by pushing through the inverse tableau
+        unencoded_error = analyzer.INVERSE_TABLEAU * after_transversal * analyzer.TABLEAU
         # transform the stabilizers
         px, pz, j_powers = self.STABILIZER_BSF_X.copy(), self.STABILIZER_BSF_Z.copy(), self.STABILIZER_J_POWERS.copy()
-        for generators in analyzer.STABILIZER_GENERATORS.values():
+        for generators in analyzer.UNENCODED_STABILIZER_GENERATORS.values():
             for generator in generators:
-                transformed_generator = after_transversal(generator)
+                transformed_generator = unencoded_error(generator)
                 if transformed_generator == generator:
                     continue
                 xs, zs = transformed_generator.to_numpy()
-                # xs, zs = analyzer.INVERSE_TABLEAU(transformed_generator).to_numpy()
                 px.append(xs)
                 pz.append(zs)
                 j_powers.append(extract_j_power(transformed_generator))
@@ -419,6 +423,23 @@ class _GeneralProbabilityComputer(_ProbabilityComputer):
 
 class SuperpositionLogicalAnalyzer(LogicalAnalyzer):
     """Analyzes Clifford errors as superpositions of Paulis."""
+
+    def __init__(
+            self,
+            data_indices: tuple[int, ...],
+            stabilizer_generators: dict[str, tuple[stim.PauliString, ...]],
+            logical_s: stim.Circuit,
+    ) -> None:
+        """
+        :param data_indices: A tuple of integers representing the data qubit indices in ascending order.
+        :param stabilizer_generators: The generators of the stabilizer group restricted to data qubits.
+        :param logical_s: A transversal implementation of the logical S gate,
+            where indices are in terms of all the physical qubits.
+        """
+        super().__init__(data_indices, logical_s)
+        self.STABILIZER_GENERATORS = stabilizer_generators
+        """The generators of the stabilizer group restricted to data qubits."""
+        # TODO: flatten this attribute
 
     def analyze(self, cultivated_state, before_transversal):
         clifford = self.LOGICAL[cultivated_state].conjugate(before_transversal)
