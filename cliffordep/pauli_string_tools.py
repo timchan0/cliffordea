@@ -182,7 +182,7 @@ class PauliSum:
         self.denominator_squared = sum(abs(amplitude)**2 for amplitude in self.terms.values())
 
 
-    def postselect_from_stabilizers(self, stabilizer_generators: dict[str, tuple[stim.PauliString, ...]]):
+    def postselect_from_stabilizers(self, stabilizer_generators: tuple[stim.PauliString, ...]):
         """Kill all terms that do not commute with the stabilizers.
         
         :param stabilizer_generators: The generators of the stabilizer group.
@@ -195,8 +195,7 @@ class PauliSum:
             pauli_string = PauliString(term)
             if not all(
                 pauli_string.commutes(generator)
-                for generator_list in stabilizer_generators.values()
-                for generator in generator_list
+                for generator in stabilizer_generators
             ):
                 killed.add(term)
         for term in killed:

@@ -437,9 +437,9 @@ class SuperpositionLogicalAnalyzer(LogicalAnalyzer):
             where indices are in terms of all the physical qubits.
         """
         super().__init__(data_indices, logical_s)
-        self.STABILIZER_GENERATORS = stabilizer_generators
+        self.STABILIZER_GENERATORS = tuple(
+            g for list_ in stabilizer_generators.values() for g in list_)
         """The generators of the stabilizer group restricted to data qubits."""
-        # TODO: flatten this attribute
 
     def analyze(self, cultivated_state, before_transversal):
         clifford = self.LOGICAL[cultivated_state].conjugate(before_transversal)
