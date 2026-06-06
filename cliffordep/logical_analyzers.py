@@ -4,11 +4,9 @@ from collections.abc import Mapping, Iterable, Sequence
 import itertools
 from typing import Literal, overload, override
 
-import numpy as np
 import stim
 
 from cliffordep.pauli_string_tools import PUSH_THROUGH_MAP, PauliSum, tensor_paulis, split_sign
-from cliffordep.pauli_trace import ProjectorProductTracer
 from cliffordep.type_aliases import LogicalTriple
 
 
@@ -263,20 +261,6 @@ class LogicalAnalyzer(abc.ABC):
         return strings
 
 
-def extract_j_power(pauli_string: stim.PauliString) -> Literal[0, 1, 2, 3]:
-    """Extract the power of 1j from a Pauli string.
-    
-    :param pauli_string: A signed Pauli string P.
-    :return power: such that P = 1j^power [X string] [Z string].
-    """
-    xs, zs = pauli_string.to_numpy(bit_packed=True)
-    x_mask = int.from_bytes(xs.tobytes(), 'little')
-    z_mask = int.from_bytes(zs.tobytes(), 'little')
-    external = _SIGN_TO_J_POWER[pauli_string.sign]
-    internal = (x_mask & z_mask).bit_count()
-    return (external + internal) % 4 # type: ignore
-
-
 def _pauli_masks_and_j_power(pauli_string: stim.PauliString) -> tuple[int, int, int]:
     """Convert a Pauli string to integer X/Z masks and an i-power.
 
@@ -458,157 +442,6 @@ class CliffordLogicalAnalyzer(LogicalAnalyzer):
         x_mask, z_mask, j_power = _pauli_masks_and_j_power(pauli_string)
         outside_support = x_mask | (z_mask & self.unencoded_logical_mask)
         return outside_support, (x_mask, z_mask, j_power)
-
-
-class TableauLogicalAnalyzer(LogicalAnalyzer):
-    """Analyzes Clifford errors as Clifford gates."""
-
-    @override
-    def __init__(
-        self,
-        data_indices: tuple[int, ...],
-        stabilizer_generators: dict[str, tuple[stim.PauliString, ...]],
-        logical_s: stim.Circuit,
-        mode: Literal['brute', 'deterministic'] = 'deterministic',
-        use_packed: bool = True,
-        shortcut_probability_computer: bool = True,
-    ):
-        """
-        :param data_indices: A tuple of integers representing the data qubit indices in ascending order.
-        :param stabilizer_generators: The generators of the stabilizer group restricted to data qubits.
-        :param logical_s: A transversal implementation of the logical S gate,
-            where indices are in terms of all the physical qubits.
-        :param mode: Mode to count solutions when computing acceptance probability:
-            
-            * 'deterministic' uses polynomial-time GF(2) elimination,
-            * 'brute' uses exponential-time brute force.
-
-        :param use_packed: When constructing the pairing matrix in the
-            acceptance probability calculation,
-            use 64-bit-word packing for large n (faster).
-        :param shortcut_probability_computer: Whether to use simple shortcuts
-            when computing the acceptance probability.
-            Without these shortcuts, the distance-5 cultivation analysis takes >7 minutes
-            (I interrupted the analysis before it finished).
-        """
-        super().__init__(data_indices, logical_s)
-        self.LOGICAL_ZERO_GENERATORS = (
-            *stabilizer_generators['X'],
-            *stabilizer_generators['Z'],
-            self.Z_TENSOR_N,
-        )
-        self.TABLEAU = stim.Tableau.from_stabilizers(self.LOGICAL_ZERO_GENERATORS)
-        self.INVERSE_TABLEAU = self.TABLEAU.inverse()
-        self.UNENCODED_STABILIZER_GENERATORS = {
-            basis: tuple(self.INVERSE_TABLEAU(generator) for generator in generator_list)
-            for basis, generator_list in stabilizer_generators.items()
-        }
-        """The unencoded generators of the stabilizer group restricted to data qubits."""
-        self._PROJECTOR_PRODUCT_TRACER = ProjectorProductTracer(
-            mode=mode,
-            use_packed=use_packed,
-            assume_nonnegative=True,
-        )
-        self._PROBABILITY_COMPUTER: _ProbabilityComputer = (_ShortcutProbabilityComputer if
-            shortcut_probability_computer else _GeneralProbabilityComputer)(self)
-
-
-    def analyze(self, cultivated_state, before_transversal):
-        _before_transversal = stim.PauliString(before_transversal)
-        after_transversal = self.LOGICAL[cultivated_state](before_transversal)
-        accept_probability = self._PROBABILITY_COMPUTER.get_accept_probability(_before_transversal, after_transversal)
-        logical_fidelity = self.X_TENSOR_N.commutes(_before_transversal)
-        # The logical fidelity of a logical X eigenstate suffering from error `_before_transversal`
-        return accept_probability, logical_fidelity
-
-
-class _ProbabilityComputer(abc.ABC):
-
-    def __init__(self, logical_analyzer: TableauLogicalAnalyzer):
-        self.LOGICAL_ANALYZER = logical_analyzer
-        _stabilizer_bsf_x: list[np.ndarray[tuple[int], np.dtype[np.bool_]]] = []
-        _stabilizer_bsf_z: list[np.ndarray[tuple[int], np.dtype[np.bool_]]] = []
-        _stabilizer_j_powers: list[Literal[0, 1, 2, 3]] = []
-        for generator_list in logical_analyzer.UNENCODED_STABILIZER_GENERATORS.values():
-            for generator in generator_list:
-                xs, zs = generator.to_numpy()
-                _stabilizer_bsf_x.append(xs)
-                _stabilizer_bsf_z.append(zs)
-                _stabilizer_j_powers.append(extract_j_power(generator))
-        self.STABILIZER_BSF_X = _stabilizer_bsf_x
-        """Binary vectors representing the X component of _all_ the
-        stabilizer generators in binary symplectic form.
-        """
-        self.STABILIZER_BSF_Z = _stabilizer_bsf_z
-        """Binary vectors representing the Z component of _all_ the
-        stabilizer generators in binary symplectic form.
-        """
-        self.STABILIZER_J_POWERS = _stabilizer_j_powers
-        """The power of each stabilizer generator such that P = 1j^power [X string] [Z string]."""
-    
-    @abc.abstractmethod
-    def get_accept_probability(
-            self,
-            before_transversal: stim.PauliString,
-            after_transversal: stim.Tableau,
-    ) -> float:
-        """Calculate the acceptance probability.
-
-        :param before_transversal: The error before being pushed through the transversal gates.
-        :param after_transversal: The Clifford circuit after being pushed through the transversal gates.
-
-        :return acceptance_probability: The probability (as a float between 0 and 1)
-            that the Clifford error results in the stabilizer measurements all being +1.
-        """
-
-
-class _ShortcutProbabilityComputer(_ProbabilityComputer):
-    
-    def get_accept_probability(self, before_transversal, after_transversal):
-        analyzer = self.LOGICAL_ANALYZER
-        # transform the Z stabilizers
-        # unencode the error (before transversal) by pushing through the inverse tableau
-        unencoded_before = analyzer.INVERSE_TABLEAU(before_transversal)
-        for z_generator in analyzer.UNENCODED_STABILIZER_GENERATORS['Z']:
-            if not z_generator.commutes(unencoded_before):
-                return 0
-        # transform the X stabilizers
-        px, pz, j_powers = self.STABILIZER_BSF_X.copy(), self.STABILIZER_BSF_Z.copy(), self.STABILIZER_J_POWERS.copy()
-        # unencode the error (after transversal) by pushing through the inverse tableau
-        unencoded_after = analyzer.INVERSE_TABLEAU * after_transversal * analyzer.TABLEAU
-        for x_generator in analyzer.UNENCODED_STABILIZER_GENERATORS['X']:
-            transformed_generator = unencoded_after(x_generator)
-            if transformed_generator == x_generator:
-                continue
-            if transformed_generator == -x_generator:
-                return 0
-            xs, zs = transformed_generator.to_numpy()
-            px.append(xs)
-            pz.append(zs)
-            j_powers.append(extract_j_power(transformed_generator))
-        stabilizer_trace = analyzer._PROJECTOR_PRODUCT_TRACER.trace(px, pz, j_powers)
-        return float(stabilizer_trace/2)
-
-
-class _GeneralProbabilityComputer(_ProbabilityComputer):
-
-    def get_accept_probability(self, before_transversal, after_transversal):
-        analyzer = self.LOGICAL_ANALYZER
-        # unencode the error by pushing through the inverse tableau
-        unencoded_error = analyzer.INVERSE_TABLEAU * after_transversal * analyzer.TABLEAU
-        # transform the stabilizers
-        px, pz, j_powers = self.STABILIZER_BSF_X.copy(), self.STABILIZER_BSF_Z.copy(), self.STABILIZER_J_POWERS.copy()
-        for generators in analyzer.UNENCODED_STABILIZER_GENERATORS.values():
-            for generator in generators:
-                transformed_generator = unencoded_error(generator)
-                if transformed_generator == generator:
-                    continue
-                xs, zs = transformed_generator.to_numpy()
-                px.append(xs)
-                pz.append(zs)
-                j_powers.append(extract_j_power(transformed_generator))
-        stabilizer_trace = analyzer._PROJECTOR_PRODUCT_TRACER.trace(px, pz, j_powers)
-        return float(stabilizer_trace/2)
 
 
 class SuperpositionLogicalAnalyzer(LogicalAnalyzer):

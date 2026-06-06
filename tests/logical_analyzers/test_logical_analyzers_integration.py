@@ -1,7 +1,7 @@
 import pytest
 
 from cliffordep.combinators import FaultCombinator
-from cliffordep.logical_analyzers import CliffordLogicalAnalyzer, SuperpositionLogicalAnalyzer, TableauLogicalAnalyzer
+from cliffordep.logical_analyzers import CliffordLogicalAnalyzer, SuperpositionLogicalAnalyzer
 from cliffordep import noise
 from cliffordep import circuits
 
@@ -21,54 +21,38 @@ def both_analyzers():
         stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
         logical_s=circuit.LOGICAL_S,
     )
-    tableau_analyzer = TableauLogicalAnalyzer(
-        data_indices=circuit.DATA_INDICES,
-        stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
-        logical_s=circuit.LOGICAL_S,
-        # mode='brute',
-    )
     clifford_analyzer = CliffordLogicalAnalyzer(
         data_indices=circuit.DATA_INDICES,
         stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
         logical_s=circuit.LOGICAL_S,
     )
     configurations = combinator.get_undetected_configurations(max_order=max_order)
-    return superposition_analyzer, tableau_analyzer, clifford_analyzer, configurations
+    return superposition_analyzer, clifford_analyzer, configurations
 
 
 @pytest.mark.parametrize("state", ['S', 'T'])
-def test_superposition_vs_tableau(state, both_analyzers: tuple[
+def test_superposition_vs_clifford(state, both_analyzers: tuple[
     SuperpositionLogicalAnalyzer,
-    TableauLogicalAnalyzer,
     CliffordLogicalAnalyzer,
     list[dict[str, set[frozenset[int]]]],
 ]):
-    """Check that all logical analyzer implementations keep the same strings."""
-    superposition_analyzer, tableau_analyzer, clifford_analyzer, configurations = both_analyzers
-    kept_strings_1 = superposition_analyzer.get_kept_strings(
+    """Check that both logical analyzer implementations keep the same strings."""
+    superposition_analyzer, clifford_analyzer, configurations = both_analyzers
+    superposition_kept_strings = superposition_analyzer.get_kept_strings(
         configurations=configurations,
         cultivated_state=state,
     )
-    kept_strings_2 = tableau_analyzer.get_kept_strings(
-        configurations=configurations,
-        cultivated_state=state,
-    )
-    kept_strings_3 = clifford_analyzer.get_kept_strings(
+    clifford_kept_strings = clifford_analyzer.get_kept_strings(
         configurations=configurations,
         cultivated_state=state,
     )
     for degree, _ in enumerate(configurations):
-        for kept_string, logical_triple_1 in kept_strings_1[degree].items():
-            assert kept_string in kept_strings_2[degree], f"{kept_string} missing in kept_strings_2[{degree}]"
-            logical_triple_2 = kept_strings_2[degree][kept_string]
-            assert logical_triple_1 == logical_triple_2, f"Mismatch for {kept_string}: {logical_triple_1} vs {logical_triple_2}"
-            assert kept_string in kept_strings_3[degree], f"{kept_string} missing in kept_strings_3[{degree}]"
-            logical_triple_3 = kept_strings_3[degree][kept_string]
-            assert logical_triple_1 == logical_triple_3, f"Mismatch for {kept_string}: {logical_triple_1} vs {logical_triple_3}"
-        for kept_string in kept_strings_2[degree]:
-            assert kept_string in kept_strings_1[degree], f"{kept_string} missing in kept_strings_1[{degree}]"
-        for kept_string in kept_strings_3[degree]:
-            assert kept_string in kept_strings_1[degree], f"{kept_string} missing in kept_strings_1[{degree}]"
+        for kept_string, superposition_triple in superposition_kept_strings[degree].items():
+            assert kept_string in clifford_kept_strings[degree], f"{kept_string} missing in clifford_kept_strings[{degree}]"
+            clifford_triple = clifford_kept_strings[degree][kept_string]
+            assert superposition_triple == clifford_triple, f"Mismatch for {kept_string}: {superposition_triple} vs {clifford_triple}"
+        for kept_string in clifford_kept_strings[degree]:
+            assert kept_string in superposition_kept_strings[degree], f"{kept_string} missing in superposition_kept_strings[{degree}]"
 
     # Correct result:
     # S state cultivation: for order...
