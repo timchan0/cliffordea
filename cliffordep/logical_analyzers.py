@@ -1,6 +1,6 @@
 import abc
 from collections import Counter
-from collections.abc import Mapping, Iterable
+from collections.abc import Mapping, Iterable, Sequence
 import itertools
 from typing import Literal, overload, override
 
@@ -10,6 +10,14 @@ import stim
 from cliffordep.pauli_string_tools import PUSH_THROUGH_MAP, PauliSum, tensor_paulis, split_sign
 from cliffordep.pauli_trace import ProjectorProductTracer
 from cliffordep.type_aliases import LogicalTriple
+
+
+_SIGN_TO_J_POWER: dict[complex, Literal[0, 1, 2, 3]] = {
+    (1+0j): 0,
+    (0+1j): 1,
+    (-1+0j): 2,
+    (0-1j): 3,
+}
 
 
 class _TransversalGate:
@@ -105,6 +113,7 @@ class LogicalAnalyzer(abc.ABC):
         :param logical_s: A transversal implementation of the logical S gate,
             where indices are in terms of all the physical qubits.
         """
+        # TODO: consider lowercasing these attributes since they are not really constants.
         self.DATA_INDICES = data_indices
         """A tuple of integers representing the data qubit indices in ascending order."""
         self.X_TENSOR_N = stim.PauliString('X'*len(data_indices))
@@ -260,14 +269,195 @@ def extract_j_power(pauli_string: stim.PauliString) -> Literal[0, 1, 2, 3]:
     :param pauli_string: A signed Pauli string P.
     :return power: such that P = 1j^power [X string] [Z string].
     """
-    external = {
-        (1+0j): 0,
-        (0+1j): 1,
-        (-1+0j): 2,
-        (0-1j): 3,
-    }[pauli_string.sign]
-    internal = len(pauli_string.pauli_indices('Y'))
+    xs, zs = pauli_string.to_numpy(bit_packed=True)
+    x_mask = int.from_bytes(xs.tobytes(), 'little')
+    z_mask = int.from_bytes(zs.tobytes(), 'little')
+    external = _SIGN_TO_J_POWER[pauli_string.sign]
+    internal = (x_mask & z_mask).bit_count()
     return (external + internal) % 4 # type: ignore
+
+
+def _pauli_masks_and_j_power(pauli_string: stim.PauliString) -> tuple[int, int, int]:
+    """Convert a Pauli string to integer X/Z masks and an i-power.
+
+    :param pauli_string: A signed Pauli string P.
+    :return x_mask: Integer bitmask for the X component.
+    :return z_mask: Integer bitmask for the Z component.
+    :return j_power: Power such that P = 1j^j_power [X string] [Z string].
+    """
+    xs, zs = pauli_string.to_numpy(bit_packed=True)
+    x_mask = int.from_bytes(xs.tobytes(), 'little')
+    z_mask = int.from_bytes(zs.tobytes(), 'little')
+    j_power = (_SIGN_TO_J_POWER[pauli_string.sign] + (x_mask & z_mask).bit_count()) % 4
+    return x_mask, z_mask, j_power
+
+
+def _multiply_pauli_masks(
+        left: tuple[int, int, int],
+        right: tuple[int, int, int],
+) -> tuple[int, int, int]:
+    """Multiply Paulis represented by integer masks and i-powers.
+
+    :param left: Tuple ``(x_mask, z_mask, j_power)`` representing the left Pauli.
+    :param right: Tuple ``(x_mask, z_mask, j_power)`` representing the right Pauli.
+    :return product: Tuple ``(x_mask, z_mask, j_power)`` representing their product.
+    """
+    left_x_mask, left_z_mask, left_j_power = left
+    right_x_mask, right_z_mask, right_j_power = right
+    commutation_power = 2 * ((left_z_mask & right_x_mask).bit_count() & 1)
+    return (
+        left_x_mask ^ right_x_mask,
+        left_z_mask ^ right_z_mask,
+        (left_j_power + right_j_power + commutation_power) % 4,
+    )
+
+
+class CliffordLogicalAnalyzer(LogicalAnalyzer):
+    """Analyzes Clifford errors using unencoded stabilizer overlap."""
+
+    @override
+    def __init__(
+        self,
+        data_indices: tuple[int, ...],
+        stabilizer_generators: dict[str, tuple[stim.PauliString, ...]],
+        logical_s: stim.Circuit,
+    ):
+        """
+        :param data_indices: A tuple of integers representing the data qubit indices in ascending order.
+        :param stabilizer_generators: The generators of the stabilizer group restricted to data qubits.
+        :param logical_s: A transversal implementation of the logical S gate,
+            where indices are in terms of all the physical qubits.
+        """
+        super().__init__(data_indices, logical_s)
+        stabilizer_generator_tuple = (
+            *stabilizer_generators['X'],
+            *stabilizer_generators['Z'],
+        )
+        self.stabilizer_rank = len(stabilizer_generator_tuple)
+        """The number of independent stabilizer generators."""
+        self.encoder = self._get_encoding_tableau(
+            stabilizers=stabilizer_generator_tuple,
+            logical_zs=(self.Z_TENSOR_N,),
+            logical_xs=(self.X_TENSOR_N,),
+        )
+        """The encoding circuit for the stabilizer code."""
+        self.unencoder = self.encoder.inverse()
+        """The unencoding circuit for the stabilizer code."""
+        self.unencoded_stabilizer_generators = tuple(
+            self.unencoder(generator)
+            for generator in stabilizer_generator_tuple
+        )
+        """The unencoded generators of the stabilizer group restricted to data qubits."""
+        self.qubit_count = len(data_indices)
+        """The number of data qubits."""
+        self.unencoded_logical_mask = (
+            ((1 << self.qubit_count) - 1) ^ ((1 << self.stabilizer_rank) - 1)
+        )
+        """Bitmask selecting the unencoded logical qubits."""
+
+    @staticmethod
+    def _get_encoding_tableau(
+            stabilizers: Sequence[stim.PauliString],
+            logical_zs: Sequence[stim.PauliString],
+            logical_xs: Sequence[stim.PauliString],
+    ) -> stim.Tableau:
+        """Construct an encoding tableau from a stabilizer-code Pauli frame.
+
+        Stim can complete the all-zero logical-state stabilizers into an arbitrary
+        tableau. This method keeps the resulting destabilizers for the stabilizer
+        generators, adjusts them to commute with the chosen logical X operators,
+        and then rebuilds a full encoding tableau whose final X and Z outputs are
+        the code's logical X and logical Z operators.
+
+        :param stabilizers: Stabilizer generators for the code.
+        :param logical_zs: Logical Z operators, one for each logical qubit.
+        :param logical_xs: Logical X operators, one for each logical qubit.
+        :return tableau: A full encoding tableau for the stabilizer code.
+        :raises ValueError: If the logical X and Z operator counts differ.
+            Stim may also raise ``ValueError`` if the supplied Pauli frame does
+            not satisfy the required commutation relationships.
+        """
+        logical_zero_generators = [*stabilizers, *logical_zs]
+        logical_zero_tableau = stim.Tableau.from_stabilizers(logical_zero_generators)
+        destabilizers = [
+            logical_zero_tableau.x_output(index)
+            for index, _ in enumerate(stabilizers)
+        ]
+        for index, destabilizer in enumerate(destabilizers):
+            adjusted_destabilizer = destabilizer
+            for logical_z, logical_x in zip(logical_zs, logical_xs, strict=True):
+                if not adjusted_destabilizer.commutes(logical_x):
+                    adjusted_destabilizer *= logical_z
+            destabilizers[index] = adjusted_destabilizer
+        return stim.Tableau.from_conjugated_generators(
+            xs=[*destabilizers, *logical_xs],
+            zs=logical_zero_generators,
+        )
+
+    def analyze(self, cultivated_state, before_transversal):
+        before_transversal_pauli = stim.PauliString(before_transversal)
+        after_transversal = self.LOGICAL[cultivated_state](before_transversal)
+        unencoded_error = self.unencoder * after_transversal * self.encoder
+        accept_probability = self._get_accept_probability(unencoded_error)
+        logical_fidelity = self.X_TENSOR_N.commutes(before_transversal_pauli)
+        # The logical fidelity of a logical X eigenstate suffering from error `before_transversal`.
+        return accept_probability, logical_fidelity
+
+    def _get_accept_probability(self, unencoded_error: stim.Tableau) -> float:
+        """Calculate the trivial-syndrome probability from stabilizer overlap.
+
+        :param unencoded_error: The Clifford error after passing through the inverse
+            of the code's encoder.
+        :return accept_probability: The probability that all noiseless stabilizer
+            generator measurements return +1.
+        """
+        row_basis: dict[int, int] = {}
+        pauli_basis: dict[int, tuple[int, int, int]] = {}
+
+        for unencoded_generator in self.unencoded_stabilizer_generators:
+            transformed_generator = unencoded_error(unencoded_generator)
+            if transformed_generator == unencoded_generator:
+                continue
+            if transformed_generator == -unencoded_generator:
+                return 0.0
+
+            row, pauli_product = self._get_row_and_pauli_product(transformed_generator)
+            if row == 0:
+                if pauli_product[2] == 2:
+                    return 0.0
+                continue
+
+            while row:
+                pivot = row.bit_length() - 1
+                if pivot not in row_basis:
+                    row_basis[pivot] = row
+                    pauli_basis[pivot] = pauli_product
+                    break
+                row ^= row_basis[pivot]
+                pauli_product = _multiply_pauli_masks(pauli_product, pauli_basis[pivot])
+
+            if row == 0 and pauli_product[2] == 2:
+                return 0.0
+
+        return 2.0 ** (-len(row_basis))
+
+    def _get_row_and_pauli_product(
+            self,
+            pauli_string: stim.PauliString,
+    ) -> tuple[int, tuple[int, int, int]]:
+        """Construct the row used for stabilizer-overlap rank reduction.
+
+        The row records all X support and the Z support on unencoded logical qubits.
+
+        :param pauli_string: A signed Pauli string in unencoded coordinates.
+        :return row: Integer bitmask representing support outside the unencoded
+            stabilizer-Z subgroup.
+        :return pauli_product: Tuple ``(x_mask, z_mask, j_power)`` representing
+            ``pauli_string``.
+        """
+        x_mask, z_mask, j_power = _pauli_masks_and_j_power(pauli_string)
+        outside_support = x_mask | (z_mask & self.unencoded_logical_mask)
+        return outside_support, (x_mask, z_mask, j_power)
 
 
 class TableauLogicalAnalyzer(LogicalAnalyzer):

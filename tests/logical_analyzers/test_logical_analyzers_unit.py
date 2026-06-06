@@ -1,13 +1,19 @@
 import pytest
+import stim
 
-from cliffordep.logical_analyzers import LogicalAnalyzer, TableauLogicalAnalyzer, SuperpositionLogicalAnalyzer
+from cliffordep.logical_analyzers import (
+    CliffordLogicalAnalyzer,
+    LogicalAnalyzer,
+    SuperpositionLogicalAnalyzer,
+    TableauLogicalAnalyzer,
+)
 from cliffordep import circuits
 from cliffordep.pauli_string_tools import forget_sign
 
 
 class TestDistance3:
     
-    @pytest.fixture(params=[TableauLogicalAnalyzer, SuperpositionLogicalAnalyzer])
+    @pytest.fixture(params=[CliffordLogicalAnalyzer, TableauLogicalAnalyzer, SuperpositionLogicalAnalyzer])
     def analyzer(self, request) -> LogicalAnalyzer:
         class_ = request.param
         circuit = circuits.D3DoubleCatCheckA6()
@@ -28,23 +34,123 @@ class TestDistance3:
         assert analyzer.analyze('T', restricted) == (0.0, False)
 
 
+    def test_nontrivial_acceptance_probability(self, analyzer: LogicalAnalyzer):
+        """Check a distance-3 example whose trivial-syndrome probability is 1/4."""
+        assert analyzer.analyze('T', 'YX_X___') == (0.25, False)
+
+
+    def test_clifford_tableau_is_encoding_circuit(self):
+        """Check that the stabilizer-overlap analyzer fixes the logical X frame."""
+        circuit = circuits.D3DoubleCatCheckA6()
+        analyzer = CliffordLogicalAnalyzer(
+            data_indices=circuit.DATA_INDICES,
+            stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+            logical_s=circuit.LOGICAL_S,
+        )
+        stabilizer_generators = (
+            *circuit.STABILIZER_GENERATORS_RESTRICTED['X'],
+            *circuit.STABILIZER_GENERATORS_RESTRICTED['Z'],
+        )
+        for index, stabilizer_generator in enumerate(stabilizer_generators):
+            assert analyzer.encoder.z_output(index) == stabilizer_generator
+        assert analyzer.encoder.z_output(analyzer.stabilizer_rank) == analyzer.Z_TENSOR_N
+        assert analyzer.encoder.x_output(analyzer.stabilizer_rank) == analyzer.X_TENSOR_N
+
+
+    def test_encoding_tableau_supports_multiple_logical_qubits(self):
+        """Check that the encoding-tableau helper handles a two-logical-qubit frame."""
+        stabilizers = (stim.PauliString("Z__"),)
+        logical_zs = (
+            stim.PauliString("_Z_"),
+            stim.PauliString("__Z"),
+        )
+        logical_xs = (
+            stim.PauliString("ZX_"),
+            stim.PauliString("__X"),
+        )
+        logical_zero_tableau = stim.Tableau.from_stabilizers((*stabilizers, *logical_zs))
+        assert not logical_zero_tableau.x_output(0).commutes(logical_xs[0])
+
+        tableau = CliffordLogicalAnalyzer._get_encoding_tableau(
+            stabilizers=stabilizers,
+            logical_zs=logical_zs,
+            logical_xs=logical_xs,
+        )
+        assert tableau.x_output(0).commutes(logical_xs[0])
+        assert tableau.z_output(0) == stabilizers[0]
+        for logical_index, (logical_z, logical_x) in enumerate(
+                zip(logical_zs, logical_xs, strict=True),
+                start=len(stabilizers),
+        ):
+            assert tableau.z_output(logical_index) == logical_z
+            assert tableau.x_output(logical_index) == logical_x
+
+
+    @pytest.mark.parametrize("restricted", [
+        "_______",
+        "XXXXXXX",
+        "YX_X___",
+        "_X__XX_",
+        "Z______",
+        "XYZXYZX",
+    ])
+    def test_clifford_matches_tableau(self, restricted: str):
+        """Compare the stabilizer-overlap analyzer to the existing tableau analyzer."""
+        circuit = circuits.D3DoubleCatCheckA6()
+        clifford_analyzer = CliffordLogicalAnalyzer(
+            data_indices=circuit.DATA_INDICES,
+            stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+            logical_s=circuit.LOGICAL_S,
+        )
+        tableau_analyzer = TableauLogicalAnalyzer(
+            data_indices=circuit.DATA_INDICES,
+            stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+            logical_s=circuit.LOGICAL_S,
+        )
+        assert clifford_analyzer.analyze('T', restricted) == tableau_analyzer.analyze('T', restricted)
+
+
 class TestDistance5:
     
     @pytest.fixture
     def analyzer(self):
         circuit = circuits.D5DoubleCatCheckA19()
-        return TableauLogicalAnalyzer(
+        return CliffordLogicalAnalyzer(
             data_indices=circuit.DATA_INDICES,
             stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
             logical_s=circuit.LOGICAL_S,
         )
 
 
-    def test_x_tensor_n(self, analyzer: TableauLogicalAnalyzer):
+    def test_x_tensor_n(self, analyzer: CliffordLogicalAnalyzer):
         ps = forget_sign(analyzer.X_TENSOR_N)
         assert analyzer.analyze('T', ps) == (1.0, True)
 
 
-    def test_abort(self, analyzer: TableauLogicalAnalyzer):
+    def test_abort(self, analyzer: CliffordLogicalAnalyzer):
         ps = analyzer.restrict_to_data('X__X_X_X_X_X_XX_Y_X_X_X_X_X__X_XX_X_X_')
         assert analyzer.analyze('T', ps) == (0.0, False)
+
+
+    @pytest.mark.parametrize("restricted", [
+        None,
+        "X__X_X_X_X_X_XX_Y_X_X_X_X_X__X_XX_X_X_",
+    ])
+    def test_clifford_matches_tableau_smoke(self, restricted: None | str):
+        """Compare the distance-5 stabilizer-overlap analyzer on representative cases."""
+        circuit = circuits.D5DoubleCatCheckA19()
+        clifford_analyzer = CliffordLogicalAnalyzer(
+            data_indices=circuit.DATA_INDICES,
+            stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+            logical_s=circuit.LOGICAL_S,
+        )
+        tableau_analyzer = TableauLogicalAnalyzer(
+            data_indices=circuit.DATA_INDICES,
+            stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+            logical_s=circuit.LOGICAL_S,
+        )
+        if restricted is None:
+            restricted = forget_sign(clifford_analyzer.X_TENSOR_N)
+        else:
+            restricted = clifford_analyzer.restrict_to_data(restricted)
+        assert clifford_analyzer.analyze('T', restricted) == tableau_analyzer.analyze('T', restricted)

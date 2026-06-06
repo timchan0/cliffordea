@@ -1,7 +1,7 @@
 import pytest
 
 from cliffordep.combinators import FaultCombinator
-from cliffordep.logical_analyzers import SuperpositionLogicalAnalyzer, TableauLogicalAnalyzer
+from cliffordep.logical_analyzers import CliffordLogicalAnalyzer, SuperpositionLogicalAnalyzer, TableauLogicalAnalyzer
 from cliffordep import noise
 from cliffordep import circuits
 
@@ -27,17 +27,24 @@ def both_analyzers():
         logical_s=circuit.LOGICAL_S,
         # mode='brute',
     )
+    clifford_analyzer = CliffordLogicalAnalyzer(
+        data_indices=circuit.DATA_INDICES,
+        stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+        logical_s=circuit.LOGICAL_S,
+    )
     configurations = combinator.get_undetected_configurations(max_order=max_order)
-    return superposition_analyzer, tableau_analyzer, configurations
+    return superposition_analyzer, tableau_analyzer, clifford_analyzer, configurations
 
 
 @pytest.mark.parametrize("state", ['S', 'T'])
 def test_superposition_vs_tableau(state, both_analyzers: tuple[
     SuperpositionLogicalAnalyzer,
     TableauLogicalAnalyzer,
+    CliffordLogicalAnalyzer,
     list[dict[str, set[frozenset[int]]]],
 ]):
-    superposition_analyzer, tableau_analyzer, configurations = both_analyzers
+    """Check that all logical analyzer implementations keep the same strings."""
+    superposition_analyzer, tableau_analyzer, clifford_analyzer, configurations = both_analyzers
     kept_strings_1 = superposition_analyzer.get_kept_strings(
         configurations=configurations,
         cultivated_state=state,
@@ -46,12 +53,21 @@ def test_superposition_vs_tableau(state, both_analyzers: tuple[
         configurations=configurations,
         cultivated_state=state,
     )
+    kept_strings_3 = clifford_analyzer.get_kept_strings(
+        configurations=configurations,
+        cultivated_state=state,
+    )
     for degree, _ in enumerate(configurations):
         for kept_string, logical_triple_1 in kept_strings_1[degree].items():
             assert kept_string in kept_strings_2[degree], f"{kept_string} missing in kept_strings_2[{degree}]"
             logical_triple_2 = kept_strings_2[degree][kept_string]
             assert logical_triple_1 == logical_triple_2, f"Mismatch for {kept_string}: {logical_triple_1} vs {logical_triple_2}"
+            assert kept_string in kept_strings_3[degree], f"{kept_string} missing in kept_strings_3[{degree}]"
+            logical_triple_3 = kept_strings_3[degree][kept_string]
+            assert logical_triple_1 == logical_triple_3, f"Mismatch for {kept_string}: {logical_triple_1} vs {logical_triple_3}"
         for kept_string in kept_strings_2[degree]:
+            assert kept_string in kept_strings_1[degree], f"{kept_string} missing in kept_strings_1[{degree}]"
+        for kept_string in kept_strings_3[degree]:
             assert kept_string in kept_strings_1[degree], f"{kept_string} missing in kept_strings_1[{degree}]"
 
     # Correct result:
