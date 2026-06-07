@@ -464,7 +464,8 @@ class CliffordLogicalAnalyzer(LogicalAnalyzer):
             ``pauli_string``.
         """
         x_mask, z_mask, j_power = _pauli_masks_and_j_power(pauli_string)
-        outside_support = x_mask | (z_mask & self.unencoded_logical_mask)
+        logical_z_support = z_mask & self.unencoded_logical_mask
+        outside_support = x_mask | (logical_z_support << self.qubit_count)
         return outside_support, (x_mask, z_mask, j_power)
 
 
