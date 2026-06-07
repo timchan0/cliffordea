@@ -133,6 +133,29 @@ class TestDistance5:
 
 
     @pytest.mark.parametrize("restricted", [
+        "XX_X__X___Y________",
+        "X__________________",
+        "Y__________________",
+        "Z__________________",
+    ])
+    def test_z_stabilizer_precheck_matches_general_path(self, restricted: str):
+        circuit = circuits.D5DoubleCatCheckA19()
+        enabled_analyzer = CliffordLogicalAnalyzer(
+            data_indices=circuit.DATA_INDICES,
+            stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+            logical_s=circuit.LOGICAL_S,
+            precheck_z_stabilizers=True,
+        )
+        disabled_analyzer = CliffordLogicalAnalyzer(
+            data_indices=circuit.DATA_INDICES,
+            stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+            logical_s=circuit.LOGICAL_S,
+            precheck_z_stabilizers=False,
+        )
+        assert enabled_analyzer.analyze('T', restricted) == disabled_analyzer.analyze('T', restricted)
+
+
+    @pytest.mark.parametrize("restricted", [
         None,
         "X__X_X_X_X_X_XX_Y_X_X_X_X_X__X_XX_X_X_",
     ])

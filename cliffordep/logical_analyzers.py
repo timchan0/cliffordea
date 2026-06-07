@@ -321,14 +321,24 @@ class CliffordLogicalAnalyzer(LogicalAnalyzer):
         data_indices: tuple[int, ...],
         stabilizer_generators: dict[str, tuple[stim.PauliString, ...]],
         logical_s: stim.Circuit,
+        precheck_z_stabilizers: bool = True,
     ):
         """
         :param data_indices: A tuple of integers representing the data qubit indices in ascending order.
-        :param stabilizer_generators: The generators of the stabilizer group restricted to data qubits.
+        :param stabilizer_generators: The generators of the CSS code stabilizer group
+            restricted to data qubits, categorized by basis.
         :param logical_s: A transversal implementation of the logical S gate,
             where indices are in terms of all the physical qubits.
+        :param precheck_z_stabilizers: Whether to early reject errors that
+            anticommute with a pure Z stabilizer before
+            pushing the error through the layer of Z/S/T gates.
+            This pre-check is valid because the considered errors
+            (anti)commute with a Z stabilizer before the Z/S/T gates iff they
+            (anti)commute with the same stabilizer after.
         """
         super().__init__(data_indices, logical_s)
+        self.precheck_z_stabilizers = precheck_z_stabilizers
+        """Whether to analyze the Z stabilizer generators before the layer of Z/S/T gates."""
         stabilizer_generator_tuple = (
             *stabilizer_generators['X'],
             *stabilizer_generators['Z'],
@@ -343,11 +353,11 @@ class CliffordLogicalAnalyzer(LogicalAnalyzer):
         """The encoding circuit for the stabilizer code."""
         self.unencoder = self.encoder.inverse()
         """The unencoding circuit for the stabilizer code."""
-        self.unencoded_stabilizer_generators = tuple(
-            self.unencoder(generator)
-            for generator in stabilizer_generator_tuple
-        )
-        """The unencoded generators of the stabilizer group restricted to data qubits."""
+        self.unencoded_stabilizer_generators = {
+            basis: tuple(self.unencoder(generator) for generator in generator_list)
+            for basis, generator_list in stabilizer_generators.items()
+        }
+        """The unencoded generators of the CSS code stabilizer group restricted to data qubits, by basis."""
         self.qubit_count = len(data_indices)
         """The number of data qubits."""
         self.unencoded_logical_mask = (
@@ -396,11 +406,21 @@ class CliffordLogicalAnalyzer(LogicalAnalyzer):
 
     def analyze(self, cultivated_state, before_transversal):
         before_transversal_pauli = stim.PauliString(before_transversal)
+        
+        # The logical fidelity of a logical X eigenstate suffering from error `before_transversal`.
+        logical_fidelity = self.X_TENSOR_N.commutes(before_transversal_pauli)
+        
+        if self.precheck_z_stabilizers:
+            # Under Z-preserving transversal gates, any pre-existing pure
+            # Z-stabilizer syndrome persists through the transversal layer.
+            unencoded_before = self.unencoder(before_transversal_pauli)
+            for z_generator in self.unencoded_stabilizer_generators['Z']:
+                if not z_generator.commutes(unencoded_before):
+                    return 0.0, logical_fidelity
         after_transversal = self.LOGICAL[cultivated_state](before_transversal)
         unencoded_error = self.unencoder * after_transversal * self.encoder
         accept_probability = self._get_accept_probability(unencoded_error)
-        logical_fidelity = self.X_TENSOR_N.commutes(before_transversal_pauli)
-        # The logical fidelity of a logical X eigenstate suffering from error `before_transversal`.
+        
         return accept_probability, logical_fidelity
 
     def _get_accept_probability(self, unencoded_error: stim.Tableau) -> float:
@@ -414,7 +434,11 @@ class CliffordLogicalAnalyzer(LogicalAnalyzer):
         row_basis: dict[int, int] = {}
         pauli_basis: dict[int, tuple[int, int, int]] = {}
 
-        for unencoded_generator in self.unencoded_stabilizer_generators:
+        for unencoded_generator in itertools.chain(
+                self.unencoded_stabilizer_generators['X'],
+                () if self.precheck_z_stabilizers
+                else self.unencoded_stabilizer_generators['Z'],
+        ):
             transformed_generator = unencoded_error(unencoded_generator)
             if transformed_generator == unencoded_generator:
                 continue
