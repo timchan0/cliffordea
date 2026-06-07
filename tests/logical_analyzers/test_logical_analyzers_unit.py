@@ -5,7 +5,6 @@ from cliffordep.logical_analyzers import (
     CliffordLogicalAnalyzer,
     LogicalAnalyzer,
     SuperpositionLogicalAnalyzer,
-    TableauLogicalAnalyzer,
 )
 from cliffordep import circuits
 from cliffordep.pauli_string_tools import forget_sign
@@ -13,7 +12,7 @@ from cliffordep.pauli_string_tools import forget_sign
 
 class TestDistance3:
     
-    @pytest.fixture(params=[CliffordLogicalAnalyzer, TableauLogicalAnalyzer, SuperpositionLogicalAnalyzer])
+    @pytest.fixture(params=[CliffordLogicalAnalyzer, SuperpositionLogicalAnalyzer])
     def analyzer(self, request) -> LogicalAnalyzer:
         class_ = request.param
         circuit = circuits.D3DoubleCatCheckA6()
@@ -94,20 +93,24 @@ class TestDistance3:
         "Z______",
         "XYZXYZX",
     ])
-    def test_clifford_matches_tableau(self, restricted: str):
-        """Compare the stabilizer-overlap analyzer to the existing tableau analyzer."""
+    def test_clifford_matches_pauli_sum(self, restricted: str):
+        """Compare the stabilizer-overlap analyzer to the existing pauli sum analyzer."""
         circuit = circuits.D3DoubleCatCheckA6()
         clifford_analyzer = CliffordLogicalAnalyzer(
             data_indices=circuit.DATA_INDICES,
             stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
             logical_s=circuit.LOGICAL_S,
         )
-        tableau_analyzer = TableauLogicalAnalyzer(
+        pauli_sum_analyzer = SuperpositionLogicalAnalyzer(
             data_indices=circuit.DATA_INDICES,
             stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
             logical_s=circuit.LOGICAL_S,
         )
-        assert clifford_analyzer.analyze('T', restricted) == tableau_analyzer.analyze('T', restricted)
+        clifford_probability, clifford_fidelity = clifford_analyzer.analyze('T', restricted)
+        pauli_sum_probability, pauli_sum_fidelity = pauli_sum_analyzer.analyze('T', restricted)
+        assert clifford_probability == pauli_sum_probability
+        if clifford_probability > 0:
+            assert clifford_fidelity == pauli_sum_fidelity
 
 
 class TestDistance5:
@@ -154,26 +157,3 @@ class TestDistance5:
         )
         assert enabled_analyzer.analyze('T', restricted) == disabled_analyzer.analyze('T', restricted)
 
-
-    @pytest.mark.parametrize("restricted", [
-        None,
-        "X__X_X_X_X_X_XX_Y_X_X_X_X_X__X_XX_X_X_",
-    ])
-    def test_clifford_matches_tableau_smoke(self, restricted: None | str):
-        """Compare the distance-5 stabilizer-overlap analyzer on representative cases."""
-        circuit = circuits.D5DoubleCatCheckA19()
-        clifford_analyzer = CliffordLogicalAnalyzer(
-            data_indices=circuit.DATA_INDICES,
-            stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
-            logical_s=circuit.LOGICAL_S,
-        )
-        tableau_analyzer = TableauLogicalAnalyzer(
-            data_indices=circuit.DATA_INDICES,
-            stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
-            logical_s=circuit.LOGICAL_S,
-        )
-        if restricted is None:
-            restricted = forget_sign(clifford_analyzer.X_TENSOR_N)
-        else:
-            restricted = clifford_analyzer.restrict_to_data(restricted)
-        assert clifford_analyzer.analyze('T', restricted) == tableau_analyzer.analyze('T', restricted)

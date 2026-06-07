@@ -1,1 +1,0 @@
-from cliffordep.pauli_trace.main import ProjectorProductTracer
