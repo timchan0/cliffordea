@@ -5,9 +5,47 @@ from cliffordep.logical_analyzers import (
     CliffordLogicalAnalyzer,
     LogicalAnalyzer,
     SuperpositionLogicalAnalyzer,
+    _pauli_masks_and_j_power,
+    LOGICAL_COEFFICIENTS,
 )
 from cliffordep import circuits
 from cliffordep.pauli_string_tools import forget_sign
+
+class TestPauliMasksAndJPower:
+    
+    def test_uses_x_then_z_convention(self):
+        """Check that mask conversion matches the i^phi X(x)Z(z) convention."""
+        assert _pauli_masks_and_j_power(stim.PauliString("+Y")) == (0b1, 0b1, 1)
+        assert _pauli_masks_and_j_power(stim.PauliString("-Y")) == (0b1, 0b1, 3)
+
+
+class TestCliffordLogicalAnalyzer:
+
+    @pytest.fixture
+    def bitflip_repetition_code(self):
+        return CliffordLogicalAnalyzer(
+            data_indices=(0, 1, 2),
+            stabilizer_generators={
+                'X': (stim.PauliString("ZZ_"), stim.PauliString("_ZZ")),
+                'Z': (),
+            },
+            logical_s=stim.Circuit("S_DAG 0 1 2"),
+        )
+
+    def test_accept_probability_includes_logical_coefficients(self, bitflip_repetition_code: CliffordLogicalAnalyzer):
+        """Check that a non-identity logical fibre contributes correctly to acceptance."""
+        unencoded_error = stim.Tableau.from_circuit(stim.Circuit("""
+            H 2
+            SWAP 0 2
+        """))
+        assert bitflip_repetition_code._get_accept_probability(unencoded_error, LOGICAL_COEFFICIENTS['maximally_mixed']) == 0.5
+        assert bitflip_repetition_code._get_accept_probability(unencoded_error, LOGICAL_COEFFICIENTS['+']) == 1.0
+
+
+    def test_accept_probability_rejects_negative_zero_column(self, bitflip_repetition_code: CliffordLogicalAnalyzer):
+        """Check that a zero rho column with negative sign forces rejection."""
+        unencoded_error = stim.Tableau.from_named_gate("X") + stim.Tableau(2)
+        assert bitflip_repetition_code._get_accept_probability(unencoded_error, LOGICAL_COEFFICIENTS['maximally_mixed']) == 0.0
 
 
 class TestDistance3:
@@ -156,4 +194,3 @@ class TestDistance5:
             precheck_z_stabilizers=False,
         )
         assert enabled_analyzer.analyze('T', restricted) == disabled_analyzer.analyze('T', restricted)
-

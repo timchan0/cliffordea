@@ -10,12 +10,47 @@ from cliffordep.pauli_string_tools import PUSH_THROUGH_MAP, PauliSum, tensor_pau
 from cliffordep.type_aliases import LogicalTriple
 
 
+LogicalCoefficients = Mapping[int, float]
+"""Sparse Pauli-basis coefficients for a logical density operator.
+
+Each key is a nonnegative integer encoding a phaseless logical Pauli on k
+logical qubits. The low k bits encode X support and the high k bits encode
+Z support. For k=1, the masks are ``0b00`` for I, ``0b01`` for X, ``0b10``
+for Z, and ``0b11`` for Y.
+"""
+
+
 _SIGN_TO_J_POWER: dict[complex, Literal[0, 1, 2, 3]] = {
     (1+0j): 0,
     (0+1j): 1,
     (-1+0j): 2,
     (0-1j): 3,
 }
+
+
+_I_STATE_LOGICAL_COEFFICIENTS: LogicalCoefficients = {0b00: 1.0, 0b11: 1.0}
+_MINUS_STATE_LOGICAL_COEFFICIENTS: LogicalCoefficients = {0b00: 1.0, 0b01: -1.0}
+
+
+LOGICAL_COEFFICIENTS: dict[str, LogicalCoefficients] = {
+    '0': {0b00: 1.0, 0b10: 1.0},
+    '1': {0b00: 1.0, 0b10: -1.0},
+    '+': {0b00: 1.0, 0b01: 1.0},
+    '-': _MINUS_STATE_LOGICAL_COEFFICIENTS,
+    'i': _I_STATE_LOGICAL_COEFFICIENTS,
+    '-i': {0b00: 1.0, 0b11: -1.0},
+    'T': {0b00: 1.0, 0b01: 2**-0.5, 0b11: 2**-0.5},
+    'S': _I_STATE_LOGICAL_COEFFICIENTS,
+    'Z': _MINUS_STATE_LOGICAL_COEFFICIENTS,
+    'maximally_mixed': {0b00: 1.0},
+}
+"""One-logical-qubit Pauli-basis coefficients by logical state.
+
+These maps contain the nonzero coefficients alpha_L in
+``|Psi><Psi| = 2^-k sum_L alpha_L L``. Raw ket labels denote the Pauli
+eigenstates stabilized by their corresponding signed Paulis. The key ``S`` is
+an alias for ``i``, and ``Z`` is an alias for ``-``.
+"""
 
 
 class _TransversalGate:
@@ -323,6 +358,8 @@ class CliffordLogicalAnalyzer(LogicalAnalyzer):
         super().__init__(data_indices, logical_s)
         self.precheck_z_stabilizers = precheck_z_stabilizers
         """Whether to analyze the Z stabilizer generators before the layer of Z/S/T gates."""
+        self.x_stabilizer_rank = len(stabilizer_generators['X'])
+        """The number of independent X-basis stabilizer generators."""
         stabilizer_generator_tuple = (
             *stabilizer_generators['X'],
             *stabilizer_generators['Z'],
@@ -344,6 +381,8 @@ class CliffordLogicalAnalyzer(LogicalAnalyzer):
         """The unencoded generators of the CSS code stabilizer group restricted to data qubits, by basis."""
         self.qubit_count = len(data_indices)
         """The number of data qubits."""
+        self.logical_qubit_count = self.qubit_count - self.stabilizer_rank
+        """The number of encoded logical qubits."""
         self.unencoded_logical_mask = (
             ((1 << self.qubit_count) - 1) ^ ((1 << self.stabilizer_rank) - 1)
         )
@@ -403,70 +442,178 @@ class CliffordLogicalAnalyzer(LogicalAnalyzer):
                     return 0.0, logical_fidelity
         after_transversal = self.LOGICAL[cultivated_state](before_transversal)
         unencoded_error = self.unencoder * after_transversal * self.encoder
-        accept_probability = self._get_accept_probability(unencoded_error)
+        accept_probability = self._get_accept_probability(
+            unencoded_error,
+            LOGICAL_COEFFICIENTS[cultivated_state],
+        )
         
         return accept_probability, logical_fidelity
 
-    def _get_accept_probability(self, unencoded_error: stim.Tableau) -> float:
+    def _get_accept_probability(
+            self,
+            unencoded_error: stim.Tableau,
+            logical_coefficients: LogicalCoefficients,
+    ) -> float:
         """Calculate the trivial-syndrome probability from stabilizer overlap.
+
+        This constructs columns from ``F^dag Z_i F``,
+        omits zero columns after checking their phase,
+        row-reduces the remaining matrix ``S``,
+        and sums over all logical Pauli coefficients whose fibres intersect ``im(S)``.
 
         :param unencoded_error: The Clifford error after passing through the inverse
             of the code's encoder.
+        :param logical_coefficients: The nonzero Pauli-basis coefficients of the
+            logical density operator, keyed by compact logical Pauli mask.
         :return accept_probability: The probability that all noiseless stabilizer
             generator measurements return +1.
         """
-        row_basis: dict[int, int] = {}
-        pauli_basis: dict[int, tuple[int, int, int]] = {}
-
-        for unencoded_generator in itertools.chain(
-                self.unencoded_stabilizer_generators['X'],
-                () if self.precheck_z_stabilizers
-                else self.unencoded_stabilizer_generators['Z'],
-        ):
-            transformed_generator = unencoded_error(unencoded_generator)
-            if transformed_generator == unencoded_generator:
-                continue
-            if transformed_generator == -unencoded_generator:
-                return 0.0
-
-            row, pauli_product = self._get_row_and_pauli_product(transformed_generator)
+        columns: list[tuple[int, int, int]] = []
+        rows: list[int] = []
+        checked_stabilizer_count = (
+            self.x_stabilizer_rank if self.precheck_z_stabilizers
+            else self.stabilizer_rank
+        )
+        for stabilizer_index in range(checked_stabilizer_count):
+            transformed_generator = unencoded_error.inverse_z_output(stabilizer_index)
+            x_mask, z_mask, j_power = _pauli_masks_and_j_power(transformed_generator)
+            pauli_masks = (x_mask, z_mask, j_power)
+            row = self._rho(x_mask, z_mask)
             if row == 0:
-                if pauli_product[2] == 2:
+                if self._chi(1, (pauli_masks,)):
                     return 0.0
                 continue
+            rows.append(row)
+            columns.append(pauli_masks)
 
+        # Row-reduce S over GF(2). row_basis[p] is an image vector whose
+        # leading bit is p. source_basis[p] is the corresponding source vector:
+        # a bitmask over retained columns whose image is row_basis[p].
+        # If a new column reduces to zero, source records a kernel relation.
+        # We keep source vectors, rather than Pauli products, so we can later
+        # evaluate chi(source) and solve S u = rho(I^r tensor L).
+        row_basis: dict[int, int] = {}
+        source_basis: dict[int, int] = {}
+        kernel_basis: list[int] = []
+        for column_index, column in enumerate(rows):
+            row = column
+            source = 1 << column_index
             while row:
                 pivot = row.bit_length() - 1
                 if pivot not in row_basis:
                     row_basis[pivot] = row
-                    pauli_basis[pivot] = pauli_product
+                    source_basis[pivot] = source
                     break
                 row ^= row_basis[pivot]
-                pauli_product = _multiply_pauli_masks(pauli_product, pauli_basis[pivot])
+                # Keep the source combination in sync with the row operation.
+                source ^= source_basis[pivot]
+            if row == 0:
+                kernel_basis.append(source)
 
-            if row == 0 and pauli_product[2] == 2:
+        for kernel_vector in kernel_basis:
+            if self._chi(kernel_vector, columns):
                 return 0.0
 
-        return 2.0 ** (-len(row_basis))
+        eta = 0.0
+        for logical_pauli_mask, coefficient in logical_coefficients.items():
+            if coefficient == 0:
+                continue
+            target = self._get_logical_rho(logical_pauli_mask)
+            solution = self._try_solve(row_basis, source_basis, target)
+            if solution is not None:
+                eta += (-1 if self._chi(solution, columns) else 1) * coefficient
 
-    def _get_row_and_pauli_product(
-            self,
-            pauli_string: stim.PauliString,
-    ) -> tuple[int, tuple[int, int, int]]:
-        """Construct the row used for stabilizer-overlap rank reduction.
+        return 2.0 ** (-len(row_basis)) * eta
 
-        The row records all X support and the Z support on unencoded logical qubits.
+    @staticmethod
+    def _try_solve(
+            row_basis: Mapping[int, int],
+            source_basis: Mapping[int, int],
+            target: int,
+    ) -> None | int:
+        """Return one source vector whose image equals a target row.
 
-        :param pauli_string: A signed Pauli string in unencoded coordinates.
-        :return row: Integer bitmask representing support outside the unencoded
-            stabilizer-Z subgroup.
-        :return pauli_product: Tuple ``(x_mask, z_mask, j_power)`` representing
-            ``pauli_string``.
+        :param row_basis: A row-echelon basis for the image of the reduced
+            matrix ``S``, keyed by pivot bit.
+        :param source_basis: A map with the same pivots as ``row_basis``.
+            Each value is a bitmask over columns of ``S`` whose image is the
+            corresponding row-basis vector.
+        :param target: The integer row encoding to solve for.
+        :return source: A bitmask over columns of ``S`` satisfying
+            ``S source = target``, or ``None`` if ``target`` is outside the
+            image of ``S``.
         """
-        x_mask, z_mask, j_power = _pauli_masks_and_j_power(pauli_string)
+        solution = 0
+        row = target
+        while row:
+            pivot = row.bit_length() - 1
+            if pivot not in row_basis:
+                return None
+            row ^= row_basis[pivot]
+            solution ^= source_basis[pivot]
+        return solution
+
+    @staticmethod
+    def _chi(
+            source: int,
+            columns: Sequence[tuple[int, int, int]],
+    ) -> int:
+        """Evaluate the phase function from the trivial-syndrome algorithm.
+
+        :param source: A bitmask selecting columns from ``columns``, and
+            therefore selecting a product of retained columns
+            ``F^dag Z_i F = i^phi_i X(x_i) Z(z_i)``.
+        :param columns: The retained nonzero columns of the reduced matrix ``S``.
+            Each entry is ``(x_mask, z_mask, j_power)`` for one transformed
+            generator.
+        :return chi: The sign exponent modulo 2, such that the selected product
+            contributes sign ``(-1)^chi`` to the trivial-syndrome trace.
+        """
+        phi_sum = 0
+        commutation_sum = 0
+        x_product = 0
+        z_product = 0
+        for column_index, (x_mask, z_mask, j_power) in enumerate(columns):
+            if not source & (1 << column_index):
+                continue
+            phi_sum += j_power
+            # If the current product is X(a)Z(b) and this column is X(c)Z(d),
+            # rewriting X(a)Z(b)X(c)Z(d) as X(a+c)Z(b+d) moves X(c) past Z(b).
+            # Each overlapping qubit contributes ZX = -XZ, so this adds b dot c.
+            commutation_sum ^= (z_product & x_mask).bit_count() & 1
+            x_product ^= x_mask
+            z_product ^= z_mask
+        y_count = (x_product & z_product).bit_count()
+        return (((phi_sum - y_count) // 2) + commutation_sum) & 1
+
+    def _rho(self, x_mask: int, z_mask: int) -> int:
+        """Pack Pauli masks into the row encoding used by ``rho``.
+
+        The row keeps all X support and only the Z support on unencoded logical
+        qubits.
+
+        :param x_mask: Bitmask encoding X support in unencoded coordinates.
+        :param z_mask: Bitmask encoding Z support in unencoded coordinates.
+        :return row: Integer bitmask with X support in the low ``n`` bits and
+            logical-qubit Z support in the next ``n`` bits.
+        """
         logical_z_support = z_mask & self.unencoded_logical_mask
-        outside_support = x_mask | (logical_z_support << self.qubit_count)
-        return outside_support, (x_mask, z_mask, j_power)
+        return x_mask | (logical_z_support << self.qubit_count)
+
+    def _get_logical_rho(self, logical_pauli_mask: int) -> int:
+        """Construct ``rho(I^r tensor L)`` from a compact logical Pauli mask.
+
+        :param logical_pauli_mask: Integer encoding a phaseless logical Pauli.
+            The low k bits encode logical X support and the high k bits encode
+            logical Z support.
+        :return row: The integer row encoding of
+            ``rho(I^r tensor L)``, with all X support followed by the logical
+            Z support.
+        """
+        logical_mask = (1 << self.logical_qubit_count) - 1
+        logical_x = (logical_pauli_mask & logical_mask) << self.stabilizer_rank
+        logical_z = (logical_pauli_mask >> self.logical_qubit_count) << self.stabilizer_rank
+        return self._rho(logical_x, logical_z)
 
 
 class SuperpositionLogicalAnalyzer(LogicalAnalyzer):
