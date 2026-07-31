@@ -13,6 +13,7 @@ from cliffordep.combinators._base import Combinator, get_trivial_syndrome_combin
 from cliffordep.pauli_string_tools import forget_sign
 from cliffordep.type_aliases import FaultBag, ErrorEvent, LogicalTriple
 from cliffordep import noiseless_circuit_tools
+from cliffordep.constants import ONE_QUBIT_ERROR_EVENTS
 
 
 DiagramType = Literal[
@@ -270,16 +271,17 @@ class FaultCombinator(Combinator):
         """Classify an error process by how many error events it can make.
 
         :param process_name: The name of the Stim gate that gives rise to error events.
-            This can be 'DEPOLARIZE1', 'DEPOLARIZE2', 'X_ERROR', 'Y_ERROR', 'Z_ERROR', 'MX', 'MY', 'MZ'.
+            This can be 'DEPOLARIZE1', 'DEPOLARIZE2',
+            or a member of `ONE_QUBIT_ERROR_EVENTS`.
 
         :return:
             An integer indicating the type of error process:
 
-                * 0 if it makes only 1 error event (X_ERROR, Y_ERROR, Z_ERROR, MX, MY, MZ).
+                * 0 if `process_name` is in `ONE_QUBIT_ERROR_EVENTS`.
                 * 1 if it makes 3 error events (DEPOLARIZE1).
                 * 2 if it makes 15 error events (DEPOLARIZE2).
         """
-        if process_name in {'X_ERROR', 'Y_ERROR', 'Z_ERROR', 'MX', 'MY', 'MZ'}:
+        if process_name in ONE_QUBIT_ERROR_EVENTS:
             return 0
         elif process_name == 'DEPOLARIZE1':
             return 1

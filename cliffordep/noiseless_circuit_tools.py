@@ -71,9 +71,11 @@ def insert_error_events(
                     if target in targets_copy:
                         target_index = targets_copy.index(target)
                         insertand = stim.Circuit()
-                        insertand.append(stim.CircuitInstruction(name, targets_copy[:target_index]))
+                        if targets_before := targets_copy[:target_index]:
+                            insertand.append(stim.CircuitInstruction(name, targets_before))
                         insertand.append(stim.CircuitInstruction(name, [target], [probability]))
-                        insertand.append(stim.CircuitInstruction(name, targets_copy[target_index+1:]))
+                        if targets_after := targets_copy[target_index+1:]:
+                            insertand.append(stim.CircuitInstruction(name, targets_after))
                         circuits[timeslice].pop(instruction_index)
                         circuits[timeslice].insert(instruction_index, insertand)
                         break

@@ -7,7 +7,10 @@ import numpy as np
 import numpy.typing as npt
 import stim
 
-from cliffordep.constants import DEPOLARIZE2_ERROR_EVENTS
+from cliffordep.constants import (
+    DEPOLARIZE2_ERROR_EVENTS,
+    ONE_QUBIT_ERROR_EVENTS,
+)
 from cliffordep.noiseless_circuit_tools import split_by_ticks
 from cliffordep.type_aliases import ErrorEvent, ErrorLocation
 from cliffordep.pauli_string_tools import forget_sign
@@ -107,19 +110,20 @@ class CultivationCircuit:
             for instruction in layer:
                 if isinstance(instruction, stim.CircuitRepeatBlock):
                     raise ValueError("There is a REPEAT block in the circuit.")
-                for basis in ('X', 'Y', 'Z'):
-                    if instruction.name in {f'{basis}_ERROR', f'M{basis}'}:
-                        for target in instruction.targets_copy():
-                            _events[timeslice, instruction.name, (target,)].append(
-                                (timeslice, instruction.name, (target,)))
-                    elif instruction.name == 'DEPOLARIZE1':
-                        for target in instruction.targets_copy():
+                name = instruction.name
+                if name in ONE_QUBIT_ERROR_EVENTS:
+                    for target in instruction.targets_copy():
+                        event = (timeslice, name, (target,))
+                        _events[event].append(event)
+                elif name == 'DEPOLARIZE1':
+                    for target in instruction.targets_copy():
+                        for basis in ('X', 'Y', 'Z'):
                             _events[timeslice, instruction.name, (target,)].append(
                                 (timeslice, f'{basis}_ERROR', (target,)))
-                if instruction.name == 'DEPOLARIZE2':
+                elif name == 'DEPOLARIZE2':
                     for targets in instruction.target_groups():
                         target_1, target_2 = sorted(targets, key=lambda t: t.value)
-                        group = _events[timeslice, instruction.name, (target_1, target_2)]
+                        group = _events[timeslice, name, (target_1, target_2)]
                         for event in DEPOLARIZE2_ERROR_EVENTS:
                             match event:
                                 case ('I', basis):
@@ -143,7 +147,7 @@ class CultivationCircuit:
         """Convert an error event to a `stim.PauliString`.
         
         :param name: The name of the error event,
-            which can be 'E', 'X_ERROR', 'Y_ERROR', 'Z_ERROR', 'MX', 'MY', 'MZ'.
+            which can be 'E' or a member of `ONE_QUBIT_ERROR_EVENTS`.
             The measurement faults do not affect the Pauli string.
         :param targets: A tuple of stim.GateTarget objects representing the qubits the error event acts on.
 

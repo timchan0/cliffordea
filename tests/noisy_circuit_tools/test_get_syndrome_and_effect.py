@@ -96,6 +96,36 @@ def test_measurement_error_gives_syndrome():
     assert np.array_equal(syndrome, np.array([True]))
     assert effect == "_"
 
+
+def test_measure_reset_error_preserves_reset_gate():
+    """An MRX outcome flip changes the detector result without adding a Pauli.
+
+    Re-inserting the event for inspection must still use ``MRX`` rather than
+    ``MX`` so that the visualized faulty circuit also resets the measured qubit.
+    """
+    circuit = CultivationCircuit(noisy_circuit=stim.Circuit("""
+        MRX(0.001) 0
+        DETECTOR rec[-1]
+    """))
+    event = (0, "MRX", (stim.GateTarget(0),))
+
+    syndrome, effect = circuit.get_syndrome_and_effect(event)
+    assert np.array_equal(syndrome, np.array([True]))
+    assert effect == "_"
+
+    probability = 0.25
+    faulty_circuit = cliffordep.insert_error_events(
+        circuit=circuit.noiseless_circuit,
+        error_events=[event],
+        probability=probability,
+    )
+    measurement = faulty_circuit[0]
+    assert isinstance(measurement, stim.CircuitInstruction)
+    assert measurement.name == "MRX"
+    assert measurement.gate_args_copy() == [probability]
+    assert stim.gate_data(measurement.name).is_reset
+
+
 def test_pauli_error_gives_effect_and_syndrome():
     circuit = CultivationCircuit(noisy_circuit=stim.Circuit("""
             H 0

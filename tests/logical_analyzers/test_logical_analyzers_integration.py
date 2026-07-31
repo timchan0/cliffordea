@@ -1,33 +1,6 @@
 import pytest
 
-from cliffordep.combinators import FaultCombinator
 from cliffordep.logical_analyzers import CliffordLogicalAnalyzer, SuperpositionLogicalAnalyzer
-from cliffordep import noise
-from cliffordep import circuits
-
-
-@pytest.fixture
-def both_analyzers():
-    NOISE_LEVEL = 1e-3
-    max_order = 4
-    circuit = circuits.D3DoubleCatCheckA6()
-    noisy_circuit = noise.uniformly_depolarize(
-        circuit.INNER_CIRCUIT,
-        noise_level=NOISE_LEVEL,
-    )
-    combinator = FaultCombinator(noisy_circuit=noisy_circuit)
-    superposition_analyzer = SuperpositionLogicalAnalyzer(
-        data_indices=circuit.DATA_INDICES,
-        stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
-        logical_s=circuit.LOGICAL_S,
-    )
-    clifford_analyzer = CliffordLogicalAnalyzer(
-        data_indices=circuit.DATA_INDICES,
-        stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
-        logical_s=circuit.LOGICAL_S,
-    )
-    configurations = combinator.get_undetected_configurations(max_order=max_order)
-    return superposition_analyzer, clifford_analyzer, configurations
 
 
 @pytest.mark.parametrize("state", ['S', 'T'])
