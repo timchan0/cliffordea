@@ -3,6 +3,7 @@ from collections.abc import Iterable, Sequence
 from functools import cache, cached_property
 import itertools
 import math
+from typing import Literal
 
 import stim
 import pandas as pd
@@ -12,6 +13,29 @@ from cliffordep.combinators._base import Combinator, get_trivial_syndrome_combin
 from cliffordep.pauli_string_tools import forget_sign
 from cliffordep.type_aliases import FaultBag, ErrorEvent, LogicalTriple
 from cliffordep import noiseless_circuit_tools
+
+
+DiagramType = Literal[
+    'timeline-text',
+    'timeline-svg',
+    'timeline-svg-html',
+    'timeline-3d',
+    'timeline-3d-html',
+    'detslice-text',
+    'detslice-svg',
+    'detslice-svg-html',
+    'matchgraph-svg',
+    'matchgraph-svg-html',
+    'matchgraph-3d',
+    'matchgraph-3d-html',
+    'timeslice-svg',
+    'timeslice-svg-html',
+    'detslice-with-ops-svg',
+    'detslice-with-ops-svg-html',
+    'interactive',
+    'interactive-html',
+]
+"""Stim diagram type."""
 
 
 class FaultCombinator(Combinator):
@@ -191,7 +215,7 @@ class FaultCombinator(Combinator):
             self,
             configurations: Sequence[Iterable[int]],
             probability_increment: float = 0.1,
-            diagram_type: str = 'timeline',
+            diagram_type: DiagramType = 'timeline-text',
             **kwargs_for_diagram,
     ):
         """Visualize multiple fault configurations one by one.
