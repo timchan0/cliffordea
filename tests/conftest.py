@@ -27,10 +27,18 @@ def d3_double_cat_check_brute(noisy_d3_double_cat_check_circuit: stim.Circuit) -
 
 
 @pytest.fixture(scope='session')
-def both_analyzers():
-    """Build both logical analyzers and enumerate the shared distance-3 configurations once."""
+def d3_combinator_and_kept_strings_by_analyzer():
+    """Build shared distance-3 kept-string regression results.
+
+    The superposition analyzer is evaluated through order three for comparison
+    with the Clifford analyzer. The Clifford analyzer is evaluated through
+    order four so the same session-scoped result can support the frozen
+    higher-order regression.
+
+    :return: The fault combinator, the superposition-analyzer results, and the
+        Clifford-analyzer results.
+    """
     noise_level = 1e-3
-    max_order = 4
     circuit = cliffordep.circuits.D3DoubleCatCheckA6()
     noisy_circuit = cliffordep.noise.uniformly_depolarize(
         circuit.INNER_CIRCUIT,
@@ -47,5 +55,14 @@ def both_analyzers():
         stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
         logical_s=circuit.LOGICAL_S,
     )
-    configurations = combinator.get_undetected_configurations(max_order=max_order)
-    return superposition_analyzer, clifford_analyzer, configurations
+    superposition_kept_strings = combinator.get_kept_strings(
+        logical_analyzer=superposition_analyzer,
+        max_order=3,
+        cultivated_states=('S', 'T'),
+    )
+    clifford_kept_strings = combinator.get_kept_strings(
+        logical_analyzer=clifford_analyzer,
+        max_order=4,
+        cultivated_states=('S', 'T'),
+    )
+    return combinator, superposition_kept_strings, clifford_kept_strings

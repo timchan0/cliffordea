@@ -64,7 +64,7 @@ class TestD3DoubleCatCheck:
 
     def test_undetected_configuration_counts(
             self,
-            both_analyzers,
+            d3_combinator_and_kept_strings_by_analyzer,
     ):
         """Count the undetected distance-3 configurations and their final errors by order.
 
@@ -72,15 +72,26 @@ class TestD3DoubleCatCheck:
         detectors. The second counts the distinct final Pauli errors produced
         by those sets. Together they catch unintended changes to enumeration.
         """
-        *_, configurations = both_analyzers
-        assert [sum(map(len, errors.values())) for errors in configurations] == [
+        combinator, *_ = d3_combinator_and_kept_strings_by_analyzer
+        configuration_counts = []
+        effect_counts = []
+        for order in range(5):
+            configuration_count = 0
+            effects = set()
+            for effect, _ in combinator._iter_undetected_configurations_for_order(order):
+                configuration_count += 1
+                effects.add(effect)
+            configuration_counts.append(configuration_count)
+            effect_counts.append(len(effects))
+
+        assert configuration_counts == [
             1,
             32,
             1003,
             29656,
             769733,
         ]
-        assert [len(errors) for errors in configurations] == [
+        assert effect_counts == [
             1,
             32,
             413,

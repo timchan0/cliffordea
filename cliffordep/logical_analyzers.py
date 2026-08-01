@@ -1,13 +1,11 @@
 import abc
-from collections import Counter
 from collections.abc import Mapping, Iterable, Sequence
 import itertools
-from typing import Literal, overload, override
+from typing import Literal, override
 
 import stim
 
 from cliffordep.pauli_string_tools import PUSH_THROUGH_MAP, PauliSum, tensor_paulis, split_sign
-from cliffordep.type_aliases import LogicalTriple
 
 
 LogicalCoefficients = Mapping[int, float]
@@ -194,107 +192,6 @@ class LogicalAnalyzer(abc.ABC):
             when all stabilizer generators are noiselessly measured.
         :return logical_fidelity: The fidelity of the resulting state to the target logical state.
         """
-
-    @overload
-    def get_kept_strings(
-            self,
-            configurations: list[dict[str, Counter[int]]],
-            cultivated_state: Literal['T', 'S', 'Z'] = 'T',
-            print_progress: bool = False,
-    ) -> list[dict[str, tuple[float, float, Counter[int]]]]:
-        pass
-    @overload
-    def get_kept_strings(
-            self,
-            configurations: list[dict[str, set[frozenset[int]]]],
-            cultivated_state: Literal['T', 'S', 'Z'] = 'T',
-            print_progress: bool = False,
-    ) -> list[dict[str, LogicalTriple]]:
-        pass
-    def get_kept_strings(
-            self,
-            configurations,
-            cultivated_state: Literal['T', 'S', 'Z'] = 'T',
-            print_progress: bool = False,
-    ):
-        """Return all the information needed to reconstruct the logical error probability for any noise level.
-
-        :param configurations: the output of the `get_undetected_configurations()` method
-            from `BaseFaultCombinator` or `BaseExclusiveCombinator`.
-        :param cultivated_state: the target logical state cultivated.
-        :param print_progress: whether to print progress.
-
-        :return kept_strings: A list of maps, one for each degree. Each one maps from each error
-            (as an unsigned Pauli string) to a pair containing:
-            
-            1. the resulting logical vector,
-            2. a counter of denominators OR a set of fault configurations
-            (each represented by a frozen set of fault indices).
-        """
-        if print_progress:
-            print(f"{cultivated_state} state cultivation:")
-        result = [self._get_kept_strings(
-                combinations_of_order,
-                cultivated_state=cultivated_state,
-                order=order if print_progress else None,
-            ) for order, combinations_of_order in enumerate(configurations)]
-        return result
-
-    @overload
-    def _get_kept_strings(
-            self,
-            combinations_of_order: dict[str, Counter[int]],
-            cultivated_state: Literal['T', 'S', 'Z'] = 'T',
-            order: None | int = None,
-    ) -> dict[str, tuple[float, float, Counter[int]]]:
-        pass
-    @overload
-    def _get_kept_strings(
-            self,
-            combinations_of_order: dict[str, set[frozenset[int]]],
-            cultivated_state: Literal['T', 'S', 'Z'] = 'T',
-            order: None | int = None,
-    ) -> dict[str, LogicalTriple]:
-        pass
-    def _get_kept_strings(
-            self,
-            combinations_of_order: Mapping[str, Counter[int] | set[frozenset[int]]],
-            cultivated_state: Literal['T', 'S', 'Z'] = 'T',
-            order: None | int = None,
-    ) -> Mapping[str, tuple[float, float, Counter[int] | set[frozenset[int]]]]:
-        """Compute the logical vector for each postselected error.
-
-        Helper for `get_kept_strings`.
-
-        :param combinations_of_order: A map from each effect to a counter of denominators
-            OR a map from each effect to a set of frozen sets of fault indices.
-            Each denominator divides (noise level)^order to equal
-            the probability an instance of that undetected combination occurs.
-        :param cultivated_state: The target logical state cultivated.
-        :param order: An optional parameter used only for printing progress.
-
-        :return kept_strings_of_order: A map from each error (as an unsigned Pauli string)
-            to a pair containing:
-            
-            1. the resulting logical vector,
-            2. a counter of denominators OR a set of fault configurations
-            (each represented by a frozen set of fault indices).
-        """
-        strings: dict[str, tuple[float, float, Counter[int] | set[frozenset[int]]]] = {}
-        for pauli_string, denominators in combinations_of_order.items():
-            restricted_pauli_string = self.restrict_to_data(pauli_string)
-            accept_probability, logical_fidelity = self.analyze(cultivated_state, restricted_pauli_string)
-            if accept_probability:
-                strings[restricted_pauli_string] = (accept_probability, logical_fidelity, denominators)
-        if order is not None:
-            identity_weight = 0
-            error_weight = 0
-            for accept_probability, logical_fidelity, _ in strings.values():
-                identity_weight += accept_probability * logical_fidelity
-                error_weight += accept_probability * (1-logical_fidelity)
-            print(f'    {order}, {identity_weight} ({error_weight}) errors are kept and lead to identity (error).')
-        return strings
-
 
 def _pauli_masks_and_j_power(pauli_string: stim.PauliString) -> tuple[int, int, int]:
     """Convert a Pauli string to integer X/Z masks and an i-power.
