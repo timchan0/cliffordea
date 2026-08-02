@@ -6,6 +6,7 @@ import math
 from typing import Literal
 
 import pandas as pd
+from tqdm.auto import tqdm
 
 from cliffordep.noisy_circuit_tools import CultivationCircuit
 from cliffordep.combinators._base import Combinator, get_trivial_syndrome_combinations
@@ -166,7 +167,12 @@ class FaultCombinator(Combinator):
         result: dict[str, list[dict[str, LogicalTriple]]] = {
             state: [] for state in cultivated_states
         }
+        configuration_counts: tuple[int, ...] | None = None
         if print_progress:
+            print("Counting undetected configurations...")
+            configuration_counts = (
+                self._count_undetected_configurations_by_order(max_order)
+            )
             print("Enumerating undetected configurations...")
 
         for order in range(max_order + 1):
@@ -176,7 +182,20 @@ class FaultCombinator(Combinator):
             ] = {state: {} for state in cultivated_states}
             visited_configuration_count = 0
 
-            for full_effect_mask, fault_indices in self._iter_undetected_configurations_for_order(order):
+            configuration_iterator: Iterable[tuple[int, tuple[int, ...]]] = (
+                self._iter_undetected_configurations_for_order(order)
+            )
+            if configuration_counts is not None:
+                configuration_iterator = tqdm(
+                    configuration_iterator,
+                    total=configuration_counts[order],
+                    desc=f"Order {order}",
+                    unit="configuration",
+                    dynamic_ncols=True,
+                    leave=True,
+                )
+
+            for full_effect_mask, fault_indices in configuration_iterator:
                 visited_configuration_count += 1
                 data_effect_mask = restrict_effect_mask(full_effect_mask)
                 analyses = analyze_mask(data_effect_mask)
@@ -435,6 +454,59 @@ class FaultCombinator(Combinator):
             yield from self._iter_configurations_for_syndrome_counter(
                 syndrome_counter
             )
+
+    def _count_undetected_configurations_by_order(
+            self,
+            max_order: int,
+    ) -> tuple[int, ...]:
+        """Count undetected fault configurations through a maximum order.
+
+        Dynamic programming tracks the number of ways to select faults from
+        each syndrome group for every accumulated syndrome and order. Selecting
+        an odd number of faults from a group XORs that group's syndrome into
+        the accumulated syndrome; selecting an even number does not.
+
+        :param max_order: The largest fault-configuration order to count.
+
+        :return configuration_counts: The exact number of trivial-syndrome
+            configurations at each order from zero through ``max_order``.
+        """
+        counts_by_order: list[dict[int, int]] = [
+            {0: 1},
+            *({} for _ in range(max_order)),
+        ]
+        for syndrome, faults in self._mask_basis.items():
+            syndrome_mask = sum(
+                int(detector) << detector_index
+                for detector_index, detector in enumerate(syndrome)
+            )
+            next_counts_by_order: list[dict[int, int]] = [
+                defaultdict(int) for _ in range(max_order + 1)
+            ]
+            for previous_order, counts_by_syndrome in enumerate(
+                    counts_by_order):
+                maximum_selected_count = min(
+                    len(faults),
+                    max_order - previous_order,
+                )
+                for accumulated_syndrome, configuration_count in (
+                        counts_by_syndrome.items()):
+                    for selected_count in range(maximum_selected_count + 1):
+                        resultant_syndrome = accumulated_syndrome
+                        if selected_count % 2:
+                            resultant_syndrome ^= syndrome_mask
+                        next_counts_by_order[
+                            previous_order + selected_count
+                        ][resultant_syndrome] += (
+                            configuration_count
+                            * math.comb(len(faults), selected_count)
+                        )
+            counts_by_order = next_counts_by_order
+
+        return tuple(
+            counts_by_syndrome.get(0, 0)
+            for counts_by_syndrome in counts_by_order
+        )
 
     def _iter_configurations_for_syndrome_counter(
             self,

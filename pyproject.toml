@@ -14,7 +14,8 @@ dependencies = [
     "statsmodels",
     "ldpc",
     "pymatching",
-    "stim"
+    "stim",
+    "tqdm"
 ]
 requires-python = ">=3.10"
 

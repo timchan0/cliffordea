@@ -445,6 +445,109 @@ def _make_synthetic_combinator() -> FaultCombinator:
     return combinator
 
 
+def test_configuration_counts_match_synthetic_enumeration():
+    """Compare exact configuration totals with tiny exhaustive enumeration.
+
+    The synthetic basis covers order zero, a zero-syndrome fault, repeated
+    selection from individual syndrome groups, and cancellation across three
+    distinct nonzero syndrome groups.
+    """
+    combinator = _make_synthetic_combinator()
+    max_order = 3
+    expected = tuple(
+        sum(
+            1
+            for _ in combinator._iter_undetected_configurations_for_order(
+                order
+            )
+        )
+        for order in range(max_order + 1)
+    )
+
+    assert combinator._count_undetected_configurations_by_order(
+        max_order
+    ) == expected
+
+
+def test_progress_bars_receive_exact_totals_only_when_enabled(monkeypatch):
+    """Check per-order progress metadata and disabled-progress behavior.
+
+    :param monkeypatch: Pytest fixture used to replace the exact counter and
+        tqdm with lightweight recording wrappers.
+    """
+    combinator = _make_synthetic_combinator()
+    logical_analyzer = _SyntheticAnalyzer()
+    max_order = 3
+    expected_totals = combinator._count_undetected_configurations_by_order(
+        max_order
+    )
+    count_calls: list[int] = []
+    progress_calls: list[dict[str, object]] = []
+    original_counter = FaultCombinator._count_undetected_configurations_by_order
+
+    def recording_counter(
+            self: FaultCombinator,
+            requested_max_order: int,
+    ) -> tuple[int, ...]:
+        """Record one exact-count request before delegating to the method.
+
+        :param self: The combinator whose configurations are counted.
+        :param requested_max_order: The largest requested configuration order.
+
+        :return: Exact configuration totals through ``requested_max_order``.
+        """
+        count_calls.append(requested_max_order)
+        return original_counter(self, requested_max_order)
+
+    def recording_tqdm(iterable, **kwargs):
+        """Record progress-bar options without adding iteration overhead.
+
+        :param iterable: The configuration iterator that tqdm would wrap.
+        :param kwargs: The progress-bar display and total options.
+
+        :return: The original iterable without a rendered progress bar.
+        """
+        progress_calls.append(kwargs)
+        return iterable
+
+    monkeypatch.setattr(
+        FaultCombinator,
+        "_count_undetected_configurations_by_order",
+        recording_counter,
+    )
+    monkeypatch.setattr(
+        "cliffordep.combinators.fault_combinator.tqdm",
+        recording_tqdm,
+    )
+
+    without_progress = combinator.get_kept_strings(
+        logical_analyzer=logical_analyzer,
+        max_order=max_order,
+        cultivated_states=('S', 'T'),
+        print_progress=False,
+    )
+    assert count_calls == []
+    assert progress_calls == []
+
+    with_progress = combinator.get_kept_strings(
+        logical_analyzer=logical_analyzer,
+        max_order=max_order,
+        cultivated_states=('S', 'T'),
+        print_progress=True,
+    )
+    assert with_progress == without_progress
+    assert count_calls == [max_order]
+    assert len(progress_calls) == max_order + 1
+    for order, progress_options in enumerate(progress_calls):
+        assert progress_options == {
+            'total': expected_totals[order],
+            'desc': f"Order {order}",
+            'unit': "configuration",
+            'dynamic_ncols': True,
+            'leave': True,
+        }
+
+
 def test_synthetic_order_three_matches_exhaustive_subset_oracle():
     """Compare lazy enumeration with exhaustive three-way cancellation.
 
