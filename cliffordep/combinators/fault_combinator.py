@@ -306,23 +306,35 @@ class FaultCombinator(Combinator):
 
         :return summary:
             A DataFrame whose rows are of the form (cultivated_state, degree)
-            whose columns are [identity_entropy, error_entropy, conditional_probability].
+            whose columns are [('configuration_count', 'benign'), ('configuration_count', 'malignant'),
+            ('weight', 'benign'), ('weight', 'malignant'), ('weight', 'error_probability')].
         """
-        dict_: dict[tuple[str, int], tuple[float, float]] = {}
+        dict_: dict[tuple[str, int], tuple[int, int, float, float]] = {}
         for state, strings_for_state in all_kept_strings.items():
             for degree, strings in enumerate(strings_for_state):
                 i_entropy, e_entropy = 0, 0
+                i_count, e_count = 0, 0
                 for accept_probability, logical_fidelity, set_of_configurations in strings.values():
-                    entropy = sum(math.prod(self._bag_to_entropy(
-                        self.index_to_bag[index]) for index in config) for config in set_of_configurations)
+                    entropy = sum(math.prod(self._bag_to_entropy(self.index_to_bag[index])
+                        for index in config) for config in set_of_configurations)
                     i_entropy += accept_probability * logical_fidelity * entropy
                     e_entropy += accept_probability * (1-logical_fidelity) * entropy
-                dict_[state, degree] = (i_entropy, e_entropy)
+                    if accept_probability > 0:
+                        if logical_fidelity == 1:
+                            i_count += len(set_of_configurations)
+                        else:
+                            e_count += len(set_of_configurations)
+                dict_[state, degree] = (i_count, e_count, i_entropy, e_entropy)
         data = pd.DataFrame(dict_).T
         data.index.set_names(['cultivated_state', 'degree'], inplace=True)
-        data.columns.set_names(['logical_error'], inplace=True)
-        data['conditional_probability'] = data[1] / (data[0] + data[1])
-        return data
+        data.columns = pd.MultiIndex.from_product([
+            ['configuration_count', 'weight'], ['benign', 'malignant']])
+        data['weight', 'error_probability'] = data['weight', 'malignant'] / \
+            (data['weight', 'benign'] + data['weight', 'malignant'])
+        return data.astype({
+            ('configuration_count', 'benign'): int,
+            ('configuration_count', 'malignant'): int,
+        })
 
     
     @property
