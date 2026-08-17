@@ -38,5 +38,5 @@ class TestD3DoubleCatCheck():
                 string_2 = stim.PauliString(resultant_pauli_2)
                 prod = string_1 * string_2
                 if not any(name=='MX' for _, name, _ in (faults_1|faults_2).keys()):
-                    for index in cliffordep.circuits.D3DoubleCatCheckA6.ANCILLA_INDICES:
+                    for index in cliffordep.circuits.D3A6.ANCILLA_INDICES:
                         assert prod[index] not in _get_anticommuting_paulis('MX')

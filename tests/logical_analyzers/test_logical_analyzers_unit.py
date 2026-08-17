@@ -53,7 +53,7 @@ class TestDistance3:
     @pytest.fixture(params=[CliffordLogicalAnalyzer, SuperpositionLogicalAnalyzer])
     def analyzer(self, request) -> LogicalAnalyzer:
         class_ = request.param
-        circuit = circuits.D3DoubleCatCheckA6()
+        circuit = circuits.D3A6()
         return class_(
             data_indices=circuit.DATA_INDICES,
             stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
@@ -78,7 +78,7 @@ class TestDistance3:
 
     def test_clifford_tableau_is_encoding_circuit(self):
         """Check that the stabilizer-overlap analyzer fixes the logical X frame."""
-        circuit = circuits.D3DoubleCatCheckA6()
+        circuit = circuits.D3A6()
         analyzer = CliffordLogicalAnalyzer(
             data_indices=circuit.DATA_INDICES,
             stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
@@ -133,7 +133,7 @@ class TestDistance3:
     ])
     def test_clifford_matches_pauli_sum(self, restricted: str):
         """Compare the stabilizer-overlap analyzer to the existing pauli sum analyzer."""
-        circuit = circuits.D3DoubleCatCheckA6()
+        circuit = circuits.D3A6()
         clifford_analyzer = CliffordLogicalAnalyzer(
             data_indices=circuit.DATA_INDICES,
             stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
@@ -155,7 +155,7 @@ class TestDistance5:
     
     @pytest.fixture
     def analyzer(self):
-        circuit = circuits.D5DoubleCatCheckA19()
+        circuit = circuits.D5A19()
         return CliffordLogicalAnalyzer(
             data_indices=circuit.DATA_INDICES,
             stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
@@ -180,7 +180,7 @@ class TestDistance5:
         "Z__________________",
     ])
     def test_z_stabilizer_precheck_matches_general_path(self, restricted: str):
-        circuit = circuits.D5DoubleCatCheckA19()
+        circuit = circuits.D5A19()
         enabled_analyzer = CliffordLogicalAnalyzer(
             data_indices=circuit.DATA_INDICES,
             stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,

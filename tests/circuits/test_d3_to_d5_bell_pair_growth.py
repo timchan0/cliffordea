@@ -1,13 +1,13 @@
 from collections.abc import Iterable
 
 from cliffordep import circuits
-from cliffordep.circuits.distance_3_circuits import OriginalD3ColorCodeLayout
-from cliffordep.circuits.distance_5_circuits import OriginalD5ColorCodeLayout
+from cliffordep.circuits.distance_3_circuits import Distance3DoubleCheck
+from cliffordep.circuits.distance_5_circuits import Distance5DoubleCheck
 
 
 Qubit = tuple[float, float]
 Support = frozenset[Qubit]
-ColorCodeLayout = OriginalD3ColorCodeLayout | OriginalD5ColorCodeLayout
+ColorCodeLayout = Distance3DoubleCheck | Distance5DoubleCheck
 
 
 _BELL_PAIR_SUPPORTS: tuple[Support, ...] = tuple(map(frozenset, (
@@ -73,10 +73,10 @@ def test_inherits_syndrome_and_logicals():
     acquire their values from the following stabilizer round.
     """
     d3_data, d3_generators = _layout_supports(
-        circuits.D3DoubleCatCheckA6()
+        circuits.D3A6()
     )
     d5_data, d5_generators = _layout_supports(
-        circuits.D5DoubleCatCheckA19()
+        circuits.D5A19()
     )
 
     for basis in ('X', 'Z'):

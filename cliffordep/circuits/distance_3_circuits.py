@@ -7,8 +7,8 @@ _DATA_QUBIT_COUNT = 7
 _STIM_FILES_DIR = Path(__file__).with_name("stim_files")
 
 
-class OriginalD3ColorCodeLayout:
-    """Common constants for the distance-3 double cat-check circuit."""
+class Distance3DoubleCheck:
+    """Common constants for the distance-3 double-check circuit."""
 
     _STABILIZER_GENERATOR_INDICES = (
         (0, 1, 2, 4),
@@ -80,38 +80,38 @@ class OriginalD3ColorCodeLayout:
         self.LOGICAL_S.append('S_DAG', set(self.DATA_INDICES) - _majority_indices_unrestricted)
 
 
-class D3DoubleCatCheckA1(OriginalD3ColorCodeLayout):
-    """The distance-3 double cat-check circuit using 1 ancilla."""
+class D3A1(Distance3DoubleCheck):
+    """The distance-3 double-check circuit using 1 ancilla."""
     DATA_INDICES = (0, 1, 3, 4, 5, 6, 7)
     ANCILLA_INDICES = (2,)
 
 
-class D3DoubleCatCheckA2(OriginalD3ColorCodeLayout):
-    """The distance-3 double cat-check circuit using 2 ancillas."""
+class D3A2(Distance3DoubleCheck):
+    """The distance-3 double-check circuit using 2 ancillas."""
     DATA_INDICES = (0, 1, 3, 4, 5, 7, 8)
     ANCILLA_INDICES = (2, 6)
 
 
-class D3DoubleCatCheckA3(OriginalD3ColorCodeLayout):
-    """The distance-3 double cat-check circuit using 3 ancillas."""
+class D3A3(Distance3DoubleCheck):
+    """The distance-3 double-check circuit using 3 ancillas."""
     DATA_INDICES = (0, 2, 4, 5, 6, 8, 9)
     ANCILLA_INDICES = (1, 3, 7)
 
 
-class D3DoubleCatCheckA4(OriginalD3ColorCodeLayout):
-    """The distance-3 double cat-check circuit using 4 ancillas."""
+class D3A4(Distance3DoubleCheck):
+    """The distance-3 double-check circuit using 4 ancillas."""
     DATA_INDICES = (0, 2, 4, 6, 7, 9, 10)
     ANCILLA_INDICES = (1, 3, 5, 8)
 
 
-class D3DoubleCatCheckA5(OriginalD3ColorCodeLayout):
-    """The distance-3 double cat-check circuit using 5 ancillas."""
+class D3A5(Distance3DoubleCheck):
+    """The distance-3 double-check circuit using 5 ancillas."""
     DATA_INDICES = (0, 3, 5, 7, 8, 10, 11)
     ANCILLA_INDICES = (1, 2, 4, 6, 9)
 
 
-class D3DoubleCatCheckA6(OriginalD3ColorCodeLayout):
-    """The distance-3 double cat-check circuit using 6 ancillas.
+class D3A6(Distance3DoubleCheck):
+    """The distance-3 double-check circuit using 6 ancillas.
     
     This is the circuit used in the paper.
     """
@@ -119,7 +119,7 @@ class D3DoubleCatCheckA6(OriginalD3ColorCodeLayout):
     ANCILLA_INDICES = (12, 9, 4, 2, 6, 1)
 
 
-class D3DoubleCatCheckA7(OriginalD3ColorCodeLayout):
-    """The distance-3 double cat-check circuit using 7 ancillas."""
+class D3A7(Distance3DoubleCheck):
+    """The distance-3 double-check circuit using 7 ancillas."""
     DATA_INDICES = (0, 3, 5, 7, 8, 10, 11)
     ANCILLA_INDICES = (13, 12, 9, 4, 2, 6, 1)

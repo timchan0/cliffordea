@@ -579,7 +579,7 @@ def test_d3_cache_sizes_preserve_kept_strings_and_share_configuration_sets():
     distance-3 results. Effects accepted for both S and T should also refer to
     the same configuration-set object.
     """
-    circuit = cliffordep.circuits.D3DoubleCatCheckA6()
+    circuit = cliffordep.circuits.D3A6()
     noisy_circuit = cliffordep.noise.uniformly_depolarize(
         circuit.INNER_CIRCUIT,
         noise_level=1e-3,
@@ -694,7 +694,7 @@ def test_d5_through_order_three_documented_weights():
     This integration regression exercises the real distance-5 circuit while
     remaining substantially cheaper than its order-four workflow.
     """
-    circuit = cliffordep.circuits.D5DoubleCatCheckA19()
+    circuit = cliffordep.circuits.D5A19()
     noisy_circuit = cliffordep.noise.uniformly_depolarize(
         circuit.INNER_CIRCUIT,
         noise_level=1e-3,

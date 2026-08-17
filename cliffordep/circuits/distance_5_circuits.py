@@ -6,8 +6,8 @@ import stim
 _STIM_FILES_DIR = Path(__file__).with_name("stim_files")
 
 
-class OriginalD5ColorCodeLayout:
-    """Common constants for the distance-5 double cat-check circuit."""
+class Distance5DoubleCheck:
+    """Common constants for the distance-5 double-check circuit."""
 
     _UNRESTRICTED_STABILIZER_GENERATOR_INDICES = (
         (0, 9, 5, 3), (14, 32, 29, 22), (11, 16, 24, 18, 13, 7),
@@ -44,8 +44,8 @@ class OriginalD5ColorCodeLayout:
         )
 
 
-class D5DoubleCatCheckA19(OriginalD5ColorCodeLayout):
-    """The distance-5 double cat-check circuit using 19 ancillas.
+class D5A19(Distance5DoubleCheck):
+    """The distance-5 double-check circuit using 19 ancillas.
     
     This is the circuit used in the paper.
     """
