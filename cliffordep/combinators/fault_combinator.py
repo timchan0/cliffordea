@@ -354,14 +354,14 @@ class FaultCombinator(Combinator):
         :param configurations: A sequence of fault configurations.
             Each fault configuration is a frozen set of fault indices.
         :param probability_increment: The increment in error probability for each fault in the configuration.
-            I.e. all error events of the kth fault have probability `k*probability_increment`.
-            This is used to distinguish error events belonging to different faults.
+            I.e. all error events realizing the kth fault have probability `k*probability_increment`.
+            This is used to distinguish error events realizing different faults.
         :param diagram_type: The type of diagram to produce. See `stim.Circuit.diagram()` for options.
         :param **kwargs_for_diagram: Other keyword arguments for `stim.Circuit.diagram()`.
 
         :return: An interactive widget that displays one configuration at a time.
             For each configuration, shows a diagram of the circuit where each fault in the configuration
-            is represented by all the error events that correspond to it.
+            is represented by all the error events that realize it.
         """
         from ipywidgets import interact, BoundedIntText
         @interact(configuration=BoundedIntText(
