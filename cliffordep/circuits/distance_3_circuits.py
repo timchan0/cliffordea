@@ -25,9 +25,9 @@ class OriginalD3ColorCodeLayout:
     """
 
     CIRCUIT: stim.Circuit
-    """The full double check circuit."""
+    """The full double-check circuit."""
     INNER_CIRCUIT: stim.Circuit
-    """The double check circuit _within_ the transversal T gates:
+    """The double-check circuit _within_ the transversal T gates:
     * The first timeslice of this circuit is an MPP measurement of all data qubits,
     which the first logical H_XY measurement is checked against.
     * If the ancilla qubit is used again after measurement,
@@ -50,14 +50,17 @@ class OriginalD3ColorCodeLayout:
             '*'.join(f'{basis}{self.DATA_INDICES[index]}' for index in indices)
         ) * logical_identity for indices in self._STABILIZER_GENERATOR_INDICES) for basis in ('X', 'Z')}
         self.STABILIZER_GENERATORS_RESTRICTED = {basis: tuple(stim.PauliString(
-            basis if data_index in indices else '_' for data_index in range(_DATA_QUBIT_COUNT))
-        for indices in self._STABILIZER_GENERATOR_INDICES) for basis in ('X', 'Z')}
+            basis if data_index in indices
+            else '_' for data_index in range(_DATA_QUBIT_COUNT) # type: ignore
+        ) for indices in self._STABILIZER_GENERATOR_INDICES) for basis in ('X', 'Z')}
         """Generators restricted to the 7 data qubits
         in the order given by `DATA_INDICES`.
         """
         (self.LOGICAL_X_RESTRICTED, self.LOGICAL_Z_RESTRICTED) = tuple(
-            stim.PauliString(basis if data_index in self._LOGICAL_INDICES else '_' for data_index in range(_DATA_QUBIT_COUNT))
-            for basis in ('X', 'Z')
+            stim.PauliString(
+                basis if data_index in self._LOGICAL_INDICES
+                else '_' for data_index in range(_DATA_QUBIT_COUNT) # type: ignore
+            ) for basis in ('X', 'Z')
         )
         (self.LOGICAL_X, self.LOGICAL_Z) = tuple(
             stim.PauliString('*'.join(f'{basis}{self.DATA_INDICES[index]}' for index in self._LOGICAL_INDICES)) * logical_identity
