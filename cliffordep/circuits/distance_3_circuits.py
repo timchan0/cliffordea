@@ -33,9 +33,13 @@ class Distance3DoubleCheck:
     """The indices of the data qubits."""
     ANCILLA_INDICES: tuple[int, ...]
     """The indices of the ancilla qubits."""
+    FLAG_INDICES: tuple[int, ...] = ()
+    """The indices of the flag qubits."""
 
     def __init__(self):
-        circuit_name = f'd3a{len(self.ANCILLA_INDICES)}.stim'
+        _flag_count = len(self.FLAG_INDICES)
+        _flag_id = f'f{_flag_count}' if _flag_count else ''
+        circuit_name = f'd3a{len(self.ANCILLA_INDICES)}{_flag_id}.stim'
         self.INNER_CIRCUIT = stim.Circuit.from_file(
             _STIM_FILES_DIR / 'inner_circuits' / circuit_name)
         """The double-check circuit _within_ the two layers of T gates:
@@ -123,3 +127,17 @@ class D3A7(Distance3DoubleCheck):
     """The distance-3 double-check circuit using 7 ancillas."""
     DATA_INDICES = (0, 3, 5, 7, 8, 10, 11)
     ANCILLA_INDICES = (13, 12, 9, 4, 2, 6, 1)
+
+
+class D3A6F2(Distance3DoubleCheck):
+    """The distance-3 double-check circuit using 6 ancillas and 2 flags."""
+    DATA_INDICES = (0, 3, 7, 9, 10, 12, 13)
+    ANCILLA_INDICES = (14, 11, 6, 2, 8, 1)
+    FLAG_INDICES = (4, 5)
+
+
+class D3A6F3(Distance3DoubleCheck):
+    """The distance-3 double-check circuit using 6 ancillas and 3 flags."""
+    DATA_INDICES = (0, 3, 7, 9, 11, 13, 14)
+    ANCILLA_INDICES = (15, 12, 6, 2, 8, 1)
+    FLAG_INDICES = (4, 5, 10)
