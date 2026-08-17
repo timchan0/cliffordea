@@ -56,12 +56,14 @@ class FaultCombinator(Combinator):
             tuple[bool, ...], dict[str, int]
         ] = defaultdict(dict)
         _index_to_bag: defaultdict[int, list[int]] = defaultdict(lambda: [0, 0, 0])
+        event_fault_indices: list[int] = []
         for (_, process_name, _), group in _circuit.group_error_events_by_location().items():
             process_class = self._classify(process_name)
             for error_event in group:
                 syndrome, effect = _circuit.get_syndrome_and_effect(error_event)
                 index = _basis[tuple(syndrome)].setdefault(effect, len(_index_to_bag))
                 _index_to_bag[index][process_class] += 1
+                event_fault_indices.append(index)
         self.basis: dict[tuple[bool, ...], dict[str, int]] = dict(_basis) # type: ignore
         """A map from each syndrome to another map from each effect to a fault index."""
         self._mask_basis: dict[tuple[bool, ...], tuple[tuple[int, int], ...]] = {
@@ -75,10 +77,18 @@ class FaultCombinator(Combinator):
         self.index_to_bag: dict[int, FaultBag] = { # type: ignore
             index: tuple(bag) for index, bag in _index_to_bag.items()}
         """A map from each fault index to its fault bag."""
+        self._event_fault_indices = tuple(event_fault_indices)
+        """The fault index of each deterministically enumerated error event."""
         if print_progress:
             print(f"Finished enumerating all faults. {str(self)}")
         self.circuit = _circuit
         """The noisy circuit to analyze."""
+
+    def __getstate__(self):
+        """Return picklable state without the cached Stim error events."""
+        state = self.__dict__.copy()
+        state.pop('index_to_events', None)
+        return state
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.circuit})"
@@ -260,11 +270,14 @@ class FaultCombinator(Combinator):
         Not used for computation, just for introspection.
         """
         map_: defaultdict[int, set[ErrorEvent]] = defaultdict(set)
-        for group in self.circuit.group_error_events_by_location().values():
-            for error_event in group:
-                syndrome, effect = self.circuit.get_syndrome_and_effect(error_event)
-                index = self.basis[tuple(syndrome)][effect]
-                map_[index].add(error_event)
+        error_events = (
+            error_event
+            for group in self.circuit.group_error_events_by_location().values()
+            for error_event in group
+        )
+        for index, error_event in zip(
+                self._event_fault_indices, error_events, strict=True):
+            map_[index].add(error_event)
         return dict(map_)
 
 
@@ -371,13 +384,16 @@ class FaultCombinator(Combinator):
                 step=1,
         ))
         def f(configuration: int):
-            circuit = self.circuit.noiseless_circuit
+            circuits = noiseless_circuit_tools.split_by_ticks(
+                self.circuit.noiseless_circuit
+            )
             for k, fault_index in enumerate(configurations[configuration]):
-                circuit = noiseless_circuit_tools.insert_error_events(
-                    circuit=circuit,
+                noiseless_circuit_tools._insert_error_events_into_slices(
+                    circuits=circuits,
                     error_events=self.index_to_events[fault_index],
                     probability=k*probability_increment,
                 )
+            circuit = noiseless_circuit_tools.compose_slices(circuits)
             return circuit.diagram(type=diagram_type, **kwargs_for_diagram)
         return f
     

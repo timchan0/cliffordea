@@ -58,11 +58,26 @@ def insert_error_events(
         The tags are not preserved in the output circuit.
     """
     circuits = split_by_ticks(circuit)
+    _insert_error_events_into_slices(circuits, error_events, probability)
+    return compose_slices(circuits)
+
+
+def _insert_error_events_into_slices(
+        circuits: list[stim.Circuit],
+        error_events: Iterable[ErrorEvent],
+        probability: float,
+) -> None:
+    """Insert error events into an already-split circuit in place.
+
+    :param circuits: A circuit split into timeslices by :func:`split_by_ticks`.
+    :param error_events: The error events to insert.
+    :param probability: The probability assigned to every inserted event.
+    """
     for timeslice, name, targets in error_events:
         if name.startswith('M'):
             target, = targets
             # find the index of the instruction containing the erroneous measurement
-            for instruction_index, instruction in enumerate(circuits[timeslice]):
+            for instruction_index, instruction in enumerate(circuits[timeslice]): # type: ignore
                 if isinstance(instruction, stim.CircuitRepeatBlock):
                     raise ValueError("There is a REPEAT block in the circuit.")
                 if instruction.num_measurements:
@@ -81,4 +96,3 @@ def insert_error_events(
                         break
         else:
             circuits[timeslice].append(name, targets, probability)
-    return compose_slices(circuits)

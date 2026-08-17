@@ -1,6 +1,7 @@
 from collections import Counter, defaultdict
 import itertools
 import math
+import pickle
 from types import SimpleNamespace
 from typing import cast
 
@@ -19,6 +20,58 @@ from cliffordep.combinators.fault_combinator import (
 from cliffordep.logical_analyzers import CliffordLogicalAnalyzer, LogicalAnalyzer
 from cliffordep.noisy_circuit_tools import CultivationCircuit
 from cliffordep.pauli_string_tools import forget_sign
+
+
+def _make_small_fault_combinator() -> FaultCombinator:
+    """Build a combinator containing one- and two-qubit fault processes."""
+    return FaultCombinator(stim.Circuit("""
+        R 0 1
+        DEPOLARIZE1(0.001) 0
+        TICK
+        CX 0 1
+        DEPOLARIZE2(0.001) 0 1
+        TICK
+        M(0.001) 0 1
+        DETECTOR rec[-2]
+        DETECTOR rec[-1]
+    """))
+
+
+def test_index_to_events_reuses_indices_recorded_during_construction(
+        monkeypatch,
+):
+    """Rebuilding event objects should not repeat fault propagation."""
+    combinator = _make_small_fault_combinator()
+    event_count = sum(
+        len(group)
+        for group in combinator.circuit.group_error_events_by_location().values()
+    )
+    assert len(combinator._event_fault_indices) == event_count
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("Fault propagation was unexpectedly repeated.")
+
+    monkeypatch.setattr(
+        combinator.circuit,
+        'get_syndrome_and_effect',
+        fail_if_called,
+    )
+    index_to_events = combinator.index_to_events
+
+    assert sum(map(len, index_to_events.values())) == event_count
+    assert set(index_to_events) == set(combinator.index_to_bag)
+
+
+def test_index_to_events_cache_is_excluded_from_pickle():
+    """Cached Stim targets should be rebuilt from picklable integer indices."""
+    combinator = _make_small_fault_combinator()
+    expected = combinator.index_to_events
+
+    restored = pickle.loads(pickle.dumps(combinator))
+
+    assert 'index_to_events' not in restored.__dict__
+    assert restored._event_fault_indices == combinator._event_fault_indices
+    assert restored.index_to_events == expected
 
 
 @pytest.mark.parametrize("qubit_count", range(4))
