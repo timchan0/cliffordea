@@ -1,4 +1,10 @@
+from pathlib import Path
+
 import stim
+
+
+_STIM_FILES_DIR = Path(__file__).with_name("stim_files")
+
 
 class OriginalD5ColorCodeLayout:
     """Common constants for the distance-5 double cat-check circuit."""
@@ -10,21 +16,30 @@ class OriginalD5ColorCodeLayout:
     )
     """Indices of the stabilizer generators."""
 
-    INNER_CIRCUIT: stim.Circuit
     TRANSVERSAL_S: stim.Circuit
+    ANCILLA_INDICES: tuple[int, ...]
+    """The indices of the ancilla qubits."""
 
     def __init__(self):
+        circuit_name = f'd5a{len(self.ANCILLA_INDICES)}.stim'
+        self.INNER_CIRCUIT = stim.Circuit.from_file(
+            _STIM_FILES_DIR / 'inner_circuits' / circuit_name)
+        self.CIRCUIT = stim.Circuit.from_file(
+            _STIM_FILES_DIR / 'full_circuits' / circuit_name)
+        """The full double-check circuit."""
         self.DATA_INDICES: tuple[int, ...]
         self.STABILIZER_GENERATORS = {basis: tuple(stim.PauliString(
-            basis if index in indices else '_' for index in range(self.INNER_CIRCUIT.num_qubits)
+            basis if index in indices else '_' for index in range(self.INNER_CIRCUIT.num_qubits) # type: ignore
         ) for indices in self._UNRESTRICTED_STABILIZER_GENERATOR_INDICES
         ) for basis in ('X', 'Z')}
         self.STABILIZER_GENERATORS_RESTRICTED = {basis: tuple(stim.PauliString(
-            basis if index in indices else '_' for index in self.DATA_INDICES
+            basis if index in indices else '_' for index in self.DATA_INDICES # type: ignore
         ) for indices in self._UNRESTRICTED_STABILIZER_GENERATOR_INDICES
         ) for basis in ('X', 'Z')}
         (self.LOGICAL_X, self.LOGICAL_Z) = tuple(
-            stim.PauliString(basis if index in self.DATA_INDICES else '_' for index in range(self.INNER_CIRCUIT.num_qubits))
+            stim.PauliString(
+                basis if index in self.DATA_INDICES
+                else '_' for index in range(self.INNER_CIRCUIT.num_qubits)) # type: ignore
             for basis in ('X', 'Z')
         )
 
@@ -36,279 +51,7 @@ class D5DoubleCatCheckA19(OriginalD5ColorCodeLayout):
     """
 
     DATA_INDICES = tuple(sorted((3, 5, 0, 9, 14, 22, 32, 29, 34, 31, 24, 26, 20, 18, 13, 7, 11, 16, 36)))
-
     ANCILLA_INDICES = tuple(sorted((21, 28, 2, 4, 6, 8, 17, 19, 35, 1, 10, 15, 33, 30, 12, 23, 25, 27, 37)))
-
-    INNER_CIRCUIT = stim.Circuit(
-"""
-QUBIT_COORDS(0, 0) 0
-QUBIT_COORDS(0, 1) 1
-QUBIT_COORDS(1, 0) 2
-QUBIT_COORDS(1, 1) 3
-QUBIT_COORDS(2, 0) 4
-QUBIT_COORDS(2, 1) 5
-QUBIT_COORDS(2, 2) 6
-QUBIT_COORDS(2, 3) 7
-QUBIT_COORDS(2, 4) 8
-QUBIT_COORDS(3, 0) 9
-QUBIT_COORDS(3, 1) 10
-QUBIT_COORDS(3, 2) 11
-QUBIT_COORDS(3, 3) 12
-QUBIT_COORDS(3, 4) 13
-QUBIT_COORDS(4, 0) 14
-QUBIT_COORDS(4, 1) 15
-QUBIT_COORDS(4, 2) 16
-QUBIT_COORDS(4, 3) 17
-QUBIT_COORDS(4, 4) 18
-QUBIT_COORDS(4, 5) 19
-QUBIT_COORDS(4, 6) 20
-QUBIT_COORDS(5, 0) 21
-QUBIT_COORDS(5, 1) 22
-QUBIT_COORDS(5, 2) 23
-QUBIT_COORDS(5, 3) 24
-QUBIT_COORDS(5, 4) 25
-QUBIT_COORDS(5, 5) 26
-QUBIT_COORDS(5, 6) 27
-QUBIT_COORDS(6, 0) 28
-QUBIT_COORDS(6, 1) 29
-QUBIT_COORDS(6, 2) 30
-QUBIT_COORDS(6, 3) 31
-QUBIT_COORDS(7, 0) 32
-QUBIT_COORDS(7, 1) 33
-QUBIT_COORDS(7, 2) 34
-QUBIT_COORDS(7, 3) 35
-QUBIT_COORDS(8, 0) 36
-QUBIT_COORDS(8, 1) 37
-#!pragma POLYGON(0,0,1,0.25) 9 14 22 16 11 5
-#!pragma POLYGON(0,0,1,0.25) 29 32 36 34
-#!pragma POLYGON(0,0,1,0.25) 24 31 26 18
-#!pragma POLYGON(0,1,0,0.25) 7 11 5 3
-#!pragma POLYGON(0,1,0,0.25) 22 29 34 31 24 16
-#!pragma POLYGON(0,1,0,0.25) 13 18 26 20
-#!pragma POLYGON(1,0,0,0.25) 3 5 9 0
-#!pragma POLYGON(1,0,0,0.25) 14 32 29 22
-#!pragma POLYGON(1,0,0,0.25) 11 16 24 18 13 7
-MPP X3*X5*X0*X9*X14*X22*X32*X29*X34*X31*X24*X26*X20*X18*X13*X7*X11*X16*X36
-TICK
-RX 21 28 2 4 6 8 17 19 35 1 10 15 33 30 12 23 25 27 37
-TICK
-CX 1 0 2 3 4 5 10 9 15 14 21 22 28 29 33 32 30 31 35 34 23 16 17 24 25 18 19 26 27 20 6 11 12 7 8 13 37 36
-TICK
-CX 12 13 3 1 26 27 33 37 30 34
-TICK
-CX 25 26 11 12 5 3 29 33 23 30
-TICK
-CX 24 25 10 11 22 29
-TICK
-CX 10 5 23 24
-TICK
-CX 15 10 22 23
-TICK
-CX 22 15
-TICK
-MRX 22
-DETECTOR(1, 1, 0) rec[-1] rec[-2]
-TICK
-CX 22 15
-TICK
-CX 15 10 22 23
-TICK
-CX 10 5 23 24
-TICK
-CX 24 25 10 11 22 29
-TICK
-CX 25 26 11 12 5 3 29 33 23 30
-TICK
-CX 12 13 3 1 26 27 33 37 30 34
-TICK
-CX 1 0 2 3 4 5 10 9 15 14 21 22 28 29 33 32 30 31 35 34 23 16 17 24 25 18 19 26 27 20 12 7 8 13 6 11 37 36
-TICK
-MX 17 19 6 8 2 4 21 28 35 1 10 15 33 30 12 23 25 27 37
-DETECTOR(4, 3, 1) rec[-19]
-DETECTOR(4, 5, 1) rec[-18]
-DETECTOR(2, 2, 1) rec[-17]
-DETECTOR(2, 4, 1) rec[-16]
-DETECTOR(1, 0, 1) rec[-15]
-DETECTOR(2, 0, 1) rec[-14]
-DETECTOR(5, 1, 1) rec[-13] rec[-20]
-DETECTOR(6, 0, 1) rec[-12]
-DETECTOR(7, 3, 1) rec[-11]
-DETECTOR(0, 1, 1) rec[-10]
-DETECTOR(3, 1, 1) rec[-9]
-DETECTOR(4, 1, 1) rec[-8]
-DETECTOR(7, 1, 1) rec[-7]
-DETECTOR(6, 2, 1) rec[-6]
-DETECTOR(3, 3, 1) rec[-5]
-DETECTOR(5, 2, 1) rec[-4]
-DETECTOR(5, 4, 1) rec[-3]
-DETECTOR(5, 6, 1) rec[-2]
-DETECTOR(8, 1, 1) rec[-1]
-TICK
-RX 17 19 6 8 2 4 21 28 35 1 10 15 33 30 12 23 25 27 37
-"""
-    )
-
-    CIRCUIT = stim.Circuit(
-"""
-QUBIT_COORDS(0, 0) 0
-QUBIT_COORDS(0, 1) 1
-QUBIT_COORDS(1, 0) 2
-QUBIT_COORDS(1, 1) 3
-QUBIT_COORDS(2, 0) 4
-QUBIT_COORDS(2, 1) 5
-QUBIT_COORDS(2, 2) 6
-QUBIT_COORDS(2, 3) 7
-QUBIT_COORDS(2, 4) 8
-QUBIT_COORDS(3, 0) 9
-QUBIT_COORDS(3, 1) 10
-QUBIT_COORDS(3, 2) 11
-QUBIT_COORDS(3, 3) 12
-QUBIT_COORDS(3, 4) 13
-QUBIT_COORDS(4, 0) 14
-QUBIT_COORDS(4, 1) 15
-QUBIT_COORDS(4, 2) 16
-QUBIT_COORDS(4, 3) 17
-QUBIT_COORDS(4, 4) 18
-QUBIT_COORDS(4, 5) 19
-QUBIT_COORDS(4, 6) 20
-QUBIT_COORDS(5, 0) 21
-QUBIT_COORDS(5, 1) 22
-QUBIT_COORDS(5, 2) 23
-QUBIT_COORDS(5, 3) 24
-QUBIT_COORDS(5, 4) 25
-QUBIT_COORDS(5, 5) 26
-QUBIT_COORDS(5, 6) 27
-QUBIT_COORDS(6, 0) 28
-QUBIT_COORDS(6, 1) 29
-QUBIT_COORDS(6, 2) 30
-QUBIT_COORDS(6, 3) 31
-QUBIT_COORDS(7, 0) 32
-QUBIT_COORDS(7, 1) 33
-QUBIT_COORDS(7, 2) 34
-QUBIT_COORDS(7, 3) 35
-QUBIT_COORDS(8, 0) 36
-QUBIT_COORDS(8, 1) 37
-#!pragma POLYGON(0,0,1,0.25) 9 14 22 16 11 5
-#!pragma POLYGON(0,0,1,0.25) 29 32 36 34
-#!pragma POLYGON(0,0,1,0.25) 24 31 26 18
-#!pragma POLYGON(0,1,0,0.25) 7 11 5 3
-#!pragma POLYGON(0,1,0,0.25) 22 29 34 31 24 16
-#!pragma POLYGON(0,1,0,0.25) 13 18 26 20
-#!pragma POLYGON(1,0,0,0.25) 3 5 9 0
-#!pragma POLYGON(1,0,0,0.25) 14 32 29 22
-#!pragma POLYGON(1,0,0,0.25) 11 16 24 18 13 7
-TICK
-MPP X0*X9*X5*X3 X14*X32*X29*X22 X11*X16*X24*X18*X13*X7
-TICK
-MPP X22*X29*X34*X31*X24*X16 X3*X5*X11*X7 X13*X18*X26*X20
-TICK
-MPP X9*X14*X22*X16*X11*X5 X24*X31*X26*X18 X29*X32*X36*X34
-TICK
-MPP Z0*Z9*Z5*Z3 Z14*Z32*Z29*Z22 Z11*Z16*Z24*Z18*Z13*Z7
-TICK
-MPP Z22*Z29*Z34*Z31*Z24*Z16 Z3*Z5*Z11*Z7 Z13*Z18*Z26*Z20
-TICK
-MPP Z9*Z14*Z22*Z16*Z11*Z5 Z24*Z31*Z26*Z18 Z29*Z32*Z36*Z34
-TICK
-MPP Y3*Y5*Y0*Y9*Y14*Y22*Y32*Y29*Y34*Y31*Y24*Y26*Y20*Y18*Y13*Y7*Y11*Y16*Y36
-TICK
-RX 21 28 2 4 6 8 17 19 35 1 10 15 33 30 12 23 25 27 37
-TICK
-S_DAG 9 11 13 14 16 18 20 22 24 26 29 31 34 36 32 3 5 7 0
-TICK
-CX 1 0 2 3 4 5 10 9 15 14 21 22 28 29 33 32 30 31 35 34 23 16 17 24 25 18 19 26 27 20 6 11 12 7 8 13 37 36
-TICK
-CX 12 13 3 1 26 27 33 37 30 34
-TICK
-CX 25 26 11 12 5 3 29 33 23 30
-TICK
-CX 24 25 10 11 22 29
-TICK
-CX 10 5 23 24
-TICK
-CX 15 10 22 23
-TICK
-CX 22 15
-TICK
-MX 22
-DETECTOR(1, 1, 0) rec[-1] rec[-2]
-TICK
-RX 22
-TICK
-CX 22 15
-TICK
-CX 15 10 22 23
-TICK
-CX 10 5 23 24
-TICK
-CX 24 25 10 11 22 29
-TICK
-CX 25 26 11 12 5 3 29 33 23 30
-TICK
-CX 12 13 3 1 26 27 33 37 30 34
-TICK
-CX 1 0 2 3 4 5 10 9 15 14 21 22 28 29 33 32 30 31 35 34 23 16 17 24 25 18 19 26 27 20 12 7 8 13 6 11 37 36
-TICK
-S 9 11 13 14 16 18 20 22 24 26 29 31 34 32 3 5 7 0 36
-TICK
-MX 17 19 6 8 2 4 21 28 35 1 10 15 33 30 12 23 25 27 37
-DETECTOR(4, 3, 1) rec[-19]
-DETECTOR(4, 5, 1) rec[-18]
-DETECTOR(2, 2, 1) rec[-17]
-DETECTOR(2, 4, 1) rec[-16]
-DETECTOR(1, 0, 1) rec[-15]
-DETECTOR(2, 0, 1) rec[-14]
-DETECTOR(5, 1, 1) rec[-13] rec[-20]
-DETECTOR(6, 0, 1) rec[-12]
-DETECTOR(7, 3, 1) rec[-11]
-DETECTOR(0, 1, 1) rec[-10]
-DETECTOR(3, 1, 1) rec[-9]
-DETECTOR(4, 1, 1) rec[-8]
-DETECTOR(7, 1, 1) rec[-7]
-DETECTOR(6, 2, 1) rec[-6]
-DETECTOR(3, 3, 1) rec[-5]
-DETECTOR(5, 2, 1) rec[-4]
-DETECTOR(5, 4, 1) rec[-3]
-DETECTOR(5, 6, 1) rec[-2]
-DETECTOR(8, 1, 1) rec[-1]
-TICK
-MPP X0*X9*X5*X3 X14*X32*X29*X22 X11*X16*X24*X18*X13*X7
-DETECTOR(0, 0, 2) rec[-3] rec[-42]
-DETECTOR(4, 0, 2) rec[-2] rec[-23] rec[-41]
-DETECTOR(3, 2, 2) rec[-1] rec[-40]
-TICK
-MPP X22*X29*X34*X31*X24*X16 X3*X5*X11*X7 X13*X18*X26*X20
-DETECTOR(5, 1, 3) rec[-3] rec[-26] rec[-42]
-DETECTOR(1, 1, 3) rec[-2] rec[-41]
-DETECTOR(3, 4, 3) rec[-1] rec[-40]
-TICK
-MPP X9*X14*X22*X16*X11*X5 X24*X31*X26*X18 X32*X36*X34*X29
-DETECTOR(3, 0, 4) rec[-3] rec[-29] rec[-42]
-DETECTOR(5, 3, 4) rec[-2] rec[-41]
-DETECTOR(6, 1, 4) rec[-1] rec[-40]
-TICK
-MPP Z0*Z9*Z5*Z3 Z14*Z32*Z29*Z22 Z11*Z16*Z24*Z18*Z13*Z7
-DETECTOR(0, 0, 5) rec[-3] rec[-42]
-DETECTOR(4, 0, 5) rec[-2] rec[-41]
-DETECTOR(3, 2, 5) rec[-1] rec[-40]
-TICK
-MPP Z22*Z29*Z34*Z31*Z24*Z16 Z3*Z5*Z11*Z7 Z13*Z18*Z26*Z20
-DETECTOR(5, 1, 6) rec[-3] rec[-42]
-DETECTOR(1, 1, 6) rec[-2] rec[-41]
-DETECTOR(3, 4, 6) rec[-1] rec[-40]
-TICK
-MPP Z9*Z14*Z22*Z16*Z11*Z5 Z24*Z31*Z26*Z18 Z32*Z36*Z34*Z29
-DETECTOR(3, 0, 7) rec[-3] rec[-42]
-DETECTOR(5, 3, 7) rec[-2] rec[-41]
-DETECTOR(6, 1, 7) rec[-1] rec[-40]
-TICK
-MPP Y3*Y5*Y0*Y9*Y14*Y22*Y32*Y29*Y36*Y34*Y31*Y24*Y26*Y20*Y18*Y13*Y7*Y11*Y16
-OBSERVABLE_INCLUDE(0) rec[-1] rec[-20] rec[-21] rec[-22] rec[-23] rec[-24] rec[-25] rec[-26] rec[-27] rec[-28] rec[-29]
-"""
-    )
-    """Copied from the Stim file in `make_chunk_d5_double_cat_check()`
-    in `code/src/cultiv/_construction/_cultivation_stage.py`.
-    """
 
     LOGICAL_S = stim.Circuit(
 """

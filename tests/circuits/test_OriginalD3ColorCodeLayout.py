@@ -1,20 +1,12 @@
 import pytest
 import stim
 
-from cliffordep.circuits import OriginalD3ColorCodeLayout
-
-
-class _ConcreteD3ColorCodeLayout(OriginalD3ColorCodeLayout):
-    """Concrete subclass of `OriginalD3ColorCodeLayout` for testing purposes."""
-    
-    DATA_INDICES = (0, 3, 5, 7, 8, 10, 11)
-    CIRCUIT = stim.Circuit()
-    INNER_CIRCUIT = stim.Circuit()
+from cliffordep.circuits import OriginalD3ColorCodeLayout, D3DoubleCatCheckA6
 
 
 @pytest.fixture
 def original_d3_color_code():
-    return _ConcreteD3ColorCodeLayout()
+    return D3DoubleCatCheckA6()
 
 
 identity_tensor_7 = stim.PauliString(7)
