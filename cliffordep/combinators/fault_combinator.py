@@ -109,7 +109,9 @@ def _make_error_event_analyzer(
             f'{basis}_ERROR',
             (stim.GateTarget(qubit),),
         )
-        syndrome, effect = circuit.get_syndrome_and_effect(generator_event)
+        syndrome, effect = circuit.get_pauli_error_syndrome_and_effect(
+            generator_event,
+        )
         return (
             _bools_to_mask(syndrome),
             _unsigned_pauli_string_to_mask(effect),
@@ -123,11 +125,8 @@ def _make_error_event_analyzer(
         """
         _, name, _ = error_event
         if name.startswith('M'):
-            syndrome, effect = circuit.get_syndrome_and_effect(error_event)
-            return (
-                _bools_to_mask(syndrome),
-                _unsigned_pauli_string_to_mask(effect),
-            )
+            syndrome = circuit.get_measurement_error_syndrome(error_event)
+            return _bools_to_mask(syndrome), 0
 
         syndrome_mask = 0
         effect_mask = 0

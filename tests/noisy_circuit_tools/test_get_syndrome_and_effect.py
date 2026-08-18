@@ -92,7 +92,9 @@ def test_measurement_error_gives_syndrome():
     circuit._measurement_to_detectors = defaultdict(set, {0: {0}})
     fault = (0, "MZ", (stim.GateTarget(0),))
     # For a 1-qubit, 1-detector circuit, measurement 0 flips detector 0
+    specialized_syndrome = circuit.get_measurement_error_syndrome(fault)
     syndrome, effect = circuit.get_syndrome_and_effect(fault)
+    assert np.array_equal(specialized_syndrome, syndrome)
     assert np.array_equal(syndrome, np.array([True]))
     assert effect == "_"
 
@@ -135,7 +137,11 @@ def test_pauli_error_gives_effect_and_syndrome():
         """))
     # Error event: X_ERROR at timeslice 0, qubit 0 (after H)
     fault = (0, "X_ERROR", (stim.GateTarget(0),))
+    specialized_analysis = circuit.get_pauli_error_syndrome_and_effect(fault)
     syndrome, effect = circuit.get_syndrome_and_effect(fault)
+    specialized_syndrome, specialized_effect = specialized_analysis
+    assert np.array_equal(specialized_syndrome, syndrome)
+    assert specialized_effect == effect
     # X anticommutes with MZ, so syndrome flips
     assert np.array_equal(syndrome, np.array([True]))
     assert effect == "X"

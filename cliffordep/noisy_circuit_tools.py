@@ -54,46 +54,94 @@ class CultivationCircuit:
         :return effect: The effect of the error event when propagated to the end of the circuit,
             as an unsigned Pauli string.
         """
-        timeslice, name, targets = error_event
-        pauli_string = self._error_event_to_pauli_string(name=name, targets=targets)
-        syndrome: npt.NDArray[np.bool_] = np.zeros(self.noisy_circuit.num_detectors, dtype=bool)
+        _, name, _ = error_event
         if name.startswith('M'):
-            # pauli_string is identity
-            for instruction in self._noiseless_layers[timeslice]:
+            syndrome = self.get_measurement_error_syndrome(error_event)
+            effect = self.noisy_circuit.num_qubits * '_'
+            return syndrome, effect
+        return self.get_pauli_error_syndrome_and_effect(error_event)
+
+
+    def get_measurement_error_syndrome(
+            self,
+            error_event: ErrorEvent,
+    ) -> npt.NDArray[np.bool_]:
+        """Get the detector syndrome caused by a measurement error.
+
+        :param error_event: The measurement error event to analyze.
+
+        Require:
+        * ``error_event`` is a measurement error.
+
+        :return syndrome: A boolean array indicating which detectors are
+            flipped by the measurement error.
+        """
+        timeslice, _, targets = error_event
+        syndrome: npt.NDArray[np.bool_] = np.zeros(
+            self.noisy_circuit.num_detectors,
+            dtype=bool,
+        )
+        for instruction in self._noiseless_layers[timeslice]:
+            if isinstance(instruction, stim.CircuitRepeatBlock):
+                raise ValueError("There is a REPEAT block in the circuit.")
+            if instruction.num_measurements:
+                # TODO: store measurement index in `ErrorEvent` to avoid below search
+                for measurement_index, target_group in enumerate(
+                    instruction.target_groups(),
+                    start=int(instruction.tag),
+                ):
+                    if set(target_group) == set(targets):
+                        for detector in self._measurement_to_detectors[measurement_index]:
+                            syndrome[detector] ^= True
+                        break
+        return syndrome
+
+
+    def get_pauli_error_syndrome_and_effect(
+            self,
+            error_event: ErrorEvent,
+    ) -> tuple[npt.NDArray[np.bool_], str]:
+        """Propagate a Pauli error to obtain its syndrome and final effect.
+
+        :param error_event: The Pauli error event to analyze.
+
+        Require:
+        * ``error_event`` is not a measurement error.
+
+        :return syndrome: A boolean array indicating which detectors are
+            flipped by the Pauli error.
+        :return effect: The propagated unsigned Pauli string at the end of the
+            circuit.
+        """
+        timeslice, name, targets = error_event
+        pauli_string = self._error_event_to_pauli_string(
+            name=name,
+            targets=targets,
+        )
+        syndrome: npt.NDArray[np.bool_] = np.zeros(
+            self.noisy_circuit.num_detectors,
+            dtype=bool,
+        )
+        remaining_layers = self._noiseless_layers[timeslice+1:]
+        for layer in remaining_layers:
+            for instruction in layer:
                 if isinstance(instruction, stim.CircuitRepeatBlock):
                     raise ValueError("There is a REPEAT block in the circuit.")
-                if instruction.num_measurements:
-                    # TODO: store measurement index in `ErrorEvent` to avoid below search
-                    for measurement_index, target_group in enumerate(
-                        instruction.target_groups(),
+                data = stim.gate_data(instruction.name)
+                if produces_measurements:=data.produces_measurements:
+                    anticommuting_paulis = self._get_anticommuting_paulis(instruction.name)
+                    for measurement_index, target in enumerate(
+                        instruction.targets_copy(),
                         start=int(instruction.tag),
                     ):
-                        if set(target_group) == set(targets):
+                        if pauli_string[target.value] in anticommuting_paulis:
                             for detector in self._measurement_to_detectors[measurement_index]:
                                 syndrome[detector] ^= True
-                            break
-        else:
-            remaining_layers = self._noiseless_layers[timeslice+1:]
-            for layer in remaining_layers:
-                for instruction in layer:
-                    if isinstance(instruction, stim.CircuitRepeatBlock):
-                        raise ValueError("There is a REPEAT block in the circuit.")
-                    data = stim.gate_data(instruction.name)
-                    if produces_measurements:=data.produces_measurements:
-                        anticommuting_paulis = self._get_anticommuting_paulis(instruction.name)
-                        for measurement_index, target in enumerate(
-                            instruction.targets_copy(),
-                            start=int(instruction.tag),
-                        ):
-                            if pauli_string[target.value] in anticommuting_paulis:
-                                for detector in self._measurement_to_detectors[measurement_index]:
-                                    syndrome[detector] ^= True
-                    if is_reset:=data.is_reset:
-                        for target in instruction.targets_copy():
-                            pauli_string[target.value] = 'I'
-                    if not (produces_measurements or is_reset):
-                        pauli_string = pauli_string.after(instruction)
-        
+                if is_reset:=data.is_reset:
+                    for target in instruction.targets_copy():
+                        pauli_string[target.value] = 'I'
+                if not (produces_measurements or is_reset):
+                    pauli_string = pauli_string.after(instruction)
         return syndrome, forget_sign(pauli_string)
 
 

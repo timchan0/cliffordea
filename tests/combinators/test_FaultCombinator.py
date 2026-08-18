@@ -79,16 +79,19 @@ def test_index_to_events_cache_is_excluded_from_pickle():
 
 def test_two_qubit_event_propagation_reuses_symplectic_generators(monkeypatch):
     """Build all 15 two-qubit Pauli faults from four propagated generators."""
-    original = CultivationCircuit.get_syndrome_and_effect
+    original = CultivationCircuit.get_pauli_error_syndrome_and_effect
     generator_calls = 0
 
     def count_calls(self, error_event):
         nonlocal generator_calls
-        if not error_event[1].startswith('M'):
-            generator_calls += 1
+        generator_calls += 1
         return original(self, error_event)
 
-    monkeypatch.setattr(CultivationCircuit, 'get_syndrome_and_effect', count_calls)
+    monkeypatch.setattr(
+        CultivationCircuit,
+        'get_pauli_error_syndrome_and_effect',
+        count_calls,
+    )
     combinator = FaultCombinator(stim.Circuit("""
         R 0 1
         TICK
