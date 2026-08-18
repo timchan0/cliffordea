@@ -11,8 +11,11 @@ import stim
 import cliffordep
 from cliffordep.combinators import FaultCombinator
 from cliffordep.combinators.fault_combinator import (
+    _bools_to_mask,
+    _decompose_error_event,
     _make_logical_analysis_cache,
     _make_pauli_mask_restrictor,
+    _make_error_event_analyzer,
     _pauli_mask_to_unsigned_string,
     _sum_logical_weights,
     _unsigned_pauli_string_to_mask,
@@ -72,6 +75,87 @@ def test_index_to_events_cache_is_excluded_from_pickle():
     assert 'index_to_events' not in restored.__dict__
     assert restored._event_fault_indices == combinator._event_fault_indices
     assert restored.index_to_events == expected
+
+
+def test_two_qubit_event_propagation_reuses_symplectic_generators(monkeypatch):
+    """Build all 15 two-qubit Pauli faults from four propagated generators."""
+    original = CultivationCircuit.get_syndrome_and_effect
+    generator_calls = 0
+
+    def count_calls(self, error_event):
+        nonlocal generator_calls
+        if not error_event[1].startswith('M'):
+            generator_calls += 1
+        return original(self, error_event)
+
+    monkeypatch.setattr(CultivationCircuit, 'get_syndrome_and_effect', count_calls)
+    combinator = FaultCombinator(stim.Circuit("""
+        R 0 1
+        TICK
+        CX 0 1
+        DEPOLARIZE2(0.001) 0 1
+        TICK
+        M 0 1
+        DETECTOR rec[-2]
+        DETECTOR rec[-1]
+    """))
+
+    assert generator_calls == 4
+    assert combinator.fault_count > 0
+
+
+@pytest.mark.parametrize(
+    ('error_event', 'expected'),
+    [
+        (
+            (3, 'X_ERROR', (stim.GateTarget(2),)),
+            ((3, 2, 'X'),),
+        ),
+        (
+            (3, 'Y_ERROR', (stim.GateTarget(2),)),
+            ((3, 2, 'X'), (3, 2, 'Z')),
+        ),
+        (
+            (3, 'Z_ERROR', (stim.GateTarget(2),)),
+            ((3, 2, 'Z'),),
+        ),
+        (
+            (5, 'E', (stim.target_x(1), stim.target_y(4))),
+            ((5, 1, 'X'), (5, 4, 'X'), (5, 4, 'Z')),
+        ),
+    ],
+)
+def test_error_events_decompose_into_elementary_generators(
+        error_event,
+        expected,
+):
+    """Express each Pauli fault as the X/Z generators needed to rebuild it."""
+    assert _decompose_error_event(error_event) == expected
+
+
+def test_mask_analyzer_matches_direct_event_propagation():
+    """Recover every small-circuit fault exactly from cached mask analyses."""
+    circuit = CultivationCircuit(noisy_circuit=stim.Circuit("""
+        R 0 1
+        DEPOLARIZE1(0.001) 0
+        TICK
+        CX 0 1
+        DEPOLARIZE2(0.001) 0 1
+        TICK
+        M(0.001) 0 1
+        DETECTOR rec[-2]
+        DETECTOR rec[-1]
+    """))
+    analyze_error_event = _make_error_event_analyzer(circuit)
+
+    for group in circuit.group_error_events_by_location().values():
+        for error_event in group:
+            syndrome, effect = circuit.get_syndrome_and_effect(error_event)
+            expected = (
+                _bools_to_mask(syndrome),
+                _unsigned_pauli_string_to_mask(effect),
+            )
+            assert analyze_error_event(error_event) == expected
 
 
 @pytest.mark.parametrize("qubit_count", range(4))
