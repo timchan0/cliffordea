@@ -2,6 +2,13 @@ from collections import Counter
 
 import stim
 
+
+PauliMask = int
+"""Packed unsigned Pauli with X support below Z support."""
+
+SyndromeMask = int
+"""Packed detector outcomes ordered from least- to most-significant bit."""
+
 ErrorLocation = tuple[int, str, tuple[stim.GateTarget, ...]]
 """A noisy instruction represented by a tuple containing:
 * `timeslice` the timeslice the error location occurs on.

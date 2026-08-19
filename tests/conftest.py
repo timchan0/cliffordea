@@ -27,8 +27,8 @@ def d3_double_cat_check_brute(noisy_d3_double_cat_check_circuit: stim.Circuit) -
 
 
 @pytest.fixture(scope='session')
-def d3_combinator_and_kept_strings_by_analyzer():
-    """Build shared distance-3 kept-string regression results.
+def d3_combinator_and_kept_effects_by_analyzer():
+    """Build shared distance-3 kept-effect regression results.
 
     The superposition analyzer is evaluated through order three for comparison
     with the Clifford analyzer. The Clifford analyzer is evaluated through
@@ -55,14 +55,14 @@ def d3_combinator_and_kept_strings_by_analyzer():
         stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
         logical_s=circuit.LOGICAL_S,
     )
-    superposition_kept_strings = combinator.get_kept_strings(
+    superposition_kept_effects = combinator.get_kept_effects(
         logical_analyzer=superposition_analyzer,
         max_order=3,
         cultivated_states=('S', 'T'),
     )
-    clifford_kept_strings = combinator.get_kept_strings(
+    clifford_kept_effects = combinator.get_kept_effects(
         logical_analyzer=clifford_analyzer,
         max_order=4,
         cultivated_states=('S', 'T'),
     )
-    return combinator, superposition_kept_strings, clifford_kept_strings
+    return combinator, superposition_kept_effects, clifford_kept_effects

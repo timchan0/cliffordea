@@ -58,7 +58,8 @@ class BaseExclusiveCombinator(Combinator):
     ) -> float:
         """Calculate the logical error rate per kept shot for a given noise level.
 
-        :param all_string_leads: The output of `get_kept_strings`.
+        :param all_string_leads: Postselected logical-analysis results grouped
+            by fault degree and final Pauli effect.
         :param noise_level: The noise level to analyze.
         :param print_progress: Whether to print progress.
         """

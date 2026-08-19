@@ -2,6 +2,11 @@ import numpy as np
 import stim
 
 from cliffordep.combinators import FaultCombinator
+from cliffordep.combinators.fault_combinator import (
+    _bools_to_mask,
+    _iter_zero_syndrome_configurations,
+    _unsigned_pauli_string_to_mask,
+)
 from cliffordep.constants import ONE_QUBIT_ERROR_EVENTS
 from cliffordep.noisy_circuit_tools import CultivationCircuit
 from cliffordep.type_aliases import ErrorEvent, ErrorLocation
@@ -57,14 +62,16 @@ class TestD3DoubleCatCheck:
         assert effect == '_' * noisy_d3_double_cat_check_circuit.num_qubits
 
         combinator = FaultCombinator(noisy_d3_double_cat_check_circuit)
-        fault_index = combinator.basis[tuple(syndrome)][effect]
+        fault_index = combinator.basis[
+            _bools_to_mask(syndrome)
+        ][_unsigned_pauli_string_to_mask(effect)]
         assert combinator.fault_count == 158
         assert combinator.index_to_bag[fault_index] == (1, 0, 5)
 
 
     def test_undetected_configuration_counts(
             self,
-            d3_combinator_and_kept_strings_by_analyzer,
+            d3_combinator_and_kept_effects_by_analyzer,
     ):
         """Count the undetected distance-3 configurations and their final errors by order.
 
@@ -72,17 +79,22 @@ class TestD3DoubleCatCheck:
         detectors. The second counts the distinct final Pauli errors produced
         by those sets. Together they catch unintended changes to enumeration.
         """
-        combinator, *_ = d3_combinator_and_kept_strings_by_analyzer
+        combinator, *_ = d3_combinator_and_kept_effects_by_analyzer
+        syndromes, fault_effects = zip(*combinator._indexed_faults, strict=True)
         configuration_counts = []
         effect_counts = []
         for order in range(5):
             configuration_count = 0
-            effects = set()
-            for effect, _ in combinator._iter_undetected_configurations_for_order(order):
+            resultant_effects = set()
+            for effect, _ in _iter_zero_syndrome_configurations(
+                    syndromes=syndromes,
+                    effects=fault_effects,
+                    order=order,
+            ):
                 configuration_count += 1
-                effects.add(effect)
+                resultant_effects.add(effect)
             configuration_counts.append(configuration_count)
-            effect_counts.append(len(effects))
+            effect_counts.append(len(resultant_effects))
 
         assert configuration_counts == [
             1,
