@@ -1,4 +1,4 @@
-from collections import Counter, defaultdict
+from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from functools import cache, cached_property, lru_cache
 import itertools
@@ -10,9 +10,15 @@ import stim
 from tqdm.auto import tqdm
 
 from cliffordep.noisy_circuit_tools import CultivationCircuit
-from cliffordep.combinators._base import Combinator, get_trivial_syndrome_combinations
+from cliffordep.combinators._base import Combinator
 from cliffordep.logical_analyzers import LogicalAnalyzer
-from cliffordep.type_aliases import FaultBag, ErrorEvent, LogicalTriple
+from cliffordep.type_aliases import (
+    ErrorEvent,
+    FaultBag,
+    LogicalTriple,
+    PauliMask,
+    SyndromeMask,
+)
 from cliffordep import noiseless_circuit_tools
 from cliffordep.constants import ONE_QUBIT_ERROR_EVENTS
 
@@ -150,14 +156,47 @@ def _bools_to_mask(values: Iterable[bool]) -> int:
     return sum(bool(value) << index for index, value in enumerate(values))
 
 
-def _mask_to_bool_tuple(mask: int, width: int) -> tuple[bool, ...]:
-    """Decode an integer mask for the legacy tuple-valued syndrome API.
+def _iter_zero_syndrome_configurations(
+        *,
+        syndromes: Sequence[SyndromeMask],
+        effects: Sequence[PauliMask],
+        order: int,
+) -> Iterator[tuple[PauliMask, tuple[int, ...]]]:
+    """Join canonical fault-subset halves with equal XOR syndromes.
 
-    :param mask: The integer mask to decode.
-    :param width: The number of boolean coefficients to return.
-    :return values: The little-endian boolean coefficients of the mask.
+    :param syndromes: Packed syndrome masks in fault-index order.
+    :param effects: Packed data-effect masks in fault-index order.
+    :param order: The number of distinct fault indices in each configuration.
+    :return: An iterator over combined effects and sorted fault-index tuples.
     """
-    return tuple(bool(mask >> index & 1) for index in range(width))
+    if order == 0:
+        yield 0, ()
+        return
+
+    left_order = order // 2
+    right_order = order - left_order
+    fault_indices = range(len(syndromes))
+    left_halves: defaultdict[
+        SyndromeMask,
+        list[tuple[tuple[int, ...], PauliMask]],
+    ] = defaultdict(list)
+    for indices in itertools.combinations(fault_indices, left_order):
+        syndrome = 0
+        effect = 0
+        for index in indices:
+            syndrome ^= syndromes[index]
+            effect ^= effects[index]
+        left_halves[syndrome].append((indices, effect))
+
+    for right_indices in itertools.combinations(fault_indices, right_order):
+        right_syndrome = 0
+        right_effect = 0
+        for index in right_indices:
+            right_syndrome ^= syndromes[index]
+            right_effect ^= effects[index]
+        for left_indices, left_effect in left_halves.get(right_syndrome, ()):
+            if not left_indices or left_indices[-1] < right_indices[0]:
+                yield left_effect ^ right_effect, left_indices + right_indices
 
 
 class FaultCombinator(Combinator):
@@ -169,9 +208,7 @@ class FaultCombinator(Combinator):
     
     def __init__(self, noisy_circuit, print_progress=False):
         _circuit = CultivationCircuit(noisy_circuit=noisy_circuit)
-        _basis: defaultdict[
-            tuple[bool, ...], dict[str, int]
-        ] = defaultdict(dict)
+        _basis: defaultdict[SyndromeMask, dict[PauliMask, int]] = defaultdict(dict)
         _index_to_bag: defaultdict[int, list[int]] = defaultdict(lambda: [0, 0, 0])
         event_fault_indices: list[int] = []
         analyze_error_event = _make_error_event_analyzer(_circuit)
@@ -180,32 +217,25 @@ class FaultCombinator(Combinator):
             process_class = self._classify(process_name)
             for error_event in group:
                 syndrome_mask, effect_mask = analyze_error_event(error_event)
-
-                # Compatibility boundary for the legacy tuple/string-valued basis.
-                syndrome = _mask_to_bool_tuple(
-                    syndrome_mask,
-                    _circuit.noisy_circuit.num_detectors,
-                )
-                effect = _pauli_mask_to_unsigned_string(
+                index = _basis[syndrome_mask].setdefault(
                     effect_mask,
-                    _circuit.noisy_circuit.num_qubits,
+                    len(_index_to_bag),
                 )
-                index = _basis[syndrome].setdefault(effect, len(_index_to_bag))
                 _index_to_bag[index][process_class] += 1
                 event_fault_indices.append(index)
-        self.basis: dict[tuple[bool, ...], dict[str, int]] = dict(_basis) # type: ignore
-        """A map from each syndrome to another map from each effect to a fault index."""
-        self._mask_basis: dict[tuple[bool, ...], tuple[tuple[int, int], ...]] = {
-            syndrome: tuple(
-                (_unsigned_pauli_string_to_mask(effect), index)
-                for effect, index in effect_to_index.items()
-            )
-            for syndrome, effect_to_index in self.basis.items()
-        }
-        """A compact mask-valued view of `basis`, used during enumeration."""
+        self.basis: dict[SyndromeMask, dict[PauliMask, int]] = dict(_basis)
+        """Packed syndrome and Pauli masks mapped to dense fault indices."""
         self.index_to_bag: dict[int, FaultBag] = { # type: ignore
             index: tuple(bag) for index, bag in _index_to_bag.items()}
         """A map from each fault index to its fault bag."""
+        indexed_faults: list[tuple[SyndromeMask, PauliMask]] = [
+            (0, 0) for _ in self.index_to_bag
+        ]
+        for syndrome_mask, effect_to_index in self.basis.items():
+            for effect_mask, index in effect_to_index.items():
+                indexed_faults[index] = syndrome_mask, effect_mask
+        self._indexed_faults = tuple(indexed_faults)
+        """Syndrome and full Pauli effect masks in fault-index order."""
         self._event_fault_indices = tuple(event_fault_indices)
         """The fault index of each deterministically enumerated error event."""
         if print_progress:
@@ -228,20 +258,20 @@ class FaultCombinator(Combinator):
 
     def error_rate_per_kept_shot(
             self,
-            all_string_leads: list[dict[str, LogicalTriple]],
+            all_kept_effects: list[dict[PauliMask, LogicalTriple]],
             noise_level: float,
             print_progress: bool = False,
     ) -> float:
         """Calculate the logical error rate per kept shot for a given noise level.
 
-        :param all_string_leads: The output of `get_kept_strings`.
+        :param all_kept_effects: One state's output from `get_kept_effects`.
         :param noise_level: The noise level to analyze.
         :param print_progress: Whether to print progress.
         """
         index_to_odds = self.get_index_to_odds(noise_level)
         identity_odds, error_odds = 0, 0
-        for degree, strings in enumerate(all_string_leads):
-            i_odds, e_odds = _sum_odds(strings.values(), index_to_odds)
+        for degree, effects in enumerate(all_kept_effects):
+            i_odds, e_odds = _sum_odds(effects.values(), index_to_odds)
             if print_progress:
                 print(f'O(p^{degree}) events:')
                 print(f'Identity odds = {i_odds}')
@@ -264,7 +294,7 @@ class FaultCombinator(Combinator):
         return index_to_odds
 
 
-    def get_kept_strings(
+    def get_kept_effects(
             self,
             *,
             logical_analyzer: LogicalAnalyzer,
@@ -272,9 +302,10 @@ class FaultCombinator(Combinator):
             cultivated_states: tuple[CultivatedState, ...] = ('T',),
             logical_analysis_cache_maxsize: int | None = 262_144,
             print_progress: bool = False,
-    ) -> dict[str, list[dict[str, LogicalTriple]]]:
-        """Enumerate undetected faults and immediately discard rejected effects.
+    ) -> dict[str, list[dict[PauliMask, LogicalTriple]]]:
+        """Enumerate circuit-undetected, postselected packed Pauli effects.
 
+        :param self: The fault combinator whose indexed faults are enumerated.
         :param max_order: The maximum order of probability to consider.
         :param logical_analyzer: The analyzer used for stabilizer postselection
             and logical-fidelity calculations.
@@ -285,13 +316,12 @@ class FaultCombinator(Combinator):
             Use `None` for an unbounded cache or `0` to disable caching.
         :param print_progress: Whether to print progress.
 
-        :return kept_strings: A map from each requested state to a list whose
-            kth entry maps each accepted data-only Pauli effect to its
+        :return: A map from each requested state to a list whose kth entry maps
+            each accepted packed data-only Pauli effect to its
             acceptance probability, logical fidelity, and fault configurations.
         """
         data_indices = logical_analyzer.DATA_INDICES
         full_qubit_count = self.circuit.noisy_circuit.num_qubits
-        data_qubit_count = len(data_indices)
         restrict_effect_mask = _make_pauli_mask_restrictor(
             data_indices=data_indices,
             source_qubit_count=full_qubit_count,
@@ -299,44 +329,52 @@ class FaultCombinator(Combinator):
         analyze_mask = _make_logical_analysis_cache(
             logical_analyzer=logical_analyzer,
             cultivated_states=cultivated_states,
-            data_qubit_count=data_qubit_count,
             maxsize=logical_analysis_cache_maxsize,
         )
+        detector_count = self.circuit.noisy_circuit.num_detectors
+        extended_syndromes: list[SyndromeMask] = []
+        data_effects: list[PauliMask] = []
+        for circuit_syndrome, full_effect in self._indexed_faults:
+            data_effect = restrict_effect_mask(full_effect)
+            precheck_syndrome = logical_analyzer.linear_precheck_syndrome(
+                data_effect,
+            )
+            extended_syndromes.append(
+                circuit_syndrome | (precheck_syndrome << detector_count)
+            )
+            data_effects.append(data_effect)
 
-        result: dict[str, list[dict[str, LogicalTriple]]] = {
+        result: dict[str, list[dict[PauliMask, LogicalTriple]]] = {
             state: [] for state in cultivated_states
         }
-        configuration_counts: tuple[int, ...] | None = None
-        if print_progress:
-            print("Counting undetected configurations...")
-            configuration_counts = (
-                self._count_undetected_configurations_by_order(max_order)
-            )
-            print("Enumerating undetected configurations...")
 
         for order in range(max_order + 1):
-            configurations_by_mask: dict[int, set[frozenset[int]]] = {}
+            configurations_by_mask: dict[
+                PauliMask, set[frozenset[int]]
+            ] = {}
             triples_by_state: dict[
-                str, dict[int, LogicalTriple]
+                str, dict[PauliMask, LogicalTriple]
             ] = {state: {} for state in cultivated_states}
             visited_configuration_count = 0
 
-            configuration_iterator: Iterable[tuple[int, tuple[int, ...]]] = (
-                self._iter_undetected_configurations_for_order(order)
+            configuration_iterator: Iterable[
+                tuple[PauliMask, tuple[int, ...]]
+            ] = _iter_zero_syndrome_configurations(
+                syndromes=extended_syndromes,
+                effects=data_effects,
+                order=order,
             )
-            if configuration_counts is not None:
+            if print_progress:
                 configuration_iterator = tqdm(
                     configuration_iterator,
-                    total=configuration_counts[order],
                     desc=f"Order {order}",
                     unit="configuration",
                     dynamic_ncols=True,
                     leave=True,
                 )
 
-            for full_effect_mask, fault_indices in configuration_iterator:
+            for data_effect_mask, fault_indices in configuration_iterator:
                 visited_configuration_count += 1
-                data_effect_mask = restrict_effect_mask(full_effect_mask)
                 analyses = analyze_mask(data_effect_mask)
                 if not any(accept_probability for accept_probability, _ in analyses):
                     continue
@@ -353,11 +391,7 @@ class FaultCombinator(Combinator):
                         )
 
             for state in cultivated_states:
-                strings_for_order = {
-                    _pauli_mask_to_unsigned_string(mask, data_qubit_count): triple
-                    for mask, triple in triples_by_state[state].items()
-                }
-                result[state].append(strings_for_order)
+                result[state].append(triples_by_state[state])
 
             if print_progress:
                 retained_configuration_count = sum(
@@ -390,7 +424,7 @@ class FaultCombinator(Combinator):
 
     @property
     def fault_count(self) -> int:
-        return sum(len(faults) for faults in self.basis.values())
+        return len(self._indexed_faults)
 
     
     @cached_property
@@ -409,42 +443,39 @@ class FaultCombinator(Combinator):
             map_[index].add(error_event)
         return dict(map_)
 
-
-    @cache
-    def index_to_syndrome_and_effect(self, index: int) -> tuple[tuple[bool, ...], str]:
-        """Get the syndrome and effect corresponding to a fault index.
-
-        :param index: The fault index.
-
-        :return syndrome: The syndrome of the fault.
-        :return effect: The effect of the fault.
-        """
-        for syndrome, effect_dict in self.basis.items():
-            for effect, effect_index in effect_dict.items():
-                if effect_index == index:
-                    return syndrome, effect
-        raise ValueError(f"Index {index} not found in basis.")
-
     
     def print_basis(self):
-        """Print the syndrome, effect, index, and fault bag of all faults."""
+        """Print readable syndromes, effects, indices, and fault bags.
+
+        :param self: The fault combinator whose basis is displayed.
+        :return: None.
+        """
         lines = []
-        for syndrome, effect_dict in self.basis.items():
-            lines.append(''.join('1' if detector else '0' for detector in syndrome))
-            for effect, index in effect_dict.items():
+        detector_count = self.circuit.noisy_circuit.num_detectors
+        qubit_count = self.circuit.noisy_circuit.num_qubits
+        for syndrome_mask, effect_dict in self.basis.items():
+            lines.append(''.join(
+                '1' if syndrome_mask >> detector_index & 1 else '0'
+                for detector_index in range(detector_count)
+            ))
+            for effect_mask, index in effect_dict.items():
                 bag = self.index_to_bag[index]
-                bag_str = bag if type(bag[0]) is int else tuple(dict(b) for b in bag) # type: ignore
+                effect = _pauli_mask_to_unsigned_string(effect_mask, qubit_count)
+                bag_str = bag
                 lines.append(f"  {effect}: {index}, {bag_str}")
         print('\n'.join(lines))
     
 
     def summarize_contributions(
             self,
-            all_kept_strings: dict[str, list[dict[str, LogicalTriple]]],
+            all_kept_effects: dict[
+                str,
+                list[dict[PauliMask, LogicalTriple]],
+            ],
     ):
         """Summarize contribution of each degree to overall probability.
         
-        :param all_kept_strings: A map from cultivated state to an output of `get_kept_strings`.
+        :param all_kept_effects: Results returned by `get_kept_effects`.
 
         :return summary:
             A DataFrame whose rows are of the form (cultivated_state, degree)
@@ -452,11 +483,11 @@ class FaultCombinator(Combinator):
             ('weight', 'benign'), ('weight', 'malignant'), ('weight', 'error_probability')].
         """
         dict_: dict[tuple[str, int], tuple[int, int, float, float]] = {}
-        for state, strings_for_state in all_kept_strings.items():
-            for degree, strings in enumerate(strings_for_state):
+        for state, effects_for_state in all_kept_effects.items():
+            for degree, effects in enumerate(effects_for_state):
                 i_entropy, e_entropy = 0, 0
                 i_count, e_count = 0, 0
-                for accept_probability, logical_fidelity, set_of_configurations in strings.values():
+                for accept_probability, logical_fidelity, set_of_configurations in effects.values():
                     entropy = sum(math.prod(self._bag_to_entropy(self.index_to_bag[index])
                         for index in config) for config in set_of_configurations)
                     i_entropy += accept_probability * logical_fidelity * entropy
@@ -591,137 +622,6 @@ class FaultCombinator(Combinator):
             raise ValueError(f"Invalid `class_`: {class_}. Only 0, 1, and 2 are supported.")
     
 
-    def _iter_undetected_configurations_for_order(
-            self,
-            order: int,
-    ) -> Iterator[tuple[int, tuple[int, ...]]]:
-        """Yield undetected fault configurations of a fixed order lazily.
-
-        :param order: The number of distinct faults in each configuration.
-
-        :yield: Pairs containing the packed Pauli effect of a configuration
-            and its tuple of fault indices. Only configurations whose combined
-            syndrome is trivial are yielded.
-        """
-        syndrome_counters = get_trivial_syndrome_combinations(
-            self._mask_basis.keys(),
-            order,
-        )
-        for syndrome_counter in syndrome_counters:
-            yield from self._iter_configurations_for_syndrome_counter(
-                syndrome_counter
-            )
-
-    def _count_undetected_configurations_by_order(
-            self,
-            max_order: int,
-    ) -> tuple[int, ...]:
-        """Count undetected fault configurations through a maximum order.
-
-        Dynamic programming tracks the number of ways to select faults from
-        each syndrome group for every accumulated syndrome and order. Selecting
-        an odd number of faults from a group XORs that group's syndrome into
-        the accumulated syndrome; selecting an even number does not.
-
-        :param max_order: The largest fault-configuration order to count.
-
-        :return configuration_counts: The exact number of trivial-syndrome
-            configurations at each order from zero through ``max_order``.
-        """
-        counts_by_order: list[dict[int, int]] = [
-            {0: 1},
-            *({} for _ in range(max_order)),
-        ]
-        for syndrome, faults in self._mask_basis.items():
-            syndrome_mask = sum(
-                int(detector) << detector_index
-                for detector_index, detector in enumerate(syndrome)
-            )
-            next_counts_by_order: list[dict[int, int]] = [
-                defaultdict(int) for _ in range(max_order + 1)
-            ]
-            for previous_order, counts_by_syndrome in enumerate(
-                    counts_by_order):
-                maximum_selected_count = min(
-                    len(faults),
-                    max_order - previous_order,
-                )
-                for accumulated_syndrome, configuration_count in (
-                        counts_by_syndrome.items()):
-                    for selected_count in range(maximum_selected_count + 1):
-                        resultant_syndrome = accumulated_syndrome
-                        if selected_count % 2:
-                            resultant_syndrome ^= syndrome_mask
-                        next_counts_by_order[
-                            previous_order + selected_count
-                        ][resultant_syndrome] += (
-                            configuration_count
-                            * math.comb(len(faults), selected_count)
-                        )
-            counts_by_order = next_counts_by_order
-
-        return tuple(
-            counts_by_syndrome.get(0, 0)
-            for counts_by_syndrome in counts_by_order
-        )
-
-    def _iter_configurations_for_syndrome_counter(
-            self,
-            syndrome_counter: Counter[tuple[bool, ...]],
-    ) -> Iterator[tuple[int, tuple[int, ...]]]:
-        """Yield fault configurations described by a syndrome multiset.
-
-        Faults belonging to the same syndrome are selected with
-        :func:`itertools.combinations`, so no fault index is repeated within
-        that syndrome group. Products from different groups are formed lazily.
-
-        :param syndrome_counter: The number of faults to select from each
-            syndrome group. The syndromes are assumed to XOR to the trivial
-            syndrome with the requested multiplicities.
-
-        :yield: Pairs containing the XOR-combined packed Pauli effect and the
-            tuple of selected fault indices.
-        """
-        groups = tuple(
-            (self._mask_basis[syndrome], count)
-            for syndrome, count in syndrome_counter.items()
-        )
-
-        def recurse(
-                group_index: int,
-                accumulated_effect: int,
-                accumulated_indices: tuple[int, ...],
-        ) -> Iterator[tuple[int, tuple[int, ...]]]:
-            """Combine the remaining syndrome groups recursively.
-
-            :param group_index: The index of the next syndrome group to add.
-            :param accumulated_effect: The packed Pauli effect of all groups
-                already selected.
-            :param accumulated_indices: The fault indices selected from all
-                groups already visited.
-
-            :yield: Complete packed effects and fault-index tuples after every
-                remaining syndrome group has been selected.
-            """
-            if group_index == len(groups):
-                yield accumulated_effect, accumulated_indices
-                return
-
-            faults, count = groups[group_index]
-            for combination in itertools.combinations(faults, count):
-                segment_effect = 0
-                segment_indices: list[int] = []
-                for effect_mask, fault_index in combination:
-                    segment_effect ^= effect_mask
-                    segment_indices.append(fault_index)
-                yield from recurse(
-                    group_index + 1,
-                    accumulated_effect ^ segment_effect,
-                    accumulated_indices + tuple(segment_indices),
-                )
-
-        yield from recurse(0, 0, ())
-
 def _unsigned_pauli_string_to_mask(unsigned_string: str) -> int:
     """Pack an unsigned Pauli string into one integer.
 
@@ -822,21 +722,18 @@ def _make_logical_analysis_cache(
         *,
         logical_analyzer: LogicalAnalyzer,
         cultivated_states: tuple[CultivatedState, ...],
-        data_qubit_count: int,
         maxsize: int | None,
 ):
     """Build a cached logical-analysis function for one enumeration run.
 
-    On a cache miss, the packed data effect is decoded once and analyzed for
-    every cultivated state. Keeping the state tuple in the closure means the
-    packed effect alone forms the cache key.
+    On a cache miss, the packed data effect is analyzed for every cultivated
+    state. Keeping the state tuple in the closure means the effect alone forms
+    the cache key.
 
     :param logical_analyzer: The analyzer used to compute acceptance
         probabilities and logical fidelities.
     :param cultivated_states: The logical states to analyze together on each
         cache miss.
-    :param data_qubit_count: The number of qubits represented by each packed
-        data effect.
     :param maxsize: The maximum number of effects retained by the LRU cache.
         Use ``None`` for an unbounded cache or ``0`` to disable caching.
 
@@ -845,7 +742,7 @@ def _make_logical_analysis_cache(
         exposes ``cache_info`` and ``cache_clear``.
     """
     @lru_cache(maxsize=maxsize)
-    def analyze_mask(data_effect_mask: int) -> tuple[LogicalAnalysis, ...]:
+    def analyze_mask(data_effect_mask: PauliMask) -> tuple[LogicalAnalysis, ...]:
         """Analyze one packed data effect for every requested state.
 
         :param data_effect_mask: The packed Pauli effect on the data qubits.
@@ -853,12 +750,8 @@ def _make_logical_analysis_cache(
         :return analyses: Acceptance-probability and logical-fidelity pairs in
             the same order as ``cultivated_states``.
         """
-        unsigned_string = _pauli_mask_to_unsigned_string(
-            data_effect_mask,
-            data_qubit_count,
-        )
         return tuple(
-            logical_analyzer.analyze(state, unsigned_string)
+            logical_analyzer.analyze(state, data_effect_mask)
             for state in cultivated_states
         )
 

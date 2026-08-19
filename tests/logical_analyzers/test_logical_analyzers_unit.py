@@ -9,6 +9,10 @@ from cliffordep.logical_analyzers import (
     LOGICAL_COEFFICIENTS,
 )
 from cliffordep import circuits
+from cliffordep.combinators.fault_combinator import (
+    _make_pauli_mask_restrictor,
+    _unsigned_pauli_string_to_mask,
+)
 from cliffordep.pauli_string_tools import forget_sign
 
 class TestPauliMasksAndJPower:
@@ -62,18 +66,28 @@ class TestDistance3:
 
 
     def test_x_tensor_n(self, analyzer: LogicalAnalyzer):
-        ps = forget_sign(analyzer.X_TENSOR_N)
-        assert analyzer.analyze('T', ps) == (1.0, True)
+        effect_mask = _unsigned_pauli_string_to_mask(
+            forget_sign(analyzer.X_TENSOR_N),
+        )
+        assert analyzer.analyze('T', effect_mask) == (1.0, True)
 
 
     def test_abort(self, analyzer: LogicalAnalyzer):
-        restricted = analyzer.restrict_to_data('___Z_X_XX____')
-        assert analyzer.analyze('T', restricted) == (0.0, False)
+        full_effect = '___Z_X_XX____'
+        restrict_effect = _make_pauli_mask_restrictor(
+            data_indices=analyzer.DATA_INDICES,
+            source_qubit_count=len(full_effect),
+        )
+        data_effect = restrict_effect(
+            _unsigned_pauli_string_to_mask(full_effect),
+        )
+        assert analyzer.analyze('T', data_effect) == (0.0, False)
 
 
     def test_nontrivial_acceptance_probability(self, analyzer: LogicalAnalyzer):
         """Check a distance-3 example whose trivial-syndrome probability is 1/4."""
-        assert analyzer.analyze('T', 'YX_X___') == (0.25, False)
+        effect_mask = _unsigned_pauli_string_to_mask('YX_X___')
+        assert analyzer.analyze('T', effect_mask) == (0.25, False)
 
 
     def test_clifford_tableau_is_encoding_circuit(self):
@@ -144,8 +158,13 @@ class TestDistance3:
             stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
             logical_s=circuit.LOGICAL_S,
         )
-        clifford_probability, clifford_fidelity = clifford_analyzer.analyze('T', restricted)
-        pauli_sum_probability, pauli_sum_fidelity = pauli_sum_analyzer.analyze('T', restricted)
+        effect_mask = _unsigned_pauli_string_to_mask(restricted)
+        clifford_probability, clifford_fidelity = clifford_analyzer.analyze(
+            'T', effect_mask,
+        )
+        pauli_sum_probability, pauli_sum_fidelity = pauli_sum_analyzer.analyze(
+            'T', effect_mask,
+        )
         assert clifford_probability == pauli_sum_probability
         if clifford_probability > 0:
             assert clifford_fidelity == pauli_sum_fidelity
@@ -164,13 +183,22 @@ class TestDistance5:
 
 
     def test_x_tensor_n(self, analyzer: CliffordLogicalAnalyzer):
-        ps = forget_sign(analyzer.X_TENSOR_N)
-        assert analyzer.analyze('T', ps) == (1.0, True)
+        effect_mask = _unsigned_pauli_string_to_mask(
+            forget_sign(analyzer.X_TENSOR_N),
+        )
+        assert analyzer.analyze('T', effect_mask) == (1.0, True)
 
 
     def test_abort(self, analyzer: CliffordLogicalAnalyzer):
-        ps = analyzer.restrict_to_data('X__X_X_X_X_X_XX_Y_X_X_X_X_X__X_XX_X_X_')
-        assert analyzer.analyze('T', ps) == (0.0, False)
+        full_effect = 'X__X_X_X_X_X_XX_Y_X_X_X_X_X__X_XX_X_X_'
+        restrict_effect = _make_pauli_mask_restrictor(
+            data_indices=analyzer.DATA_INDICES,
+            source_qubit_count=len(full_effect),
+        )
+        data_effect = restrict_effect(
+            _unsigned_pauli_string_to_mask(full_effect),
+        )
+        assert analyzer.analyze('T', data_effect) == (0.0, False)
 
 
     @pytest.mark.parametrize("restricted", [
@@ -193,4 +221,8 @@ class TestDistance5:
             logical_s=circuit.LOGICAL_S,
             precheck_z_stabilizers=False,
         )
-        assert enabled_analyzer.analyze('T', restricted) == disabled_analyzer.analyze('T', restricted)
+        effect_mask = _unsigned_pauli_string_to_mask(restricted)
+        assert enabled_analyzer.analyze(
+            'T', effect_mask,
+        ) == disabled_analyzer.analyze('T', effect_mask)
+        assert disabled_analyzer.linear_precheck_syndrome(effect_mask) == 0

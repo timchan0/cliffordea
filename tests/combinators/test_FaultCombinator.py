@@ -1,4 +1,4 @@
-from collections import Counter, defaultdict
+from collections import defaultdict
 import itertools
 import math
 import pickle
@@ -16,6 +16,7 @@ from cliffordep.combinators.fault_combinator import (
     _make_logical_analysis_cache,
     _make_pauli_mask_restrictor,
     _make_error_event_analyzer,
+    _iter_zero_syndrome_configurations,
     _pauli_mask_to_unsigned_string,
     _sum_logical_weights,
     _unsigned_pauli_string_to_mask,
@@ -105,6 +106,44 @@ def test_two_qubit_event_propagation_reuses_symplectic_generators(monkeypatch):
 
     assert generator_calls == 4
     assert combinator.fault_count > 0
+
+
+def test_basis_and_indexed_faults_remain_mask_native_and_readable(capsys):
+    """Store masks for computation while decoding only printed introspection.
+
+    :param capsys: Pytest fixture used to capture readable basis output.
+    """
+    combinator = _make_small_fault_combinator()
+    assert all(isinstance(syndrome, int) for syndrome in combinator.basis)
+    assert all(
+        isinstance(effect, int)
+        for effects in combinator.basis.values()
+        for effect in effects
+    )
+
+    expected_by_index = {
+        index: (syndrome, effect)
+        for syndrome, effects in combinator.basis.items()
+        for effect, index in effects.items()
+    }
+    assert combinator._indexed_faults == tuple(
+        expected_by_index[index] for index in range(combinator.fault_count)
+    )
+
+    sample_index = 0
+    sample_syndrome, sample_effect = expected_by_index[sample_index]
+    combinator.print_basis()
+    output = capsys.readouterr().out
+    syndrome_text = ''.join(
+        '1' if sample_syndrome >> detector & 1 else '0'
+        for detector in range(combinator.circuit.noisy_circuit.num_detectors)
+    )
+    effect_text = _pauli_mask_to_unsigned_string(
+        sample_effect,
+        combinator.circuit.noisy_circuit.num_qubits,
+    )
+    assert syndrome_text in output
+    assert f"  {effect_text}: {sample_index}" in output
 
 
 @pytest.mark.parametrize(
@@ -293,82 +332,31 @@ def test_pauli_mask_restriction_preserves_requested_order():
     assert fast_restrict(_unsigned_pauli_string_to_mask(source)) == restricted_mask
 
 
-def test_repeated_syndrome_uses_distinct_fault_indices():
-    """Check that one syndrome group cannot reuse a fault index.
+@pytest.mark.parametrize("order", range(5))
+def test_meet_in_the_middle_matches_exhaustive_subsets(order: int):
+    """Canonical half joins return every trivial-syndrome subset exactly once.
 
-    Selecting two faults from a three-fault group should produce exactly the
-    three ordinary combinations of distinct indices.
+    :param order: The distinct-fault subset size compared with brute force.
     """
-    combinator = FaultCombinator.__new__(FaultCombinator)
-    syndrome = (True,)
-    combinator._mask_basis = {
-        syndrome: (
-            (_unsigned_pauli_string_to_mask("X"), 0),
-            (_unsigned_pauli_string_to_mask("Y"), 1),
-            (_unsigned_pauli_string_to_mask("Z"), 2),
-        ),
-    }
+    syndromes = (0b00, 0b01, 0b01, 0b10, 0b11, 0b00)
+    effects = (0b0001, 0b0010, 0b0100, 0b1000, 0b0011, 0b1100)
+    expected = []
+    for indices in itertools.combinations(range(len(syndromes)), order):
+        syndrome = 0
+        effect = 0
+        for index in indices:
+            syndrome ^= syndromes[index]
+            effect ^= effects[index]
+        if syndrome == 0:
+            expected.append((effect, indices))
 
-    configurations = list(
-        combinator._iter_configurations_for_syndrome_counter(
-            Counter({syndrome: 2})
-        )
-    )
+    actual = list(_iter_zero_syndrome_configurations(
+        syndromes=syndromes,
+        effects=effects,
+        order=order,
+    ))
 
-    assert len(configurations) == 3
-    assert {indices for _, indices in configurations} == {
-        (0, 1),
-        (0, 2),
-        (1, 2),
-    }
-    assert all(len(indices) == len(set(indices)) for _, indices in configurations)
-
-
-def test_order_zero_yields_identity_configuration():
-    """Check the base case of lazy configuration enumeration.
-
-    Order zero should yield exactly the empty fault-index tuple with the packed
-    identity effect.
-    """
-    combinator = FaultCombinator.__new__(FaultCombinator)
-    combinator._mask_basis = {(False,): ((1, 0),)}
-    assert list(combinator._iter_undetected_configurations_for_order(0)) == [
-        (0, ())
-    ]
-
-
-def test_syndrome_group_recursion_is_lazy(monkeypatch):
-    """Check that requesting one result does not consume later combinations.
-
-    :param monkeypatch: Pytest fixture used to replace
-        :func:`itertools.combinations` with an iterator that fails if a second
-        item is requested.
-    """
-    combinator = FaultCombinator.__new__(FaultCombinator)
-    syndrome = (False,)
-    combinator._mask_basis = {syndrome: ((1, 0), (2, 1))}
-    original_combinations = itertools.combinations
-
-    def guarded_combinations(iterable, count):
-        """Yield one combination and fail if enumeration continues eagerly.
-
-        :param iterable: The fault entries from which combinations are drawn.
-        :param count: The number of entries in each combination.
-
-        :yield: The first combination produced by :mod:`itertools`.
-        """
-        iterator = original_combinations(iterable, count)
-        yield next(iterator)
-        raise AssertionError("The remaining combinations were consumed eagerly.")
-
-    monkeypatch.setattr(
-        "cliffordep.combinators.fault_combinator.itertools.combinations",
-        guarded_combinations,
-    )
-    generator = combinator._iter_configurations_for_syndrome_counter(
-        Counter({syndrome: 1})
-    )
-    assert next(generator) == (1, (0,))
+    assert sorted(actual) == sorted(expected)
 
 
 class _RecordingAnalyzer(LogicalAnalyzer):
@@ -378,23 +366,24 @@ class _RecordingAnalyzer(LogicalAnalyzer):
         :param data_indices: Source-qubit indices treated as data qubits.
         """
         self.DATA_INDICES = data_indices
-        self.calls: list[tuple[str, str]] = []
+        self.calls: list[tuple[str, int]] = []
 
     def analyze(
             self,
             cultivated_state: str,
-            before_transversal: str,
+            before_transversal: int,
     ) -> tuple[float, float]:
         """Record an analysis call and return deterministic synthetic values.
 
         :param cultivated_state: The logical state being cultivated.
-        :param before_transversal: The unsigned data-qubit Pauli effect.
+        :param before_transversal: The packed data-qubit Pauli effect.
 
         :return: A synthetic acceptance probability and logical fidelity.
         """
         self.calls.append((cultivated_state, before_transversal))
+        support_mask = (1 << len(self.DATA_INDICES)) - 1
         return (
-            float(before_transversal.count('X') + 1),
+            float((before_transversal & support_mask).bit_count() + 1),
             float(cultivated_state == 'S'),
         )
 
@@ -406,19 +395,18 @@ def test_logical_analysis_cache_sizes_have_identical_results(maxsize: int | None
     :param maxsize: The disabled, bounded, default-sized, or unbounded cache
         capacity under test.
     """
-    analyzer = _RecordingAnalyzer()
+    analyzer = _RecordingAnalyzer(data_indices=(0, 1))
     analyze_mask = _make_logical_analysis_cache(
         logical_analyzer=analyzer,
         cultivated_states=('S', 'T'),
-        data_qubit_count=2,
         maxsize=maxsize,
     )
     access_sequence = (0, 1, 2, 0, 1, 2)
     actual = [analyze_mask(mask) for mask in access_sequence]
     expected = [
         (
-            (float(_pauli_mask_to_unsigned_string(mask, 2).count('X') + 1), 1.0),
-            (float(_pauli_mask_to_unsigned_string(mask, 2).count('X') + 1), 0.0),
+            (float(mask.bit_count() + 1), 1.0),
+            (float(mask.bit_count() + 1), 0.0),
         )
         for mask in access_sequence
     ]
@@ -433,43 +421,42 @@ def test_logical_analysis_cache_sizes_have_identical_results(maxsize: int | None
     analyze_mask.cache_clear()
 
 
-def test_fault_combinator_owns_kept_string_enumeration():
-    """Check that only ``FaultCombinator`` exposes the fused enumeration API.
+def test_fault_combinator_exposes_only_mask_native_kept_effect_enumeration():
+    """The obsolete kept-string API is removed in favor of packed effects.
 
     The former two-step methods should not remain on either collaborating
     class after the intentional breaking API change.
     """
     assert not hasattr(FaultCombinator, "get_undetected_configurations")
+    assert not hasattr(FaultCombinator, "get_kept_strings")
+    assert hasattr(FaultCombinator, "get_kept_effects")
     assert not hasattr(LogicalAnalyzer, "get_kept_strings")
 
 
-def _exhaustive_kept_strings_oracle(
+def _exhaustive_kept_effects_oracle(
         combinator: FaultCombinator,
         logical_analyzer,
         max_order: int,
         cultivated_states: tuple[str, ...],
 ):
-    """Compute kept strings with an independent exhaustive subset search.
+    """Compute kept effects with an independent exhaustive subset search.
 
-    This oracle uses Stim multiplication and explicitly checks the syndrome of
-    every fault subset, avoiding the recursive enumeration and packed-effect
-    multiplication used by :meth:`FaultCombinator.get_kept_strings`.
+    This oracle explicitly checks every distinct fault subset instead of using
+    the production meet-in-the-middle join.
 
     :param combinator: The fault combinator whose indexed basis is enumerated.
     :param logical_analyzer: The analyzer used to postselect each data effect.
     :param max_order: The largest fault-subset size to enumerate.
     :param cultivated_states: The logical states to analyze.
 
-    :return kept_strings: Kept-string results in the same per-state, per-order
-        structure as :meth:`FaultCombinator.get_kept_strings`.
+    :return: Kept-effect results in the same structure as
+        :meth:`FaultCombinator.get_kept_effects`.
     """
-    fault_by_index = {
-        index: (syndrome, effect)
-        for syndrome, effect_to_index in combinator.basis.items()
-        for effect, index in effect_to_index.items()
-    }
-    faults = tuple(sorted(fault_by_index.items()))
-    detector_count = len(next(iter(combinator.basis)))
+    faults = tuple(enumerate(combinator._indexed_faults))
+    restrict_effect = _make_pauli_mask_restrictor(
+        data_indices=logical_analyzer.DATA_INDICES,
+        source_qubit_count=combinator.circuit.noisy_circuit.num_qubits,
+    )
     result = {state: [] for state in cultivated_states}
     for order in range(max_order + 1):
         configurations_by_state = {
@@ -477,23 +464,14 @@ def _exhaustive_kept_strings_oracle(
         }
         analyses_by_state = {state: {} for state in cultivated_states}
         for combination in itertools.combinations(faults, order):
-            resultant_syndrome = tuple(
-                sum(fault[1][0][detector] for fault in combination) % 2
-                for detector in range(detector_count)
-            )
-            if any(resultant_syndrome):
+            resultant_syndrome = 0
+            full_effect = 0
+            for _, (syndrome, effect) in combination:
+                resultant_syndrome ^= syndrome
+                full_effect ^= effect
+            if resultant_syndrome:
                 continue
-            full_effect = math.prod(
-                (stim.PauliString(fault[1][1]) for fault in combination),
-                start=stim.PauliString(
-                    combinator.circuit.noisy_circuit.num_qubits
-                ),
-            )
-            full_effect_string = forget_sign(full_effect)
-            data_effect = ''.join(
-                full_effect_string[index]
-                for index in logical_analyzer.DATA_INDICES
-            )
+            data_effect = restrict_effect(full_effect)
             fault_indices = frozenset(fault[0] for fault in combination)
             for state in cultivated_states:
                 if data_effect not in analyses_by_state[state]:
@@ -529,21 +507,25 @@ class _SyntheticAnalyzer(LogicalAnalyzer):
     def analyze(
             self,
             cultivated_state: str,
-            before_transversal: str,
+            before_transversal: int,
     ) -> tuple[float, float]:
-        """Return synthetic acceptance and fidelity for an unsigned effect.
+        """Return synthetic acceptance and fidelity for a packed effect.
 
         :param cultivated_state: The logical state being cultivated.
-        :param before_transversal: The unsigned data-qubit Pauli effect.
+        :param before_transversal: The packed data-qubit Pauli effect.
 
         :return: A deterministic acceptance probability and logical fidelity
             chosen to exercise rejection and state-dependent output.
         """
-        if before_transversal.startswith('Z'):
+        support_mask = 0b11
+        x_mask = before_transversal & support_mask
+        z_mask = (before_transversal >> 2) & support_mask
+        if not (x_mask & 1) and z_mask & 1:
             return 0.0, 0.0
-        acceptance_probability = 0.5 if 'Y' in before_transversal else 1.0
+        acceptance_probability = 0.5 if x_mask & z_mask else 1.0
         logical_fidelity = float(
-            (before_transversal.count('X') + (cultivated_state == 'S')) % 2 == 0
+            (((x_mask & ~z_mask).bit_count() + (cultivated_state == 'S')) % 2)
+            == 0
         )
         return acceptance_probability, logical_fidelity
 
@@ -558,86 +540,42 @@ def _make_synthetic_combinator() -> FaultCombinator:
         independent exhaustive-oracle comparison.
     """
     indexed_faults = (
-        ((False, False), "Z_Z", 0),
-        ((True, False), "X__", 1),
-        ((True, False), "_X_", 2),
-        ((False, True), "__Z", 3),
-        ((False, True), "Y__", 4),
-        ((True, True), "_Y_", 5),
-        ((True, True), "ZZ_", 6),
+        (0b00, _unsigned_pauli_string_to_mask("Z_Z")),
+        (0b01, _unsigned_pauli_string_to_mask("X__")),
+        (0b01, _unsigned_pauli_string_to_mask("_X_")),
+        (0b10, _unsigned_pauli_string_to_mask("__Z")),
+        (0b10, _unsigned_pauli_string_to_mask("Y__")),
+        (0b11, _unsigned_pauli_string_to_mask("_Y_")),
+        (0b11, _unsigned_pauli_string_to_mask("ZZ_")),
     )
-    basis: defaultdict[tuple[bool, ...], dict[str, int]] = defaultdict(dict)
-    for syndrome, effect, index in indexed_faults:
+    basis: defaultdict[int, dict[int, int]] = defaultdict(dict)
+    for index, (syndrome, effect) in enumerate(indexed_faults):
         basis[syndrome][effect] = index
     combinator = FaultCombinator.__new__(FaultCombinator)
     combinator.basis = dict(basis)
-    combinator._mask_basis = {
-        syndrome: tuple(
-            (_unsigned_pauli_string_to_mask(effect), index)
-            for effect, index in effects.items()
-        )
-        for syndrome, effects in combinator.basis.items()
+    combinator._indexed_faults = indexed_faults
+    combinator.index_to_bag = {
+        index: (1, 0, 0) for index in range(len(indexed_faults))
     }
     combinator.circuit = cast(
         CultivationCircuit,
-        SimpleNamespace(noisy_circuit=SimpleNamespace(num_qubits=3)),
+        SimpleNamespace(
+            noisy_circuit=SimpleNamespace(num_qubits=3, num_detectors=2),
+        ),
     )
     return combinator
 
 
-def test_configuration_counts_match_synthetic_enumeration():
-    """Compare exact configuration totals with tiny exhaustive enumeration.
+def test_progress_bars_stream_without_precounting(monkeypatch):
+    """Check that progress is streamed without an analyzer-unaware pre-count.
 
-    The synthetic basis covers order zero, a zero-syndrome fault, repeated
-    selection from individual syndrome groups, and cancellation across three
-    distinct nonzero syndrome groups.
-    """
-    combinator = _make_synthetic_combinator()
-    max_order = 3
-    expected = tuple(
-        sum(
-            1
-            for _ in combinator._iter_undetected_configurations_for_order(
-                order
-            )
-        )
-        for order in range(max_order + 1)
-    )
-
-    assert combinator._count_undetected_configurations_by_order(
-        max_order
-    ) == expected
-
-
-def test_progress_bars_receive_exact_totals_only_when_enabled(monkeypatch):
-    """Check per-order progress metadata and disabled-progress behavior.
-
-    :param monkeypatch: Pytest fixture used to replace the exact counter and
-        tqdm with lightweight recording wrappers.
+    :param monkeypatch: Pytest fixture used to replace tqdm with a lightweight
+        recording wrapper.
     """
     combinator = _make_synthetic_combinator()
     logical_analyzer = _SyntheticAnalyzer()
     max_order = 3
-    expected_totals = combinator._count_undetected_configurations_by_order(
-        max_order
-    )
-    count_calls: list[int] = []
     progress_calls: list[dict[str, object]] = []
-    original_counter = FaultCombinator._count_undetected_configurations_by_order
-
-    def recording_counter(
-            self: FaultCombinator,
-            requested_max_order: int,
-    ) -> tuple[int, ...]:
-        """Record one exact-count request before delegating to the method.
-
-        :param self: The combinator whose configurations are counted.
-        :param requested_max_order: The largest requested configuration order.
-
-        :return: Exact configuration totals through ``requested_max_order``.
-        """
-        count_calls.append(requested_max_order)
-        return original_counter(self, requested_max_order)
 
     def recording_tqdm(iterable, **kwargs):
         """Record progress-bar options without adding iteration overhead.
@@ -651,36 +589,28 @@ def test_progress_bars_receive_exact_totals_only_when_enabled(monkeypatch):
         return iterable
 
     monkeypatch.setattr(
-        FaultCombinator,
-        "_count_undetected_configurations_by_order",
-        recording_counter,
-    )
-    monkeypatch.setattr(
         "cliffordep.combinators.fault_combinator.tqdm",
         recording_tqdm,
     )
 
-    without_progress = combinator.get_kept_strings(
+    without_progress = combinator.get_kept_effects(
         logical_analyzer=logical_analyzer,
         max_order=max_order,
         cultivated_states=('S', 'T'),
         print_progress=False,
     )
-    assert count_calls == []
     assert progress_calls == []
 
-    with_progress = combinator.get_kept_strings(
+    with_progress = combinator.get_kept_effects(
         logical_analyzer=logical_analyzer,
         max_order=max_order,
         cultivated_states=('S', 'T'),
         print_progress=True,
     )
     assert with_progress == without_progress
-    assert count_calls == [max_order]
     assert len(progress_calls) == max_order + 1
     for order, progress_options in enumerate(progress_calls):
         assert progress_options == {
-            'total': expected_totals[order],
             'desc': f"Order {order}",
             'unit': "configuration",
             'dynamic_ncols': True,
@@ -697,22 +627,27 @@ def test_synthetic_order_three_matches_exhaustive_subset_oracle():
     combinator = _make_synthetic_combinator()
     logical_analyzer = _SyntheticAnalyzer()
     cultivated_states = ('S', 'T')
-    actual = combinator.get_kept_strings(
+    assert all(
+        logical_analyzer.linear_precheck_syndrome(effect) == 0
+        for _, effect in combinator._indexed_faults
+    )
+    actual = combinator.get_kept_effects(
         logical_analyzer=logical_analyzer,
         max_order=3,
         cultivated_states=cultivated_states,
     )
-    expected = _exhaustive_kept_strings_oracle(
+    expected = _exhaustive_kept_effects_oracle(
         combinator,
         logical_analyzer,
         max_order=3,
         cultivated_states=cultivated_states,
     )
     assert actual == expected
-    assert frozenset({1, 4, 5}) in actual['S'][3]['_Z'][2]
+    effect_mask = _unsigned_pauli_string_to_mask('_Z')
+    assert frozenset({1, 4, 5}) in actual['S'][3][effect_mask][2]
 
 
-def test_d3_cache_sizes_preserve_kept_strings_and_share_configuration_sets():
+def test_d3_cache_sizes_preserve_kept_effects_and_share_configuration_sets():
     """Check cache-size invariance and cross-state configuration sharing.
 
     Disabled, bounded, default-sized, and unbounded caches must retain equal
@@ -731,7 +666,7 @@ def test_d3_cache_sizes_preserve_kept_strings_and_share_configuration_sets():
         logical_s=circuit.LOGICAL_S,
     )
     results_by_cache_size = {
-        maxsize: combinator.get_kept_strings(
+        maxsize: combinator.get_kept_effects(
             logical_analyzer=logical_analyzer,
             max_order=2,
             cultivated_states=('S', 'T'),
@@ -742,10 +677,93 @@ def test_d3_cache_sizes_preserve_kept_strings_and_share_configuration_sets():
     expected = results_by_cache_size[262_144]
     assert all(result == expected for result in results_by_cache_size.values())
 
-    for order, strings_for_s in enumerate(expected['S']):
-        strings_for_t = expected['T'][order]
-        for effect in strings_for_s.keys() & strings_for_t.keys():
-            assert strings_for_s[effect][2] is strings_for_t[effect][2]
+    for order, effects_for_s in enumerate(expected['S']):
+        effects_for_t = expected['T'][order]
+        for effect in effects_for_s.keys() & effects_for_t.keys():
+            assert effects_for_s[effect][2] is effects_for_t[effect][2]
+
+
+def test_clifford_linear_precheck_preserves_results_and_reduces_enumeration(
+        monkeypatch,
+):
+    """Fold optional Clifford checks into enumeration without changing output.
+
+    :param monkeypatch: Pytest fixture used to count configurations yielded by
+        the meet-in-the-middle enumerator.
+    """
+    circuit = cliffordep.circuits.D3A6()
+    noisy_circuit = cliffordep.noise.uniformly_depolarize(
+        circuit.INNER_CIRCUIT,
+        noise_level=1e-3,
+    )
+    combinator = FaultCombinator(noisy_circuit)
+    yielded_counts = []
+    original_iterator = _iter_zero_syndrome_configurations
+
+    def recording_iterator(*, syndromes, effects, order):
+        """Record one fixed-order configuration-stream length.
+
+        :param syndromes: Packed extended syndromes in fault-index order.
+        :param effects: Packed data effects in fault-index order.
+        :param order: The fixed fault-subset size being enumerated.
+        :return: An iterator over the original configuration stream.
+        """
+        count = 0
+        for configuration in original_iterator(
+                syndromes=syndromes,
+                effects=effects,
+                order=order,
+        ):
+            count += 1
+            yield configuration
+        yielded_counts.append(count)
+
+    monkeypatch.setattr(
+        'cliffordep.combinators.fault_combinator.'
+        '_iter_zero_syndrome_configurations',
+        recording_iterator,
+    )
+    analyzer_arguments = {
+        'data_indices': circuit.DATA_INDICES,
+        'stabilizer_generators': circuit.STABILIZER_GENERATORS_RESTRICTED,
+        'logical_s': circuit.LOGICAL_S,
+    }
+    enabled_results = combinator.get_kept_effects(
+        logical_analyzer=CliffordLogicalAnalyzer(
+            **analyzer_arguments,
+            precheck_z_stabilizers=True,
+        ),
+        max_order=3,
+        cultivated_states=('S', 'T'),
+    )
+    enabled_counts = tuple(yielded_counts)
+    yielded_counts.clear()
+    disabled_results = combinator.get_kept_effects(
+        logical_analyzer=CliffordLogicalAnalyzer(
+            **analyzer_arguments,
+            precheck_z_stabilizers=False,
+        ),
+        max_order=3,
+        cultivated_states=('S', 'T'),
+    )
+
+    assert enabled_results == disabled_results
+    assert all(
+        enabled <= disabled
+        for enabled, disabled in zip(
+            enabled_counts,
+            yielded_counts,
+            strict=True,
+        )
+    )
+    assert any(
+        enabled < disabled
+        for enabled, disabled in zip(
+            enabled_counts,
+            yielded_counts,
+            strict=True,
+        )
+    )
 
 
 def test_full_effects_with_same_data_restriction_merge_configurations():
@@ -755,41 +773,47 @@ def test_full_effects_with_same_data_restriction_merge_configurations():
     contribute to one retained data effect without overwriting either fault.
     """
     combinator = FaultCombinator.__new__(FaultCombinator)
-    zero_syndrome = (False,)
-    combinator._mask_basis = {
-        zero_syndrome: (
-            (_unsigned_pauli_string_to_mask("X_"), 0),
-            (_unsigned_pauli_string_to_mask("XZ"), 1),
-        ),
+    x_identity = _unsigned_pauli_string_to_mask("X_")
+    x_z = _unsigned_pauli_string_to_mask("XZ")
+    combinator.basis = {
+        0: {
+            x_identity: 0,
+            x_z: 1,
+        },
     }
+    combinator._indexed_faults = ((0, x_identity), (0, x_z))
+    combinator.index_to_bag = {0: (1, 0, 0), 1: (1, 0, 0)}
     combinator.circuit = cast(
         CultivationCircuit,
-        SimpleNamespace(noisy_circuit=SimpleNamespace(num_qubits=2)),
+        SimpleNamespace(
+            noisy_circuit=SimpleNamespace(num_qubits=2, num_detectors=1),
+        ),
     )
     analyzer = _RecordingAnalyzer(data_indices=(0,))
 
-    kept_strings = combinator.get_kept_strings(
+    kept_effects = combinator.get_kept_effects(
         logical_analyzer=analyzer,
         max_order=1,
         cultivated_states=('S', 'T'),
     )
 
-    configurations_for_s = kept_strings['S'][1]['X'][2]
-    configurations_for_t = kept_strings['T'][1]['X'][2]
+    data_effect = _unsigned_pauli_string_to_mask('X')
+    configurations_for_s = kept_effects['S'][1][data_effect][2]
+    configurations_for_t = kept_effects['T'][1][data_effect][2]
     assert configurations_for_s == {frozenset({0}), frozenset({1})}
     assert configurations_for_s is configurations_for_t
 
 
 def test_d3_order_four_frozen_regression(
-        d3_combinator_and_kept_strings_by_analyzer,
+        d3_combinator_and_kept_effects_by_analyzer,
 ):
     """Check frozen distance-3 summaries and logical error rates through order four.
 
-    :param d3_combinator_and_kept_strings_by_analyzer: Session-scoped
-        combinator and kept-string results shared with the analyzer-comparison
+    :param d3_combinator_and_kept_effects_by_analyzer: Session-scoped
+        combinator and kept-effect results shared with the analyzer-comparison
         tests.
     """
-    combinator, _, kept_strings = d3_combinator_and_kept_strings_by_analyzer
+    combinator, _, kept_effects = d3_combinator_and_kept_effects_by_analyzer
     expected_summaries = {
         'S': [
             (1, 1, 1.0, 0.0),
@@ -808,32 +832,58 @@ def test_d3_order_four_frozen_regression(
     }
     for state, expected in expected_summaries.items():
         actual = []
-        for strings in kept_strings[state]:
+        for effects in kept_effects[state]:
             identity_weight, error_weight = _sum_logical_weights(
-                strings.values()
+                effects.values()
             )
             actual.append((
-                len(strings),
-                sum(len(triple[2]) for triple in strings.values()),
+                len(effects),
+                sum(len(triple[2]) for triple in effects.values()),
                 identity_weight,
                 error_weight,
             ))
         assert actual == expected
 
     assert combinator.error_rate_per_kept_shot(
-        kept_strings['S'], 1e-3
+        kept_effects['S'], 1e-3
     ) == pytest.approx(1.2214229460983106e-08)
     assert combinator.error_rate_per_kept_shot(
-        kept_strings['T'], 1e-3
+        kept_effects['T'], 1e-3
     ) == pytest.approx(2.817318122322684e-07)
 
 
-def test_d5_through_order_three_documented_weights():
-    """Check documented distance-5 S/T weights through order three.
+def test_d5_order_four_documented_weights_and_enumeration_counts(monkeypatch):
+    """Check distance-5 weights and prechecked enumeration through order four.
 
-    This integration regression exercises the real distance-5 circuit while
-    remaining substantially cheaper than its order-four workflow.
+    :param monkeypatch: Pytest fixture used to record configurations yielded by
+        the production meet-in-the-middle enumerator.
     """
+    enumeration_counts = []
+    original_iterator = _iter_zero_syndrome_configurations
+
+    def recording_iterator(*, syndromes, effects, order):
+        """Record the number of configurations yielded at one order.
+
+        :param syndromes: Packed extended syndromes in fault-index order.
+        :param effects: Packed data effects in fault-index order.
+        :param order: The fixed fault-subset size being enumerated.
+        :return: An iterator over the original configuration stream.
+        """
+        count = 0
+        for configuration in original_iterator(
+                syndromes=syndromes,
+                effects=effects,
+                order=order,
+        ):
+            count += 1
+            yield configuration
+        enumeration_counts.append(count)
+
+    monkeypatch.setattr(
+        'cliffordep.combinators.fault_combinator.'
+        '_iter_zero_syndrome_configurations',
+        recording_iterator,
+    )
     circuit = cliffordep.circuits.D5A19()
     noisy_circuit = cliffordep.noise.uniformly_depolarize(
         circuit.INNER_CIRCUIT,
@@ -845,17 +895,30 @@ def test_d5_through_order_three_documented_weights():
         stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
         logical_s=circuit.LOGICAL_S,
     )
-    kept_strings = combinator.get_kept_strings(
+    kept_effects = combinator.get_kept_effects(
         logical_analyzer=logical_analyzer,
-        max_order=3,
+        max_order=4,
         cultivated_states=('S', 'T'),
     )
     expected_weights = {
-        'S': [(1.0, 0.0), (2.0, 0.0), (4.0, 0.0), (20.0, 0.0)],
-        'T': [(1.0, 0.0), (2.0, 0.0), (1.75, 0.0), (7.25, 0.1875)],
+        'S': [
+            (1.0, 0.0),
+            (2.0, 0.0),
+            (4.0, 0.0),
+            (20.0, 0.0),
+            (100.0, 0.0),
+        ],
+        'T': [
+            (1.0, 0.0),
+            (2.0, 0.0),
+            (1.75, 0.0),
+            (7.25, 0.1875),
+            (50.3125, 6.203125),
+        ],
     }
     for state, expected in expected_weights.items():
         assert [
-            _sum_logical_weights(strings.values())
-            for strings in kept_strings[state]
+            _sum_logical_weights(effects.values())
+            for effects in kept_effects[state]
         ] == expected
+    assert enumeration_counts == [1, 21, 493, 14259, 351145]

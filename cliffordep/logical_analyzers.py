@@ -6,6 +6,7 @@ from typing import Literal, override
 import stim
 
 from cliffordep.pauli_string_tools import PUSH_THROUGH_MAP, PauliSum, tensor_paulis, split_sign
+from cliffordep.type_aliases import PauliMask, SyndromeMask
 
 
 LogicalCoefficients = Mapping[int, float]
@@ -24,6 +25,9 @@ _SIGN_TO_J_POWER: dict[complex, Literal[0, 1, 2, 3]] = {
     (-1+0j): 2,
     (0-1j): 3,
 }
+
+_PAULI_CODE_TO_CHAR = ('_', 'X', 'Z', 'Y')
+"""Unsigned Pauli character indexed by packed X/Z bits."""
 
 
 _I_STATE_LOGICAL_COEFFICIENTS: LogicalCoefficients = {0b00: 1.0, 0b11: 1.0}
@@ -54,8 +58,8 @@ an alias for ``i``, and ``Z`` is an alias for ``-``.
 class _TransversalGate:
     """A transversal implementation of physical Z, S, T gates or their inverses.
     
-    To conjugate a Pauli string by this transversal gate,
-    call the instance on the unsigned Pauli string;
+    To conjugate a Pauli by this transversal gate,
+    call the instance on its packed X/Z-support mask;
     the output is a `stim.Tableau`.
     """
 
@@ -95,34 +99,41 @@ class _TransversalGate:
     def __init__(self, physical_gates: Iterable[str]):
         self.PHYSICAL_GATES = tuple(physical_gates)
 
-    def __call__(self, pauli_string: str) -> stim.Tableau:
+    def __call__(self, pauli_mask: PauliMask) -> stim.Tableau:
+        """Push a packed unsigned Pauli through the transversal gate.
+
+        :param self: The transversal gate implementation.
+        :param pauli_mask: The packed Pauli to conjugate.
+        :return: The conjugated Clifford tableau.
         """
-        Push an _unsigned_ Pauli string through the transversal gate.
-        
-        :param pauli_string: The unsigned Pauli string to be conjugated.
-        :return tableau: The resulting tableau after conjugation.
-        :raises ValueError: If the length of the Pauli string
-            does not match the length of the transversal gate.
-        """
-        return sum((stim.Tableau.from_named_gate(self._PUSH_THROUGH_MAP[physical_gate][pauli])
-            for physical_gate, pauli in zip(self.PHYSICAL_GATES, pauli_string, strict=True)),
-            start=stim.Tableau(0))
+        qubit_count = len(self.PHYSICAL_GATES)
+        return sum((
+            stim.Tableau.from_named_gate(self._PUSH_THROUGH_MAP[
+                physical_gate
+            ][_PAULI_CODE_TO_CHAR[
+                ((pauli_mask >> qubit_index) & 1)
+                | (((pauli_mask >> (qubit_count + qubit_index)) & 1) << 1)
+            ]])
+            for qubit_index, physical_gate in enumerate(self.PHYSICAL_GATES)
+        ), start=stim.Tableau(0))
     
     def __repr__(self) -> str:
         return f"_TransversalGate({self.PHYSICAL_GATES})"
     
-    def conjugate(self, pauli_string: str):
+    def conjugate(self, pauli_mask: PauliMask):
+        """Expand a packed Pauli conjugated by the transversal gate.
+
+        :param self: The transversal gate implementation.
+        :param pauli_mask: The packed Pauli to conjugate.
+        :return: The resulting Pauli superposition.
         """
-        Push an _unsigned_ Pauli string through the transversal gate.
-        
-        :param pauli_string: The unsigned Pauli string to be conjugated.
-        :return clifford_string: The resulting Pauli sum after conjugation.
-        :raises ValueError: If the length of the Pauli string
-            does not match the length of the transversal gate.
-        """
+        qubit_count = len(self.PHYSICAL_GATES)
         options: list[tuple[str, ...]] = [
-            PUSH_THROUGH_MAP[physical_gate][pauli] for physical_gate, pauli
-            in zip(self.PHYSICAL_GATES, pauli_string, strict=True)
+            PUSH_THROUGH_MAP[physical_gate][_PAULI_CODE_TO_CHAR[
+                ((pauli_mask >> qubit_index) & 1)
+                | (((pauli_mask >> (qubit_count + qubit_index)) & 1) << 1)
+            ]]
+            for qubit_index, physical_gate in enumerate(self.PHYSICAL_GATES)
         ]
         terms: dict[str, complex] = {}
         for pauli_tuple in itertools.product(*options):
@@ -174,20 +185,29 @@ class LogicalAnalyzer(abc.ABC):
                 else letter for qubit_index in data_indices
             )
 
-    def restrict_to_data(self, unsigned_string: str):
-        return ''.join(unsigned_string[index] for index in self.DATA_INDICES)
+    def linear_precheck_syndrome(
+            self,
+            before_transversal: PauliMask,
+    ) -> SyndromeMask:
+        """Return optional linear checks required for postselection.
+
+        :param self: The logical analyzer supplying the checks.
+        :param before_transversal: The packed data-qubit Pauli effect.
+        :return: The packed check outcomes, or zero when none are supplied.
+        """
+        return 0
 
     @abc.abstractmethod
     def analyze(
             self,
             cultivated_state: Literal['T', 'S', 'Z'],
-            before_transversal: str,
+            before_transversal: PauliMask,
     ) -> tuple[float, float]:
-        """Compute the acceptance probability and logical fidelity of a logical state affected by error.
+        """Compute acceptance and fidelity for a packed Pauli effect.
 
+        :param self: The logical analyzer evaluating the effect.
         :param cultivated_state: The cultivated state, either 'T', 'S', or 'Z'.
-        :param before_transversal: A string representing the Pauli error without sign,
-            restricted to the data qubits.
+        :param before_transversal: The packed data-qubit Pauli effect.
         :return acceptance_probability: The probability the resulting state yields a trivial syndrome
             when all stabilizer generators are noiselessly measured.
         :return logical_fidelity: The fidelity of the resulting state to the target logical state.
@@ -271,13 +291,15 @@ class CliffordLogicalAnalyzer(LogicalAnalyzer):
         """The encoding circuit for the stabilizer code."""
         self.unencoder = self.encoder.inverse()
         """The unencoding circuit for the stabilizer code."""
-        self.unencoded_stabilizer_generators = {
-            basis: tuple(self.unencoder(generator) for generator in generator_list)
-            for basis, generator_list in stabilizer_generators.items()
-        }
-        """The unencoded generators of the CSS code stabilizer group restricted to data qubits, by basis."""
         self.qubit_count = len(data_indices)
         """The number of data qubits."""
+        self.support_mask = (1 << self.qubit_count) - 1
+        """Bitmask selecting one support half of a packed data Pauli."""
+        self.z_precheck_generators = tuple(
+            _pauli_masks_and_j_power(generator)[:2]
+            for generator in stabilizer_generators['Z']
+        )
+        """X/Z masks of stabilizers used by the optional linear precheck."""
         self.logical_qubit_count = self.qubit_count - self.stabilizer_rank
         """The number of encoded logical qubits."""
         self.unencoded_logical_mask = (
@@ -324,19 +346,36 @@ class CliffordLogicalAnalyzer(LogicalAnalyzer):
             zs=logical_zero_generators,
         )
 
+    def linear_precheck_syndrome(
+            self,
+            before_transversal: PauliMask,
+    ) -> SyndromeMask:
+        """Return commutation outcomes for optional Z-stabilizer checks.
+
+        :param self: The Clifford logical analyzer supplying the checks.
+        :param before_transversal: The packed data-qubit Pauli effect.
+        :return: The packed Z-stabilizer syndrome when enabled, otherwise zero.
+        """
+        if not self.precheck_z_stabilizers:
+            return 0
+        effect_x = before_transversal & self.support_mask
+        effect_z = (before_transversal >> self.qubit_count) & self.support_mask
+        return sum(
+            (
+                (
+                    (effect_x & stabilizer_z).bit_count()
+                    + (effect_z & stabilizer_x).bit_count()
+                ) & 1
+            ) << stabilizer_index
+            for stabilizer_index, (stabilizer_x, stabilizer_z)
+            in enumerate(self.z_precheck_generators)
+        )
+
     def analyze(self, cultivated_state, before_transversal):
-        before_transversal_pauli = stim.PauliString(before_transversal)
-        
-        # The logical fidelity of a logical X eigenstate suffering from error `before_transversal`.
-        logical_fidelity = self.X_TENSOR_N.commutes(before_transversal_pauli)
-        
-        if self.precheck_z_stabilizers:
-            # Under Z-preserving transversal gates, any pre-existing pure
-            # Z-stabilizer syndrome persists through the transversal layer.
-            unencoded_before = self.unencoder(before_transversal_pauli)
-            for z_generator in self.unencoded_stabilizer_generators['Z']:
-                if not z_generator.commutes(unencoded_before):
-                    return 0.0, logical_fidelity
+        effect_z = (before_transversal >> self.qubit_count) & self.support_mask
+        logical_fidelity = not (effect_z.bit_count() & 1)
+        if self.linear_precheck_syndrome(before_transversal):
+            return 0.0, logical_fidelity
         after_transversal = self.LOGICAL[cultivated_state](before_transversal)
         unencoded_error = self.unencoder * after_transversal * self.encoder
         accept_probability = self._get_accept_probability(
