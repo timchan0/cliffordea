@@ -20,7 +20,6 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
-from functools import lru_cache
 import heapq
 import json
 import math
@@ -36,7 +35,7 @@ import stim
 
 from cliffordep.combinators import FaultCombinator
 from cliffordep.noiseless_circuit_tools import split_by_ticks
-from cliffordep.type_aliases import ErrorEvent
+from cliffordep.type_aliases import ErrorEvent, LogicalTriple, PauliMask
 
 
 PauliBasis = Literal["X", "Z"]
@@ -247,18 +246,21 @@ class FlagSynthesisError(RuntimeError):
 
 
 def extract_malignant_configurations(
-        kept_strings: Mapping[str, Sequence[Mapping[str, tuple]]],
+        kept_effects: Mapping[
+            str,
+            Sequence[Mapping[PauliMask, LogicalTriple]],
+        ],
         *,
         cultivated_state: str = "T",
         orders: Iterable[int] | None = None,
 ) -> tuple[tuple[int, ...], ...]:
     """Extract accepted configurations with non-unit logical fidelity."""
-    strings_by_order = kept_strings[cultivated_state]
-    selected_orders = range(len(strings_by_order)) if orders is None else orders
+    effects_by_order = kept_effects[cultivated_state]
+    selected_orders = range(len(effects_by_order)) if orders is None else orders
     configurations: set[tuple[int, ...]] = set()
     for order in selected_orders:
         for accept_probability, logical_fidelity, effect_configurations in (
-                strings_by_order[order].values()):
+                effects_by_order[order].values()):
             if accept_probability and not math.isclose(float(logical_fidelity), 1.0):
                 configurations.update(
                     tuple(sorted(configuration))
@@ -881,41 +883,58 @@ def find_malignant_configurations(
         maximum_configurations: int | None = None,
         print_progress: bool = False,
 ) -> tuple[tuple[int, ...], ...]:
-    """Stream undetected configurations and retain only logical failures.
+    """Stream postselectable configurations and retain logical failures.
 
-    Unlike :meth:`FaultCombinator.get_kept_strings`, this verifier can stop
-    after a requested batch of counterexamples and never performs the costly
-    progress-total pre-count.
+    Unlike :meth:`FaultCombinator.get_kept_effects`, this verifier can stop
+    after a requested batch of counterexamples instead of materializing every
+    accepted effect.
+
+    :param combinator: The indexed circuit faults to combine.
+    :param logical_analyzer: The analyzer supplying linear prechecks and
+        logical-state classifications.
+    :param max_order: The largest configuration weight to inspect.
+    :param cultivated_state: The logical state whose failures are retained.
+    :param maximum_configurations: The optional counterexample batch size.
+    :param print_progress: Whether to report enumeration progress by order.
+    :return: The malignant configurations ordered by weight and fault indices.
     """
     from cliffordep.combinators.fault_combinator import (
+        _iter_zero_syndrome_configurations,
+        _make_logical_analysis_cache,
         _make_pauli_mask_restrictor,
-        _pauli_mask_to_unsigned_string,
     )
 
     restrict_effect = _make_pauli_mask_restrictor(
         data_indices=logical_analyzer.DATA_INDICES,
         source_qubit_count=combinator.circuit.noisy_circuit.num_qubits,
     )
-
-    @lru_cache(maxsize=262_144)
-    def analyze(data_effect_mask: int) -> tuple[float, float]:
-        return logical_analyzer.analyze(
-            cultivated_state,
-            _pauli_mask_to_unsigned_string(
-                data_effect_mask,
-                len(logical_analyzer.DATA_INDICES),
-            ),
+    detector_count = combinator.circuit.noisy_circuit.num_detectors
+    extended_syndromes: list[int] = []
+    data_effects: list[int] = []
+    for circuit_syndrome, full_effect in combinator._indexed_faults:
+        data_effect = restrict_effect(full_effect)
+        precheck_syndrome = logical_analyzer.linear_precheck_syndrome(
+            data_effect,
         )
+        extended_syndromes.append(
+            circuit_syndrome | (precheck_syndrome << detector_count)
+        )
+        data_effects.append(data_effect)
+    analyze = _make_logical_analysis_cache(
+        logical_analyzer=logical_analyzer,
+        cultivated_states=(cultivated_state,),
+        maxsize=262_144,
+    )
 
     malignant: set[tuple[int, ...]] = set()
     for order in range(max_order + 1):
         visited = 0
-        for full_effect_mask, fault_indices in (
-                combinator._iter_undetected_configurations_for_order(order)):
+        for data_effect, fault_indices in _iter_zero_syndrome_configurations(
+                syndromes=extended_syndromes,
+                effects=data_effects,
+                order=order):
             visited += 1
-            accept_probability, logical_fidelity = analyze(
-                restrict_effect(full_effect_mask)
-            )
+            ((accept_probability, logical_fidelity),) = analyze(data_effect)
             if accept_probability and not math.isclose(logical_fidelity, 1.0):
                 malignant.add(tuple(sorted(fault_indices)))
                 if (

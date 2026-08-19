@@ -3,6 +3,8 @@ import itertools
 import numpy as np
 import stim
 
+from cliffordep import circuits, noise
+from cliffordep.combinators import FaultCombinator
 from cliffordep.flag_synthesis import (
     FaultBundle,
     FlagCandidate,
@@ -14,10 +16,13 @@ from cliffordep.flag_synthesis import (
     SynthesisLimits,
     SynthesisMetrics,
     build_flagged_circuit,
+    extract_malignant_configurations,
+    find_malignant_configurations,
     synthesize_flag_circuit,
 )
 from cliffordep.flag_synthesis import _edge_color_bipartite
 from cliffordep.flag_synthesis import _rewrite_original_record_targets
+from cliffordep.logical_analyzers import CliffordLogicalAnalyzer
 
 
 def _realization(ordinal: int) -> PhysicalFaultRealization:
@@ -170,3 +175,41 @@ def test_inserted_flag_measurement_preserves_original_record_targets():
 
     detector = tuple(rewritten[1])[-1]
     assert [target.value for target in detector.targets_copy()] == [-1, -3]
+
+
+def test_mask_native_verifier_finds_distance_three_malignant_configurations():
+    """Both mask-native flag inputs recover the four D3 weight-two failures."""
+    circuit = circuits.D3A6()
+    combinator = FaultCombinator(noise.uniformly_depolarize(
+        circuit.INNER_CIRCUIT,
+        noise_level=1e-3,
+    ))
+    analyzer = CliffordLogicalAnalyzer(
+        data_indices=circuit.DATA_INDICES,
+        stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+        logical_s=circuit.LOGICAL_S,
+    )
+
+    malignant = find_malignant_configurations(
+        combinator=combinator,
+        logical_analyzer=analyzer,
+        max_order=2,
+        cultivated_state="T",
+    )
+    kept_effects = combinator.get_kept_effects(
+        logical_analyzer=analyzer,
+        max_order=2,
+        cultivated_states=("T",),
+    )
+
+    assert malignant == (
+        (54, 150),
+        (65, 148),
+        (74, 146),
+        (111, 148),
+    )
+    assert extract_malignant_configurations(
+        kept_effects,
+        cultivated_state="T",
+        orders=(2,),
+    ) == malignant
