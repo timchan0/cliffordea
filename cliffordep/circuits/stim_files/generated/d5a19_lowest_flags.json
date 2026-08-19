@@ -1,0 +1,924 @@
+{
+  "schema_version": 1,
+  "solution_id": "lowest_flags",
+  "objective": [
+    "flag_qubits",
+    "added_cnot_layers",
+    "flag_cnot_count"
+  ],
+  "verified_through_order": null,
+  "cultivated_state": "T",
+  "total_flag_qubits": 17,
+  "total_added_cnot_layers": 35,
+  "total_flag_cnot_count": 88,
+  "iterations": [
+    {
+      "iteration": 0,
+      "input_malignant_configuration_count": 604,
+      "problem_build_seconds": 37.55564966700331,
+      "solution": {
+        "flag_count": 17,
+        "added_cnot_layers": 35,
+        "interaction_count": 88,
+        "selected_candidates": [
+          {
+            "index": 118,
+            "identifier": "path_Z_b01q3__b09q2-3-5-10-15-22",
+            "basis": "Z",
+            "interactions": [
+              [
+                1,
+                [
+                  3
+                ]
+              ],
+              [
+                9,
+                [
+                  2,
+                  3,
+                  5,
+                  10,
+                  15,
+                  22
+                ]
+              ]
+            ]
+          },
+          {
+            "index": 121,
+            "identifier": "path_Z_b01q7__b09q7-10-11-12-15-22",
+            "basis": "Z",
+            "interactions": [
+              [
+                1,
+                [
+                  7
+                ]
+              ],
+              [
+                9,
+                [
+                  7,
+                  10,
+                  11,
+                  12,
+                  15,
+                  22
+                ]
+              ]
+            ]
+          },
+          {
+            "index": 136,
+            "identifier": "path_Z_b01q34__b08q22-23-30-34-35",
+            "basis": "Z",
+            "interactions": [
+              [
+                1,
+                [
+                  34
+                ]
+              ],
+              [
+                8,
+                [
+                  22,
+                  23,
+                  30,
+                  34,
+                  35
+                ]
+              ]
+            ]
+          },
+          {
+            "index": 153,
+            "identifier": "path_Z_b02q20__b09q20-22-23-24-25-26-27",
+            "basis": "Z",
+            "interactions": [
+              [
+                2,
+                [
+                  20
+                ]
+              ],
+              [
+                9,
+                [
+                  20,
+                  22,
+                  23,
+                  24,
+                  25,
+                  26,
+                  27
+                ]
+              ]
+            ]
+          },
+          {
+            "index": 162,
+            "identifier": "path_Z_b02q36__b09q22-29-33-36-37",
+            "basis": "Z",
+            "interactions": [
+              [
+                2,
+                [
+                  36
+                ]
+              ],
+              [
+                9,
+                [
+                  22,
+                  29,
+                  33,
+                  36,
+                  37
+                ]
+              ]
+            ]
+          },
+          {
+            "index": 175,
+            "identifier": "path_Z_b04q5-10__b07q5",
+            "basis": "Z",
+            "interactions": [
+              [
+                4,
+                [
+                  5,
+                  10
+                ]
+              ],
+              [
+                7,
+                [
+                  5
+                ]
+              ]
+            ]
+          },
+          {
+            "index": 220,
+            "identifier": "path_Z_b08q30__b10q30",
+            "basis": "Z",
+            "interactions": [
+              [
+                8,
+                [
+                  30
+                ]
+              ],
+              [
+                10,
+                [
+                  30
+                ]
+              ]
+            ]
+          },
+          {
+            "index": 227,
+            "identifier": "path_Z_b09q3__b16q3-5",
+            "basis": "Z",
+            "interactions": [
+              [
+                9,
+                [
+                  3
+                ]
+              ],
+              [
+                16,
+                [
+                  3,
+                  5
+                ]
+              ]
+            ]
+          },
+          {
+            "index": 233,
+            "identifier": "path_Z_b09q12__b11q12",
+            "basis": "Z",
+            "interactions": [
+              [
+                9,
+                [
+                  12
+                ]
+              ],
+              [
+                11,
+                [
+                  12
+                ]
+              ]
+            ]
+          },
+          {
+            "index": 234,
+            "identifier": "path_Z_b09q15__b10q15",
+            "basis": "Z",
+            "interactions": [
+              [
+                9,
+                [
+                  15
+                ]
+              ],
+              [
+                10,
+                [
+                  15
+                ]
+              ]
+            ]
+          },
+          {
+            "index": 237,
+            "identifier": "path_Z_b09q23__b10q23",
+            "basis": "Z",
+            "interactions": [
+              [
+                9,
+                [
+                  23
+                ]
+              ],
+              [
+                10,
+                [
+                  23
+                ]
+              ]
+            ]
+          },
+          {
+            "index": 238,
+            "identifier": "path_Z_b09q24__b10q24",
+            "basis": "Z",
+            "interactions": [
+              [
+                9,
+                [
+                  24
+                ]
+              ],
+              [
+                10,
+                [
+                  24
+                ]
+              ]
+            ]
+          },
+          {
+            "index": 239,
+            "identifier": "path_Z_b09q25__b10q25",
+            "basis": "Z",
+            "interactions": [
+              [
+                9,
+                [
+                  25
+                ]
+              ],
+              [
+                10,
+                [
+                  25
+                ]
+              ]
+            ]
+          },
+          {
+            "index": 240,
+            "identifier": "path_Z_b09q26__b10q26",
+            "basis": "Z",
+            "interactions": [
+              [
+                9,
+                [
+                  26
+                ]
+              ],
+              [
+                10,
+                [
+                  26
+                ]
+              ]
+            ]
+          },
+          {
+            "index": 245,
+            "identifier": "path_Z_b09q33__b10q33",
+            "basis": "Z",
+            "interactions": [
+              [
+                9,
+                [
+                  33
+                ]
+              ],
+              [
+                10,
+                [
+                  33
+                ]
+              ]
+            ]
+          },
+          {
+            "index": 251,
+            "identifier": "path_Z_b10q15__b12q15-22",
+            "basis": "Z",
+            "interactions": [
+              [
+                10,
+                [
+                  15
+                ]
+              ],
+              [
+                12,
+                [
+                  15,
+                  22
+                ]
+              ]
+            ]
+          },
+          {
+            "index": 254,
+            "identifier": "path_Z_b10q22-23-24-25-26-27__b17q27",
+            "basis": "Z",
+            "interactions": [
+              [
+                10,
+                [
+                  22,
+                  23,
+                  24,
+                  25,
+                  26,
+                  27
+                ]
+              ],
+              [
+                17,
+                [
+                  27
+                ]
+              ]
+            ]
+          },
+          {
+            "index": 255,
+            "identifier": "path_Z_b10q22-29-33-37__b16q37",
+            "basis": "Z",
+            "interactions": [
+              [
+                10,
+                [
+                  22,
+                  29,
+                  33,
+                  37
+                ]
+              ],
+              [
+                16,
+                [
+                  37
+                ]
+              ]
+            ]
+          },
+          {
+            "index": 259,
+            "identifier": "path_Z_b10q30__b12q30",
+            "basis": "Z",
+            "interactions": [
+              [
+                10,
+                [
+                  30
+                ]
+              ],
+              [
+                12,
+                [
+                  30
+                ]
+              ]
+            ]
+          },
+          {
+            "index": 260,
+            "identifier": "path_Z_b11q10-11-12-15__b16q12",
+            "basis": "Z",
+            "interactions": [
+              [
+                11,
+                [
+                  10,
+                  11,
+                  12,
+                  15
+                ]
+              ],
+              [
+                16,
+                [
+                  12
+                ]
+              ]
+            ]
+          },
+          {
+            "index": 264,
+            "identifier": "path_Z_b11q22-23-30-34-35__b17q34",
+            "basis": "Z",
+            "interactions": [
+              [
+                11,
+                [
+                  22,
+                  23,
+                  30,
+                  34,
+                  35
+                ]
+              ],
+              [
+                17,
+                [
+                  34
+                ]
+              ]
+            ]
+          },
+          {
+            "index": 287,
+            "identifier": "path_Z_b15q12__b16q12",
+            "basis": "Z",
+            "interactions": [
+              [
+                15,
+                [
+                  12
+                ]
+              ],
+              [
+                16,
+                [
+                  12
+                ]
+              ]
+            ]
+          },
+          {
+            "index": 297,
+            "identifier": "path_Z_b16q27__b17q27",
+            "basis": "Z",
+            "interactions": [
+              [
+                16,
+                [
+                  27
+                ]
+              ],
+              [
+                17,
+                [
+                  27
+                ]
+              ]
+            ]
+          }
+        ],
+        "candidate_to_flag": [
+          [
+            118,
+            1
+          ],
+          [
+            121,
+            2
+          ],
+          [
+            136,
+            0
+          ],
+          [
+            153,
+            3
+          ],
+          [
+            162,
+            4
+          ],
+          [
+            175,
+            5
+          ],
+          [
+            220,
+            6
+          ],
+          [
+            227,
+            13
+          ],
+          [
+            233,
+            12
+          ],
+          [
+            234,
+            5
+          ],
+          [
+            237,
+            7
+          ],
+          [
+            238,
+            8
+          ],
+          [
+            239,
+            9
+          ],
+          [
+            240,
+            10
+          ],
+          [
+            245,
+            11
+          ],
+          [
+            251,
+            0
+          ],
+          [
+            254,
+            16
+          ],
+          [
+            255,
+            15
+          ],
+          [
+            259,
+            14
+          ],
+          [
+            260,
+            1
+          ],
+          [
+            264,
+            2
+          ],
+          [
+            287,
+            0
+          ],
+          [
+            297,
+            3
+          ]
+        ],
+        "optimal_within_candidate_pool": true,
+        "metrics": {
+          "candidate_count": 300,
+          "realization_count": 2009,
+          "configuration_count": 604,
+          "refinement_rounds": 29,
+          "witness_constraint_count": 3732,
+          "elapsed_seconds": 29.294573999999557,
+          "milp_runs": [
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 0.22848650000378257,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 1,
+              "mip_gap": 0.0,
+              "objective_value": 4.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 0.3197848750060075,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 1,
+              "mip_gap": 0.0,
+              "objective_value": 6.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 0.41892845799884526,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 1,
+              "mip_gap": 0.0,
+              "objective_value": 7.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 0.5124032500025351,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 1,
+              "mip_gap": 0.0,
+              "objective_value": 8.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 0.48917400000209454,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 1,
+              "mip_gap": 0.0,
+              "objective_value": 9.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 2.5306631660059793,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 9,
+              "mip_gap": 0.0,
+              "objective_value": 10.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 1.094100124995748,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 33,
+              "mip_gap": 0.0,
+              "objective_value": 10.000000000000004
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 1.3376702910027234,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 49,
+              "mip_gap": 0.0,
+              "objective_value": 12.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 1.743701790997875,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 7,
+              "mip_gap": 0.0,
+              "objective_value": 12.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 2.0567338750042836,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 21,
+              "mip_gap": 0.0,
+              "objective_value": 13.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 1.4080404589985847,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 24,
+              "mip_gap": 0.0,
+              "objective_value": 13.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 2.107268125000701,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 12,
+              "mip_gap": 0.0,
+              "objective_value": 13.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 2.3855469589980203,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 11,
+              "mip_gap": 0.0,
+              "objective_value": 13.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 1.3723046250015614,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 41,
+              "mip_gap": 0.0,
+              "objective_value": 13.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 1.6931613749984535,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 61,
+              "mip_gap": 0.0,
+              "objective_value": 14.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 0.5813607919990318,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 1,
+              "mip_gap": 0.0,
+              "objective_value": 14.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 1.0248842079963651,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 15,
+              "mip_gap": 0.0,
+              "objective_value": 13.999999999999996
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 0.44615512499876786,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 6,
+              "mip_gap": 0.0,
+              "objective_value": 14.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 0.27506604100199183,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 1,
+              "mip_gap": 0.0,
+              "objective_value": 15.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 0.09538529199926415,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 1,
+              "mip_gap": 0.0,
+              "objective_value": 15.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 0.17734658399422187,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 1,
+              "mip_gap": 0.0,
+              "objective_value": 15.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 0.07582595800340641,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 1,
+              "mip_gap": 0.0,
+              "objective_value": 15.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 0.04501429200172424,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 1,
+              "mip_gap": 0.0,
+              "objective_value": 15.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 0.03646787499747006,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 1,
+              "mip_gap": 0.0,
+              "objective_value": 16.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 0.03587787500146078,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 1,
+              "mip_gap": 0.0,
+              "objective_value": 16.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 0.03444116600439884,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 1,
+              "mip_gap": 0.0,
+              "objective_value": 17.0
+            },
+            {
+              "objective": "added_cnot_layers",
+              "elapsed_seconds": 0.23797695800021756,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 1,
+              "mip_gap": 0.0,
+              "objective_value": 27.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 0.04046750000270549,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 1,
+              "mip_gap": 0.0,
+              "objective_value": 17.0
+            },
+            {
+              "objective": "added_cnot_layers",
+              "elapsed_seconds": 0.12121483300143154,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 1,
+              "mip_gap": 0.0,
+              "objective_value": 35.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 0.044443417005822994,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 1,
+              "mip_gap": 0.0,
+              "objective_value": 17.0
+            },
+            {
+              "objective": "added_cnot_layers",
+              "elapsed_seconds": 0.15374279199750163,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 1,
+              "mip_gap": 0.0,
+              "objective_value": 35.0
+            },
+            {
+              "objective": "flag_qubits",
+              "elapsed_seconds": 0.041851208996376954,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 1,
+              "mip_gap": 0.0,
+              "objective_value": 17.0
+            },
+            {
+              "objective": "added_cnot_layers",
+              "elapsed_seconds": 0.10543324999889592,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 1,
+              "mip_gap": 0.0,
+              "objective_value": 35.0
+            },
+            {
+              "objective": "flag_cnot_count",
+              "elapsed_seconds": 0.06419137500051875,
+              "status": 0,
+              "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+              "node_count": 1,
+              "mip_gap": 0.0,
+              "objective_value": 88.0
+            }
+          ]
+        }
+      },
+      "verification_seconds": 55.83742687499762,
+      "output_malignant_configuration_count": 1000
+    }
+  ],
+  "files": {
+    "inner_circuit": "d5a19_lowest_flags.inner.stim",
+    "full_circuit": "d5a19_lowest_flags.full.stim"
+  }
+}

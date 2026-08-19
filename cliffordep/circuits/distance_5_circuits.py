@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 import stim
 
@@ -27,6 +28,10 @@ class Distance5DoubleCheck:
         self.CIRCUIT = stim.Circuit.from_file(
             _STIM_FILES_DIR / 'full_circuits' / circuit_name)
         """The full double-check circuit."""
+        self._initialize_operators()
+
+    def _initialize_operators(self) -> None:
+        """Build stabilizers and logicals at the loaded circuit width."""
         self.DATA_INDICES: tuple[int, ...]
         self.STABILIZER_GENERATORS = {basis: tuple(stim.PauliString(
             basis if index in indices else '_' for index in range(self.INNER_CIRCUIT.num_qubits) # type: ignore
@@ -59,3 +64,31 @@ S 0 5 7 14 16 18 20 29 31 36
 S_DAG 9 11 13 22 24 26 34 32 3
 """
     )
+
+
+class D5A19Flagged(D5A19):
+    """A synthesized flagged D5A19 circuit loaded from its manifest."""
+
+    def __init__(self, solution_id: str = "lowest_flags"):
+        generated_directory = _STIM_FILES_DIR / "generated"
+        manifest_path = generated_directory / f"d5a19_{solution_id}.json"
+        if not manifest_path.exists():
+            raise FileNotFoundError(
+                f"No generated D5A19 flag solution named {solution_id!r}. "
+                f"Run tim_code/workflow_d5_flags.py first."
+            )
+        manifest = json.loads(manifest_path.read_text())
+        files = manifest["files"]
+        self.INNER_CIRCUIT = stim.Circuit.from_file(
+            generated_directory / files["inner_circuit"]
+        )
+        self.CIRCUIT = stim.Circuit.from_file(
+            generated_directory / files["full_circuit"]
+        )
+        first_flag_index = max((*self.DATA_INDICES, *self.ANCILLA_INDICES)) + 1
+        self.FLAG_INDICES = tuple(
+            range(first_flag_index, self.INNER_CIRCUIT.num_qubits)
+        )
+        self.SOLUTION_ID = solution_id
+        self.SYNTHESIS_MANIFEST = manifest
+        self._initialize_operators()
