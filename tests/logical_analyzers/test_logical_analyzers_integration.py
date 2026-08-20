@@ -1,6 +1,8 @@
 import pytest
 
+from cliffordep import circuits, noise
 from cliffordep.combinators import FaultCombinator
+from cliffordep.logical_analyzers import CliffordLogicalAnalyzer
 from cliffordep.type_aliases import LogicalTriple, PauliMask
 
 
@@ -50,3 +52,39 @@ def test_superposition_vs_clifford(
     #     1, 2.0 (0.0) errors are kept and lead to identity (error).
     #     2, 2.75 (1.0) errors are kept and lead to identity (error).
     #     3, 18.5 (23.75) errors are kept and lead to identity (error).
+
+
+def test_d5_factored_transversal_matches_general_workflow():
+    """Factoring preserves every D5 kept effect through order four.
+
+    :return: None.
+    """
+    circuit = circuits.D5A19()
+    noisy_circuit = noise.uniformly_depolarize(
+        circuit.INNER_CIRCUIT,
+        noise_level=1e-3,
+    )
+    combinator = FaultCombinator(noisy_circuit)
+    analyzer_arguments = {
+        'data_indices': circuit.DATA_INDICES,
+        'stabilizer_generators': circuit.STABILIZER_GENERATORS_RESTRICTED,
+        'logical_s': circuit.LOGICAL_S,
+    }
+    factored_results = combinator.get_kept_effects(
+        logical_analyzer=CliffordLogicalAnalyzer(
+            **analyzer_arguments,
+            factor_transversal_errors=True,
+        ),
+        max_order=4,
+        cultivated_states=('S', 'T'),
+    )
+    general_results = combinator.get_kept_effects(
+        logical_analyzer=CliffordLogicalAnalyzer(
+            **analyzer_arguments,
+            factor_transversal_errors=False,
+        ),
+        max_order=4,
+        cultivated_states=('S', 'T'),
+    )
+
+    assert factored_results == general_results

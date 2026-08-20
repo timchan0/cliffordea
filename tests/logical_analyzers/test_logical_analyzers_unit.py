@@ -226,3 +226,145 @@ class TestDistance5:
             'T', effect_mask,
         ) == disabled_analyzer.analyze('T', effect_mask)
         assert disabled_analyzer.linear_precheck_syndrome(effect_mask) == 0
+
+
+@pytest.mark.parametrize("precheck_z_stabilizers", [True, False])
+def test_factored_transversal_matches_general_path_exhaustively(
+        precheck_z_stabilizers: bool,
+):
+    """All D3 Pauli effects agree for every supported diagonal state.
+
+    :param precheck_z_stabilizers: Whether both analyzers apply the preliminary
+        pure-Z stabilizer checks.
+    :return: None.
+    """
+    circuit = circuits.D3A6()
+    analyzer_arguments = {
+        'data_indices': circuit.DATA_INDICES,
+        'stabilizer_generators': circuit.STABILIZER_GENERATORS_RESTRICTED,
+        'logical_s': circuit.LOGICAL_S,
+        'precheck_z_stabilizers': precheck_z_stabilizers,
+    }
+    factored_analyzer = CliffordLogicalAnalyzer(
+        **analyzer_arguments,
+        factor_transversal_errors=True,
+    )
+    general_analyzer = CliffordLogicalAnalyzer(
+        **analyzer_arguments,
+        factor_transversal_errors=False,
+    )
+    effect_count = 1 << (2 * len(circuit.DATA_INDICES))
+
+    for cultivated_state in ('T', 'S', 'Z'):
+        for effect_mask in range(effect_count):
+            assert factored_analyzer.analyze(
+                cultivated_state,
+                effect_mask,
+            ) == general_analyzer.analyze(cultivated_state, effect_mask)
+
+
+@pytest.mark.parametrize(
+    ("maxsize", "evicts"),
+    [(0, True), (1, True), (4_096, False), (None, False)],
+)
+def test_transversal_structure_cache_respects_maxsize(
+        maxsize: int | None,
+        evicts: bool,
+):
+    """Cache bounds control reuse without changing the built structures.
+
+    :param maxsize: Maximum number of structures retained by the analyzer.
+    :param evicts: Whether requesting a second X support removes the first.
+    :return: None.
+    """
+    circuit = circuits.D3A6()
+    analyzer = CliffordLogicalAnalyzer(
+        data_indices=circuit.DATA_INDICES,
+        stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+        logical_s=circuit.LOGICAL_S,
+        precheck_z_stabilizers=False,
+        transversal_structure_cache_maxsize=maxsize,
+    )
+
+    first_structure = analyzer._get_transversal_structure('T', 0b1)
+    repeated_structure = analyzer._get_transversal_structure('T', 0b1)
+    if maxsize == 0:
+        assert repeated_structure is not first_structure
+    else:
+        assert repeated_structure is first_structure
+
+    analyzer._get_transversal_structure('T', 0b10)
+    rebuilt_structure = analyzer._get_transversal_structure('T', 0b1)
+    assert (rebuilt_structure is not first_structure) is evicts
+    if maxsize is not None:
+        assert len(analyzer._transversal_structure_cache) <= maxsize
+
+
+def test_z_variants_share_transversal_structure():
+    """Effects with equal X support reuse one cached acceptance structure.
+
+    :return: None.
+    """
+    circuit = circuits.D3A6()
+    analyzer = CliffordLogicalAnalyzer(
+        data_indices=circuit.DATA_INDICES,
+        stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+        logical_s=circuit.LOGICAL_S,
+        precheck_z_stabilizers=False,
+    )
+    effect_x = 0b101
+    analyzer.analyze('T', effect_x)
+    first_structure, = analyzer._transversal_structure_cache.values()
+
+    effect_z = 0b010 << len(circuit.DATA_INDICES)
+    analyzer.analyze('T', effect_x | effect_z)
+
+    repeated_structure, = analyzer._transversal_structure_cache.values()
+    assert repeated_structure is first_structure
+
+
+@pytest.mark.parametrize(
+    ("factor_transversal_errors", "supports_xz_factorization"),
+    [(False, True), (True, False)],
+)
+def test_inapplicable_factoring_uses_general_path(
+        factor_transversal_errors: bool,
+        supports_xz_factorization: bool,
+        monkeypatch: pytest.MonkeyPatch,
+):
+    """Disabled or unsupported factorization falls back without caching.
+
+    :param factor_transversal_errors: Whether the candidate analyzer enables
+        the optional factored path.
+    :param supports_xz_factorization: Whether its T transversal advertises the
+        diagonal factorization capability.
+    :param monkeypatch: Pytest helper that restores the shared gate capability
+        after the test.
+    :return: None.
+    """
+    circuit = circuits.D3A6()
+    analyzer_arguments = {
+        'data_indices': circuit.DATA_INDICES,
+        'stabilizer_generators': circuit.STABILIZER_GENERATORS_RESTRICTED,
+        'logical_s': circuit.LOGICAL_S,
+    }
+    candidate = CliffordLogicalAnalyzer(
+        **analyzer_arguments,
+        factor_transversal_errors=factor_transversal_errors,
+    )
+    monkeypatch.setattr(
+        candidate.LOGICAL['T'],
+        'supports_xz_factorization',
+        supports_xz_factorization,
+    )
+    general = CliffordLogicalAnalyzer(
+        **analyzer_arguments,
+        factor_transversal_errors=False,
+    )
+    effect_mask = _unsigned_pauli_string_to_mask('YX_X___')
+
+    assert candidate.analyze('T', effect_mask) == general.analyze(
+        'T',
+        effect_mask,
+    )
+    assert not candidate._transversal_structure_cache

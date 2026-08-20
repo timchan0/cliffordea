@@ -1,5 +1,7 @@
 import abc
+from collections import OrderedDict
 from collections.abc import Mapping, Iterable, Sequence
+from dataclasses import dataclass
 import itertools
 from typing import Literal, override
 
@@ -55,6 +57,31 @@ an alias for ``i``, and ``Z`` is an alias for ``-``.
 """
 
 
+PhaseConstraint = tuple[int, int]
+"""A physical X-support phase mask followed by its base sign bit."""
+
+LogicalAcceptanceTerm = tuple[float, int, int]
+"""A logical coefficient, physical phase mask, and base sign bit."""
+
+
+@dataclass(frozen=True, slots=True)
+class _AcceptanceStructure:
+    """Store phase-parametrized data for one acceptance calculation.
+
+    :param zero_constraints: Sign constraints from transformed generators with
+        zero rows.
+    :param kernel_constraints: Sign constraints from dependencies between
+        nonzero rows.
+    :param logical_terms: Signed logical-coefficient contributions.
+    :param rank: Rank controlling the power-of-two acceptance suppression.
+    """
+
+    zero_constraints: tuple[PhaseConstraint, ...]
+    kernel_constraints: tuple[PhaseConstraint, ...]
+    logical_terms: tuple[LogicalAcceptanceTerm, ...]
+    rank: int
+
+
 class _TransversalGate:
     """A transversal implementation of physical Z, S, T gates or their inverses.
     
@@ -96,8 +123,18 @@ class _TransversalGate:
         'Z_DAG': _PUSH_THROUGH_Z,
     }
 
+    _DIAGONAL_PHYSICAL_GATES = frozenset({
+        'T', 'T_DAG', 'S', 'S_DAG', 'Z', 'Z_DAG',
+    })
+    """Physical gates for which X/Z error factorization is valid."""
+
     def __init__(self, physical_gates: Iterable[str]):
         self.PHYSICAL_GATES = tuple(physical_gates)
+        self.supports_xz_factorization = all(
+            gate in self._DIAGONAL_PHYSICAL_GATES
+            for gate in self.PHYSICAL_GATES
+        )
+        """Whether Z factors commute through every physical gate."""
 
     def __call__(self, pauli_mask: PauliMask) -> stim.Tableau:
         """Push a packed unsigned Pauli through the transversal gate.
@@ -258,8 +295,11 @@ class CliffordLogicalAnalyzer(LogicalAnalyzer):
         stabilizer_generators: dict[str, tuple[stim.PauliString, ...]],
         logical_s: stim.Circuit,
         precheck_z_stabilizers: bool = True,
+        factor_transversal_errors: bool = True,
+        transversal_structure_cache_maxsize: int | None = 4_096,
     ):
         """
+        :param self: The Clifford logical analyzer being initialized.
         :param data_indices: A tuple of integers representing the data qubit indices in ascending order.
         :param stabilizer_generators: The generators of the CSS code stabilizer group
             restricted to data qubits, categorized by basis.
@@ -271,10 +311,29 @@ class CliffordLogicalAnalyzer(LogicalAnalyzer):
             This pre-check is valid because the considered errors
             (anti)commute with a Z stabilizer before the Z/S/T gates iff they
             (anti)commute with the same stabilizer after.
+        :param factor_transversal_errors: Whether to reuse X-dependent
+            acceptance structures and apply Z-dependent phases separately for
+            supported diagonal transversal gates.
+        :param transversal_structure_cache_maxsize: Maximum number of
+            X-dependent acceptance structures to retain. Use a positive
+            integer for a bounded cache, ``None`` for an unbounded cache, or
+            ``0`` to disable retention without disabling factorization.
+        :return: None.
         """
         super().__init__(data_indices, logical_s)
         self.precheck_z_stabilizers = precheck_z_stabilizers
         """Whether to analyze the Z stabilizer generators before the layer of Z/S/T gates."""
+        self.factor_transversal_errors = factor_transversal_errors
+        """Whether supported transversal errors use X/Z factorization."""
+        self.transversal_structure_cache_maxsize = (
+            transversal_structure_cache_maxsize
+        )
+        """Maximum retained X-dependent acceptance structures."""
+        self._transversal_structure_cache: OrderedDict[
+            tuple[str, PauliMask, bool],
+            _AcceptanceStructure,
+        ] = OrderedDict()
+        """Least-recently-used X-dependent acceptance structures."""
         self.x_stabilizer_rank = len(stabilizer_generators['X'])
         """The number of independent X-basis stabilizer generators."""
         stabilizer_generator_tuple = (
@@ -376,7 +435,22 @@ class CliffordLogicalAnalyzer(LogicalAnalyzer):
         logical_fidelity = not (effect_z.bit_count() & 1)
         if self.linear_precheck_syndrome(before_transversal):
             return 0.0, logical_fidelity
-        after_transversal = self.LOGICAL[cultivated_state](before_transversal)
+        transversal_gate = self.LOGICAL[cultivated_state]
+        if (
+                self.factor_transversal_errors
+                and transversal_gate.supports_xz_factorization):
+            effect_x = before_transversal & self.support_mask
+            structure = self._get_transversal_structure(
+                cultivated_state,
+                effect_x,
+            )
+            accept_probability = self._evaluate_acceptance_structure(
+                structure,
+                effect_z,
+            )
+            return accept_probability, logical_fidelity
+
+        after_transversal = transversal_gate(before_transversal)
         unencoded_error = self.unencoder * after_transversal * self.encoder
         accept_probability = self._get_accept_probability(
             unencoded_error,
@@ -384,6 +458,78 @@ class CliffordLogicalAnalyzer(LogicalAnalyzer):
         )
         
         return accept_probability, logical_fidelity
+
+    def _get_transversal_structure(
+            self,
+            cultivated_state: Literal['T', 'S', 'Z'],
+            effect_x: PauliMask,
+    ) -> _AcceptanceStructure:
+        """Return a cached X-dependent transversal acceptance structure.
+
+        :param self: The analyzer supplying the code and transversal gate.
+        :param cultivated_state: The logical state whose transversal gate and
+            logical coefficients are used.
+        :param effect_x: X support of the Pauli before the transversal layer.
+        :return: The reusable acceptance structure for the X support.
+        """
+        maxsize = self.transversal_structure_cache_maxsize
+        if maxsize == 0:
+            return self._build_transversal_structure(
+                cultivated_state,
+                effect_x,
+            )
+
+        key = cultivated_state, effect_x, self.precheck_z_stabilizers
+        try:
+            structure = self._transversal_structure_cache.pop(key)
+        except KeyError:
+            structure = self._build_transversal_structure(
+                cultivated_state,
+                effect_x,
+            )
+        self._transversal_structure_cache[key] = structure
+        if (
+                maxsize is not None
+                and len(self._transversal_structure_cache) > maxsize):
+            self._transversal_structure_cache.popitem(last=False)
+        return structure
+
+    def _build_transversal_structure(
+            self,
+            cultivated_state: Literal['T', 'S', 'Z'],
+            effect_x: PauliMask,
+    ) -> _AcceptanceStructure:
+        """Build the acceptance structure for one transversal X support.
+
+        :param self: The analyzer supplying the code and transversal gate.
+        :param cultivated_state: The logical state whose transversal gate and
+            logical coefficients are used.
+        :param effect_x: X support of the Pauli before the transversal layer.
+        :return: The phase-parametrized acceptance structure.
+        """
+        base_error = self.LOGICAL[cultivated_state](effect_x)
+        unencoded_base_error = self.unencoder * base_error * self.encoder
+        checked_stabilizer_count = (
+            self.x_stabilizer_rank if self.precheck_z_stabilizers
+            else self.stabilizer_rank
+        )
+        columns: list[tuple[int, int, int]] = []
+        phase_masks: list[int] = []
+        for stabilizer_index in range(checked_stabilizer_count):
+            transformed_generator = unencoded_base_error.inverse_z_output(
+                stabilizer_index,
+            )
+            columns.append(_pauli_masks_and_j_power(transformed_generator))
+            physical_generator = self.encoder(transformed_generator)
+            physical_x_mask, _, _ = _pauli_masks_and_j_power(
+                physical_generator,
+            )
+            phase_masks.append(physical_x_mask)
+        return self._build_acceptance_structure(
+            columns=columns,
+            phase_masks=phase_masks,
+            logical_coefficients=LOGICAL_COEFFICIENTS[cultivated_state],
+        )
 
     def _get_accept_probability(
             self,
@@ -404,23 +550,61 @@ class CliffordLogicalAnalyzer(LogicalAnalyzer):
         :return accept_probability: The probability that all noiseless stabilizer
             generator measurements return +1.
         """
-        columns: list[tuple[int, int, int]] = []
-        rows: list[int] = []
         checked_stabilizer_count = (
             self.x_stabilizer_rank if self.precheck_z_stabilizers
             else self.stabilizer_rank
         )
+        columns: list[tuple[int, int, int]] = []
         for stabilizer_index in range(checked_stabilizer_count):
             transformed_generator = unencoded_error.inverse_z_output(stabilizer_index)
-            x_mask, z_mask, j_power = _pauli_masks_and_j_power(transformed_generator)
-            pauli_masks = (x_mask, z_mask, j_power)
-            row = self._rho(x_mask, z_mask)
-            if row == 0:
-                if self._chi(1, (pauli_masks,)):
+            column = _pauli_masks_and_j_power(transformed_generator)
+            x_mask, z_mask, _ = column
+            if self._rho(x_mask, z_mask) == 0:
+                if self._chi(1, (column,)):
                     return 0.0
                 continue
+            columns.append(column)
+        structure = self._build_acceptance_structure(
+            columns=columns,
+            phase_masks=(0,) * len(columns),
+            logical_coefficients=logical_coefficients,
+        )
+        return self._evaluate_acceptance_structure(structure, 0)
+
+    def _build_acceptance_structure(
+            self,
+            *,
+            columns: Sequence[tuple[int, int, int]],
+            phase_masks: Sequence[PauliMask],
+            logical_coefficients: LogicalCoefficients,
+    ) -> _AcceptanceStructure:
+        """Precompute row and sign data for an acceptance calculation.
+
+        :param self: The analyzer defining the unencoded code coordinates.
+        :param columns: Transformed stabilizer generators represented by X/Z
+            masks and powers of ``1j``.
+        :param phase_masks: Physical X supports whose overlap with a deferred Z
+            factor flips each corresponding column sign.
+        :param logical_coefficients: Nonzero Pauli-basis coefficients of the
+            logical input state.
+        :return: The phase-parametrized acceptance structure.
+        """
+        zero_constraints: list[PhaseConstraint] = []
+        retained_columns: list[tuple[int, int, int]] = []
+        retained_phase_masks: list[PauliMask] = []
+        rows: list[int] = []
+        for column, phase_mask in zip(columns, phase_masks, strict=True):
+            x_mask, z_mask, _ = column
+            row = self._rho(x_mask, z_mask)
+            if row == 0:
+                zero_constraints.append((
+                    phase_mask,
+                    self._chi(1, (column,)),
+                ))
+                continue
+            retained_columns.append(column)
+            retained_phase_masks.append(phase_mask)
             rows.append(row)
-            columns.append(pauli_masks)
 
         # Row-reduce S over GF(2). row_basis[p] is an image vector whose
         # leading bit is p. source_basis[p] is the corresponding source vector:
@@ -431,6 +615,7 @@ class CliffordLogicalAnalyzer(LogicalAnalyzer):
         row_basis: dict[int, int] = {}
         source_basis: dict[int, int] = {}
         kernel_basis: list[int] = []
+        kernel_constraints: list[PhaseConstraint] = []
         for column_index, column in enumerate(rows):
             row = column
             source = 1 << column_index
@@ -447,19 +632,83 @@ class CliffordLogicalAnalyzer(LogicalAnalyzer):
                 kernel_basis.append(source)
 
         for kernel_vector in kernel_basis:
-            if self._chi(kernel_vector, columns):
-                return 0.0
+            phase_mask = self._xor_selected_masks(
+                kernel_vector,
+                retained_phase_masks,
+            )
+            kernel_constraints.append((
+                phase_mask,
+                self._chi(kernel_vector, retained_columns),
+            ))
 
-        eta = 0.0
+        logical_terms: list[LogicalAcceptanceTerm] = []
         for logical_pauli_mask, coefficient in logical_coefficients.items():
             if coefficient == 0:
                 continue
             target = self._get_logical_rho(logical_pauli_mask)
             solution = self._try_solve(row_basis, source_basis, target)
             if solution is not None:
-                eta += (-1 if self._chi(solution, columns) else 1) * coefficient
+                phase_mask = self._xor_selected_masks(
+                    solution,
+                    retained_phase_masks,
+                )
+                logical_terms.append((
+                    coefficient,
+                    phase_mask,
+                    self._chi(solution, retained_columns),
+                ))
 
-        return 2.0 ** (-len(row_basis)) * eta
+        return _AcceptanceStructure(
+            zero_constraints=tuple(zero_constraints),
+            kernel_constraints=tuple(kernel_constraints),
+            logical_terms=tuple(logical_terms),
+            rank=len(row_basis),
+        )
+
+    @staticmethod
+    def _xor_selected_masks(
+            source: int,
+            masks: Sequence[PauliMask],
+    ) -> PauliMask:
+        """Combine masks selected by a source-vector bitmask.
+
+        :param source: Bitmask selecting entries from ``masks``.
+        :param masks: Masks in source-vector bit order.
+        :return: XOR of the selected masks.
+        """
+        combined_mask = 0
+        for mask_index, mask in enumerate(masks):
+            if source & (1 << mask_index):
+                combined_mask ^= mask
+        return combined_mask
+
+    @staticmethod
+    def _evaluate_acceptance_structure(
+            structure: _AcceptanceStructure,
+            effect_z: PauliMask,
+    ) -> float:
+        """Evaluate a precomputed acceptance structure for one Z support.
+
+        :param structure: Precomputed structural constraints and logical terms.
+        :param effect_z: Deferred physical Z support controlling column signs.
+        :return: Probability that every checked stabilizer yields the trivial
+            outcome.
+        """
+        for phase_mask, base_sign in structure.zero_constraints:
+            phase = (effect_z & phase_mask).bit_count() & 1
+            if base_sign ^ phase:
+                return 0.0
+        for phase_mask, base_sign in structure.kernel_constraints:
+            phase = (effect_z & phase_mask).bit_count() & 1
+            if base_sign ^ phase:
+                return 0.0
+
+        eta = 0.0
+        for coefficient, phase_mask, base_sign in structure.logical_terms:
+            phase = (effect_z & phase_mask).bit_count() & 1
+            eta += (-1 if base_sign ^ phase else 1) * coefficient
+
+        return 2.0 ** (-structure.rank) * eta
 
     @staticmethod
     def _try_solve(
