@@ -60,9 +60,9 @@ class TestD3DoubleCatCheck:
             sim_effect = circuit.noisy_circuit.num_qubits*'_'
         else:
             faulty_circuit = cliffordep.insert_error_events(
-                    circuit.noiseless_circuit,
-                    error_events=[error_event],
-                )
+                circuit.noiseless_circuit,
+                weighted_error_events=((error_event, 1),),
+            )
             sim.clear()
             for instruction in faulty_circuit:
                 sim.do(instruction)
@@ -116,8 +116,7 @@ def test_measure_reset_error_preserves_reset_gate():
     probability = 0.25
     faulty_circuit = cliffordep.insert_error_events(
         circuit=circuit.noiseless_circuit,
-        error_events=[event],
-        probability=probability,
+        weighted_error_events=((event, probability),),
     )
     measurement = faulty_circuit[0]
     assert isinstance(measurement, stim.CircuitInstruction)

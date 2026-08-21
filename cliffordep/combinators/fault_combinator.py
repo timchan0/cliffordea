@@ -6,6 +6,7 @@ import math
 from typing import Literal
 
 import pandas as pd
+import stim
 from tqdm.auto import tqdm
 
 from cliffordep.noisy_circuit_tools import (
@@ -410,6 +411,38 @@ class FaultCombinator(Combinator):
         return len(self.basis)
     
 
+    def _fault_configuration_circuit(
+            self,
+            configuration: Iterable[int],
+            probability_increment: float,
+    ) -> stim.Circuit:
+        """Insert one indexed fault configuration for visualization.
+
+        :param self: The fault combinator whose circuit is visualized.
+        :param configuration: Fault indices to distinguish in iteration order.
+        :param probability_increment: Probability increment between faults.
+        :return circuit: The noiseless circuit containing the weighted events.
+        """
+        weighted_error_events = tuple(
+            (error_event, fault_order * probability_increment)
+            for fault_order, fault_index in enumerate(configuration)
+            for error_event in self.index_to_events[fault_index]
+        )
+        measurement_locations = (
+            self.circuit._measurement_locations_by_event
+            if any(
+                error_event[1].startswith("M")
+                for error_event, _ in weighted_error_events
+            )
+            else {}
+        )
+        return noiseless_circuit_tools.insert_error_events(
+            circuit=self.circuit.noiseless_circuit,
+            weighted_error_events=weighted_error_events,
+            measurement_locations=measurement_locations,
+        )
+
+
     def visualize_fault_configurations(
             self,
             configurations: Sequence[Iterable[int]],
@@ -439,16 +472,10 @@ class FaultCombinator(Combinator):
                 step=1,
         ))
         def f(configuration: int):
-            circuits = noiseless_circuit_tools.split_by_ticks(
-                self.circuit.noiseless_circuit
+            circuit = self._fault_configuration_circuit(
+                configuration=configurations[configuration],
+                probability_increment=probability_increment,
             )
-            for k, fault_index in enumerate(configurations[configuration]):
-                noiseless_circuit_tools._insert_error_events_into_slices(
-                    circuits=circuits,
-                    error_events=self.index_to_events[fault_index],
-                    probability=k*probability_increment,
-                )
-            circuit = noiseless_circuit_tools.compose_slices(circuits)
             return circuit.diagram(type=diagram_type, **kwargs_for_diagram)
         return f
     

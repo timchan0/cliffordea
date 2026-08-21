@@ -71,6 +71,9 @@ def test_index_to_events_cache_is_excluded_from_pickle():
     combinator = _make_small_fault_combinator()
     expected = combinator.index_to_events
     reverse_data = combinator.circuit._reverse_propagation_data
+    measurement_locations = (
+        combinator.circuit._measurement_locations_by_event
+    )
     assert all(
         isinstance(response, int)
         for generator_pair in reverse_data.responses_by_timeslice
@@ -92,6 +95,19 @@ def test_index_to_events_cache_is_excluded_from_pickle():
         isinstance(detector_mask, int)
         for detector_mask in reverse_data.measurement_detector_masks
     )
+    assert all(
+        isinstance(timeslice, int)
+        and all(isinstance(qubit, int) for qubit in measured_qubits)
+        and isinstance(instruction_index, int)
+        and isinstance(target_index, int)
+        for (
+            timeslice,
+            measured_qubits,
+        ), (
+            instruction_index,
+            target_index,
+        ) in measurement_locations.items()
+    )
 
     restored = pickle.loads(pickle.dumps(combinator))
 
@@ -99,6 +115,10 @@ def test_index_to_events_cache_is_excluded_from_pickle():
     assert restored._event_fault_indices == combinator._event_fault_indices
     assert restored.index_to_events == expected
     assert restored.circuit._reverse_propagation_data == reverse_data
+    assert (
+        restored.circuit._measurement_locations_by_event
+        == measurement_locations
+    )
 
 
 def test_construction_avoids_legacy_event_analysis(monkeypatch):
@@ -124,6 +144,48 @@ def test_construction_avoids_legacy_event_analysis(monkeypatch):
 
     legacy_method.assert_not_called()
     assert combinator.fault_count > 0
+
+
+def test_visualization_measurement_locations_are_lazily_cached():
+    """Only measurement visualization should build and reuse its locations."""
+    combinator = _make_small_fault_combinator()
+    assert '_measurement_locations_by_event' not in combinator.circuit.__dict__
+    original_circuit = combinator.circuit.noiseless_circuit.copy()
+    pauli_only_index = next(
+        fault_index
+        for fault_index, events in combinator.index_to_events.items()
+        if all(not name.startswith('M') for _, name, _ in events)
+    )
+    measurement_index = next(
+        fault_index
+        for fault_index, events in combinator.index_to_events.items()
+        if any(name.startswith('M') for _, name, _ in events)
+    )
+
+    combinator._fault_configuration_circuit(
+        configuration=(pauli_only_index,),
+        probability_increment=0.125,
+    )
+    assert '_measurement_locations_by_event' not in combinator.circuit.__dict__
+
+    first = combinator._fault_configuration_circuit(
+        configuration=(measurement_index,),
+        probability_increment=0.125,
+    )
+    cached_locations = (
+        combinator.circuit._measurement_locations_by_event
+    )
+    second = combinator._fault_configuration_circuit(
+        configuration=(measurement_index,),
+        probability_increment=0.125,
+    )
+
+    assert first == second
+    assert combinator.circuit.noiseless_circuit == original_circuit
+    assert (
+        combinator.circuit._measurement_locations_by_event
+        is cached_locations
+    )
 
 
 def test_basis_and_indexed_faults_remain_mask_native_and_readable(capsys):

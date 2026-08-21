@@ -36,6 +36,12 @@ sorted by their qubit values.
 It is a pair only for `name` 'E'; else, a 1-tuple.
 """
 
+MeasurementEventKey = tuple[int, tuple[int, ...]]
+"""A measurement result keyed by timeslice and canonical target qubits."""
+
+MeasurementLocation = tuple[int, int]
+"""Instruction index and target-group index within a circuit timeslice."""
+
 EffectMap = dict[str, Counter[ErrorLocation]]
 """A map from each effect (the resultant Pauli string of the fault
 when propagated to the end of the circuit as an unsigned Pauli string)

@@ -1,7 +1,7 @@
 """Module for enumerating faults in noisy stim circuits."""
 
 from collections import defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import cached_property
 from typing import cast
@@ -14,10 +14,16 @@ from cliffordep.constants import (
     DEPOLARIZE2_ERROR_EVENTS,
     ONE_QUBIT_ERROR_EVENTS,
 )
-from cliffordep.noiseless_circuit_tools import split_by_ticks
+from cliffordep.noiseless_circuit_tools import (
+    measurement_event_key,
+    measurement_locations_by_event,
+    split_by_ticks,
+)
 from cliffordep.type_aliases import (
     ErrorEvent,
     ErrorLocation,
+    MeasurementEventKey,
+    MeasurementLocation,
     PauliMask,
     SyndromeMask,
 )
@@ -31,10 +37,6 @@ GeneratorResponses = tuple[
     tuple[ResponseMask, ...],
 ]
 """X-generator responses followed by Z-generator responses."""
-
-MeasurementTargetKey = tuple[int, ...]
-MeasurementEventKey = tuple[int, MeasurementTargetKey]
-
 
 @dataclass(frozen=True, slots=True)
 class _ReversePropagationData:
@@ -54,19 +56,6 @@ class _ReversePropagationData:
     """Global measurement indices keyed without storing Stim targets."""
     measurement_detector_masks: tuple[SyndromeMask, ...]
     """Packed detector masks in global measurement order."""
-
-
-def _measurement_target_key(
-        targets: Iterable[stim.GateTarget],
-) -> MeasurementTargetKey:
-    """Return a canonical, picklable key for one measurement target group.
-
-    :param targets: The targets belonging to one measurement result.
-    :return target_key: Sorted measured-qubit indices for the target group.
-    """
-    return tuple(sorted(target.value for target in targets))
-
-
 def _response_for_pauli(
         pauli: stim.PauliString,
         x_responses: Sequence[ResponseMask],
@@ -280,8 +269,7 @@ class CultivationCircuit:
         reverse_data = self._reverse_propagation_data
         if name.startswith('M'):
             measurement_index = reverse_data.measurement_index_by_event[
-                timeslice,
-                _measurement_target_key(targets),
+                measurement_event_key(timeslice, targets)
             ]
             return reverse_data.measurement_detector_masks[measurement_index], 0
 
@@ -436,11 +424,10 @@ class CultivationCircuit:
                             instruction.target_groups(),
                             start=int(instruction.tag),
                     ):
-                        target_key = _measurement_target_key(target_group)
-                        measurement_index_by_event[
+                        measurement_index_by_event[measurement_event_key(
                             timeslice,
-                            target_key,
-                        ] = measurement_index
+                            target_group,
+                        )] = measurement_index
                         detector_response = measurement_detector_masks[
                             measurement_index
                         ]
@@ -484,3 +471,16 @@ class CultivationCircuit:
         representing the noiseless layers of the circuit.
         """
         return split_by_ticks(self.noisy_circuit.without_noise())
+
+
+    @cached_property
+    def _measurement_locations_by_event(
+            self,
+    ) -> dict[MeasurementEventKey, MeasurementLocation]:
+        """Lazily index measurement insertion locations for visualization.
+
+        :param self: The circuit whose noiseless layers are indexed.
+        :return locations: Instruction and target-group indices keyed by
+            measurement event.
+        """
+        return measurement_locations_by_event(self._noiseless_layers)
