@@ -4,7 +4,7 @@ from stim import PauliString
 
 from cliffordep.logical_analyzers import _TransversalGate
 from cliffordep.pauli_string_tools import PauliSum, tensor_paulis, split_sign
-from tests.conftest import pauli_mask
+from cliffordep.pauli_string_tools import pauli_mask
 
 
 @pytest.mark.parametrize("gate", ["T", "S", "Z"])

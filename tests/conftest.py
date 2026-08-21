@@ -66,20 +66,3 @@ def d3_combinator_and_kept_effects_by_analyzer():
         cultivated_states=('S', 'T'),
     )
     return combinator, superposition_kept_effects, clifford_kept_effects
-
-
-def pauli_mask(unsigned_string: str) -> int:
-    """Pack an unsigned Pauli string.
-
-    :param unsigned_string: The unsigned Pauli string to pack.
-    :return mask: The packed X/Z-support mask.
-    """
-    x_mask = 0
-    z_mask = 0
-    for index, pauli in enumerate(unsigned_string):
-        bit = 1 << index
-        if pauli in ('X', 'Y'):
-            x_mask |= bit
-        if pauli in ('Z', 'Y'):
-            z_mask |= bit
-    return x_mask | z_mask << len(unsigned_string)

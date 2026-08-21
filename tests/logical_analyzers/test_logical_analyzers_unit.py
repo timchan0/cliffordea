@@ -13,7 +13,7 @@ from cliffordep.combinators.fault_combinator import (
     _make_pauli_mask_restrictor,
 )
 from cliffordep.pauli_string_tools import forget_sign
-from tests.conftest import pauli_mask
+from cliffordep.pauli_string_tools import pauli_mask
 
 
 class TestPauliMasksAndJPower:

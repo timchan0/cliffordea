@@ -23,7 +23,7 @@ from cliffordep.noisy_circuit_tools import (
     mask_to_unsigned_pauli,
 )
 from cliffordep.pauli_string_tools import forget_sign
-from tests.conftest import pauli_mask
+from cliffordep.pauli_string_tools import pauli_mask
 
 
 def _make_small_fault_combinator() -> FaultCombinator:
