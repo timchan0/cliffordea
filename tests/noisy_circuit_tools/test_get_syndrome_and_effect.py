@@ -92,9 +92,7 @@ def test_measurement_error_gives_syndrome():
     circuit._measurement_to_detectors = defaultdict(set, {0: {0}})
     fault = (0, "MZ", (stim.GateTarget(0),))
     # For a 1-qubit, 1-detector circuit, measurement 0 flips detector 0
-    specialized_syndrome = circuit.get_measurement_error_syndrome(fault)
     syndrome, effect = circuit.get_syndrome_and_effect(fault)
-    assert np.array_equal(specialized_syndrome, syndrome)
     assert np.array_equal(syndrome, np.array([True]))
     assert effect == "_"
 
@@ -137,11 +135,7 @@ def test_pauli_error_gives_effect_and_syndrome():
         """))
     # Error event: X_ERROR at timeslice 0, qubit 0 (after H)
     fault = (0, "X_ERROR", (stim.GateTarget(0),))
-    specialized_analysis = circuit.get_pauli_error_syndrome_and_effect(fault)
     syndrome, effect = circuit.get_syndrome_and_effect(fault)
-    specialized_syndrome, specialized_effect = specialized_analysis
-    assert np.array_equal(specialized_syndrome, syndrome)
-    assert specialized_effect == effect
     # X anticommutes with MZ, so syndrome flips
     assert np.array_equal(syndrome, np.array([True]))
     assert effect == "X"
@@ -172,3 +166,200 @@ def test_multiple_qubits_and_detectors(multi_qubit_detector_circuit: Cultivation
     assert effect == "_X"
     # Should only flip detector 1 if X on 1 anticommutes with MZ 1
     assert np.array_equal(syndrome, np.array([False, True]))
+
+
+@pytest.mark.parametrize(
+    'instruction_text',
+    [
+        'H 0',
+        'S 0',
+        'S_DAG 0',
+        'CX 0 1',
+        'CZ 0 1',
+        'SWAP 0 1',
+        'ISWAP 0 1',
+        'SQRT_XX 0 1',
+        'SPP X0*Z1',
+    ],
+)
+def test_reverse_responses_match_stim_clifford_conjugation(
+        instruction_text: str,
+):
+    """Match every local X/Y/Z response with Stim conjugation."""
+    instruction = stim.CircuitInstruction(instruction_text)
+    circuit = CultivationCircuit(stim.Circuit(
+        f'TICK\n{instruction_text}',
+    ))
+
+    for qubit in range(circuit.noisy_circuit.num_qubits):
+        for basis in 'XYZ':
+            event = (
+                0,
+                f'{basis}_ERROR',
+                (stim.GateTarget(qubit),),
+            )
+            syndrome, effect = circuit.get_syndrome_and_effect(event)
+            generator = stim.PauliString(circuit.noisy_circuit.num_qubits)
+            generator[qubit] = basis
+            expected = cliffordep.forget_sign(generator.after(instruction))
+
+            assert not syndrome.any()
+            assert effect == expected
+
+
+@pytest.mark.parametrize(
+    ('measurement_name', 'commuting_basis', 'anticommuting_basis'),
+    [
+        ('M', 'Z', 'X'),
+        ('MX', 'X', 'Z'),
+        ('MY', 'Y', 'X'),
+    ],
+)
+def test_reverse_responses_respect_measurement_basis(
+        measurement_name: str,
+        commuting_basis: str,
+        anticommuting_basis: str,
+):
+    """Flip a detector exactly when an incoming Pauli anticommutes."""
+    circuit = CultivationCircuit(stim.Circuit(f"""
+        TICK
+        {measurement_name} 0
+        DETECTOR rec[-1]
+    """))
+
+    commuting_syndrome, commuting_effect = circuit.get_syndrome_and_effect((
+        0,
+        f'{commuting_basis}_ERROR',
+        (stim.GateTarget(0),),
+    ))
+    anticommuting_syndrome, anticommuting_effect = (
+        circuit.get_syndrome_and_effect((
+            0,
+            f'{anticommuting_basis}_ERROR',
+            (stim.GateTarget(0),),
+        ))
+    )
+
+    assert np.array_equal(commuting_syndrome, np.array([False]))
+    assert commuting_effect == commuting_basis
+    assert np.array_equal(anticommuting_syndrome, np.array([True]))
+    assert anticommuting_effect == anticommuting_basis
+
+
+@pytest.mark.parametrize(
+    ('measurement_name', 'commuting_basis', 'anticommuting_basis'),
+    [
+        ('MR', 'Z', 'X'),
+        ('MRX', 'X', 'Z'),
+        ('MRY', 'Y', 'X'),
+    ],
+)
+def test_measurement_resets_erase_final_effects(
+        measurement_name: str,
+        commuting_basis: str,
+        anticommuting_basis: str,
+):
+    """Retain measurement response while erasing the incoming Pauli."""
+    circuit = CultivationCircuit(stim.Circuit(f"""
+        TICK
+        {measurement_name} 0
+        DETECTOR rec[-1]
+    """))
+
+    commuting_analysis = circuit.get_syndrome_and_effect((
+        0,
+        f'{commuting_basis}_ERROR',
+        (stim.GateTarget(0),),
+    ))
+    anticommuting_analysis = circuit.get_syndrome_and_effect((
+        0,
+        f'{anticommuting_basis}_ERROR',
+        (stim.GateTarget(0),),
+    ))
+
+    assert np.array_equal(commuting_analysis[0], np.array([False]))
+    assert commuting_analysis[1] == '_'
+    assert np.array_equal(anticommuting_analysis[0], np.array([True]))
+    assert anticommuting_analysis[1] == '_'
+
+
+@pytest.mark.parametrize('reset_name', ['R', 'RX', 'RY'])
+def test_pure_resets_erase_both_generator_responses(reset_name: str):
+    """Erase every incoming Pauli across each pure-reset basis."""
+    circuit = CultivationCircuit(stim.Circuit(f'TICK\n{reset_name} 0'))
+
+    for basis in 'XYZ':
+        syndrome, effect = circuit.get_syndrome_and_effect((
+            0,
+            f'{basis}_ERROR',
+            (stim.GateTarget(0),),
+        ))
+        assert not syndrome.any()
+        assert effect == '_'
+
+
+def test_detector_parity_xors_generator_responses():
+    """Cancel a detector flipped by both halves of a correlated Pauli."""
+    circuit = CultivationCircuit(stim.Circuit("""
+        TICK
+        M 0 1
+        DETECTOR rec[-1] rec[-2]
+    """))
+    event = (
+        0,
+        'E',
+        (stim.target_x(0), stim.target_x(1)),
+    )
+
+    syndrome, effect = circuit.get_syndrome_and_effect(event)
+
+    assert np.array_equal(syndrome, np.array([False]))
+    assert effect == 'XX'
+
+
+def test_mpp_response_uses_each_target_pauli_basis():
+    """Propagate detector response through a mixed-Pauli measurement."""
+    circuit = CultivationCircuit(stim.Circuit("""
+        TICK
+        MPP X0*Y1
+        DETECTOR rec[-1]
+    """))
+
+    syndrome, effect = circuit.get_syndrome_and_effect((
+        0,
+        'Z_ERROR',
+        (stim.GateTarget(0),),
+    ))
+
+    assert np.array_equal(syndrome, np.array([True]))
+    assert effect == 'Z_'
+
+
+def test_measurement_events_use_precomputed_global_indices():
+    """Resolve several same-layer measurements without revisiting the layer."""
+    circuit = CultivationCircuit(stim.Circuit("""
+        M(0.001) 2 0
+        MX(0.001) 1
+        DETECTOR rec[-3] rec[-1]
+        DETECTOR rec[-2] rec[-1]
+    """))
+    reverse_data = circuit._reverse_propagation_data
+    expected_indices = {
+        (0, (2,)): 0,
+        (0, (0,)): 1,
+        (0, (1,)): 2,
+    }
+    assert reverse_data.measurement_index_by_event == expected_indices
+    circuit.__dict__['_noiseless_layers'] = None
+
+    events_and_syndrome_masks = [
+        ((0, 'M', (stim.GateTarget(2),)), 0b01),
+        ((0, 'M', (stim.GateTarget(0),)), 0b10),
+        ((0, 'MX', (stim.GateTarget(1),)), 0b11),
+    ]
+    for event, expected_syndrome_mask in events_and_syndrome_masks:
+        syndrome_mask, effect_mask = circuit._get_syndrome_and_effect_masks(
+            event,
+        )
+        assert syndrome_mask == expected_syndrome_mask
+        assert effect_mask == 0

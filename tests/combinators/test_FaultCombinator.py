@@ -4,6 +4,7 @@ import math
 import pickle
 from types import SimpleNamespace
 from typing import cast
+from unittest.mock import Mock
 
 import pytest
 import stim
@@ -11,19 +12,18 @@ import stim
 import cliffordep
 from cliffordep.combinators import FaultCombinator
 from cliffordep.combinators.fault_combinator import (
-    _bools_to_mask,
-    _decompose_error_event,
     _make_logical_analysis_cache,
     _make_pauli_mask_restrictor,
-    _make_error_event_analyzer,
     _iter_zero_syndrome_configurations,
-    _pauli_mask_to_unsigned_string,
     _sum_logical_weights,
-    _unsigned_pauli_string_to_mask,
 )
 from cliffordep.logical_analyzers import CliffordLogicalAnalyzer, LogicalAnalyzer
-from cliffordep.noisy_circuit_tools import CultivationCircuit
+from cliffordep.noisy_circuit_tools import (
+    CultivationCircuit,
+    mask_to_unsigned_pauli,
+)
 from cliffordep.pauli_string_tools import forget_sign
+from tests.conftest import pauli_mask
 
 
 def _make_small_fault_combinator() -> FaultCombinator:
@@ -70,28 +70,46 @@ def test_index_to_events_cache_is_excluded_from_pickle():
     """Cached Stim targets should be rebuilt from picklable integer indices."""
     combinator = _make_small_fault_combinator()
     expected = combinator.index_to_events
+    reverse_data = combinator.circuit._reverse_propagation_data
+    assert all(
+        isinstance(response, int)
+        for generator_pair in reverse_data.responses_by_timeslice
+        for generator_responses in generator_pair
+        for response in generator_responses
+    )
+    assert all(
+        isinstance(measurement_index, int)
+        for measurement_index
+        in reverse_data.measurement_index_by_event.values()
+    )
+    assert all(
+        isinstance(timeslice, int)
+        and all(isinstance(qubit, int) for qubit in measured_qubits)
+        for timeslice, measured_qubits
+        in reverse_data.measurement_index_by_event
+    )
+    assert all(
+        isinstance(detector_mask, int)
+        for detector_mask in reverse_data.measurement_detector_masks
+    )
 
     restored = pickle.loads(pickle.dumps(combinator))
 
     assert 'index_to_events' not in restored.__dict__
     assert restored._event_fault_indices == combinator._event_fault_indices
     assert restored.index_to_events == expected
+    assert restored.circuit._reverse_propagation_data == reverse_data
 
 
-def test_two_qubit_event_propagation_reuses_symplectic_generators(monkeypatch):
-    """Build all 15 two-qubit Pauli faults from four propagated generators."""
-    original = CultivationCircuit.get_pauli_error_syndrome_and_effect
-    generator_calls = 0
-
-    def count_calls(self, error_event):
-        nonlocal generator_calls
-        generator_calls += 1
-        return original(self, error_event)
-
+def test_construction_avoids_legacy_event_analysis(monkeypatch):
+    """Construct a combinator without decoding masks to arrays and strings."""
+    legacy_method = Mock(side_effect=AssertionError(
+        'Legacy event analysis was unexpectedly called.',
+    ))
     monkeypatch.setattr(
         CultivationCircuit,
-        'get_pauli_error_syndrome_and_effect',
-        count_calls,
+        'get_syndrome_and_effect',
+        legacy_method,
     )
     combinator = FaultCombinator(stim.Circuit("""
         R 0 1
@@ -104,7 +122,7 @@ def test_two_qubit_event_propagation_reuses_symplectic_generators(monkeypatch):
         DETECTOR rec[-1]
     """))
 
-    assert generator_calls == 4
+    legacy_method.assert_not_called()
     assert combinator.fault_count > 0
 
 
@@ -138,41 +156,12 @@ def test_basis_and_indexed_faults_remain_mask_native_and_readable(capsys):
         '1' if sample_syndrome >> detector & 1 else '0'
         for detector in range(combinator.circuit.noisy_circuit.num_detectors)
     )
-    effect_text = _pauli_mask_to_unsigned_string(
+    effect_text = mask_to_unsigned_pauli(
         sample_effect,
         combinator.circuit.noisy_circuit.num_qubits,
     )
     assert syndrome_text in output
     assert f"  {effect_text}: {sample_index}" in output
-
-
-@pytest.mark.parametrize(
-    ('error_event', 'expected'),
-    [
-        (
-            (3, 'X_ERROR', (stim.GateTarget(2),)),
-            ((3, 2, 'X'),),
-        ),
-        (
-            (3, 'Y_ERROR', (stim.GateTarget(2),)),
-            ((3, 2, 'X'), (3, 2, 'Z')),
-        ),
-        (
-            (3, 'Z_ERROR', (stim.GateTarget(2),)),
-            ((3, 2, 'Z'),),
-        ),
-        (
-            (5, 'E', (stim.target_x(1), stim.target_y(4))),
-            ((5, 1, 'X'), (5, 4, 'X'), (5, 4, 'Z')),
-        ),
-    ],
-)
-def test_error_events_decompose_into_elementary_generators(
-        error_event,
-        expected,
-):
-    """Express each Pauli fault as the X/Z generators needed to rebuild it."""
-    assert _decompose_error_event(error_event) == expected
 
 
 def test_mask_analyzer_matches_direct_event_propagation():
@@ -188,16 +177,18 @@ def test_mask_analyzer_matches_direct_event_propagation():
         DETECTOR rec[-2]
         DETECTOR rec[-1]
     """))
-    analyze_error_event = _make_error_event_analyzer(circuit)
 
     for group in circuit.group_error_events_by_location().values():
         for error_event in group:
             syndrome, effect = circuit.get_syndrome_and_effect(error_event)
             expected = (
-                _bools_to_mask(syndrome),
-                _unsigned_pauli_string_to_mask(effect),
+                sum(
+                    bool(value) << index
+                    for index, value in enumerate(syndrome)
+                ),
+                pauli_mask(effect),
             )
-            assert analyze_error_event(error_event) == expected
+            assert circuit._get_syndrome_and_effect_masks(error_event) == expected
 
 
 @pytest.mark.parametrize("qubit_count", range(4))
@@ -212,9 +203,9 @@ def test_mask_xor_matches_stim_multiplication_exhaustively(qubit_count: int):
     )
     for left, right in itertools.product(strings, repeat=2):
         expected = forget_sign(stim.PauliString(left) * stim.PauliString(right))
-        actual = _pauli_mask_to_unsigned_string(
-            _unsigned_pauli_string_to_mask(left)
-            ^ _unsigned_pauli_string_to_mask(right),
+        actual = mask_to_unsigned_pauli(
+            pauli_mask(left)
+            ^ pauli_mask(right),
             qubit_count,
         )
         assert actual == expected
@@ -261,8 +252,8 @@ def test_representative_mask_products_match_stim(
     ))
     product_mask = 0
     for factor in factors:
-        product_mask ^= _unsigned_pauli_string_to_mask(factor)
-    assert _pauli_mask_to_unsigned_string(product_mask, qubit_count) == expected
+        product_mask ^= pauli_mask(factor)
+    assert mask_to_unsigned_pauli(product_mask, qubit_count) == expected
 
 
 @pytest.mark.parametrize("unsigned_string", ["", "_", "I", "XYZ_", "Y_YXZI"])
@@ -275,8 +266,8 @@ def test_pauli_mask_round_trip(unsigned_string: str):
     :param unsigned_string: The unsigned Pauli string to round-trip.
     """
     canonical = unsigned_string.replace('I', '_')
-    mask = _unsigned_pauli_string_to_mask(unsigned_string)
-    assert _pauli_mask_to_unsigned_string(mask, len(unsigned_string)) == canonical
+    mask = pauli_mask(unsigned_string)
+    assert mask_to_unsigned_pauli(mask, len(unsigned_string)) == canonical
 
 
 def _restrict_pauli_mask(
@@ -317,11 +308,11 @@ def test_pauli_mask_restriction_preserves_requested_order():
     source = "XYZ_YX"
     data_indices = (5, 0, 3, 2)
     restricted_mask = _restrict_pauli_mask(
-        _unsigned_pauli_string_to_mask(source),
+        pauli_mask(source),
         data_indices=data_indices,
         source_qubit_count=len(source),
     )
-    assert _pauli_mask_to_unsigned_string(
+    assert mask_to_unsigned_pauli(
         restricted_mask,
         len(data_indices),
     ) == ''.join(source[index] for index in data_indices)
@@ -329,7 +320,7 @@ def test_pauli_mask_restriction_preserves_requested_order():
         data_indices=data_indices,
         source_qubit_count=len(source),
     )
-    assert fast_restrict(_unsigned_pauli_string_to_mask(source)) == restricted_mask
+    assert fast_restrict(pauli_mask(source)) == restricted_mask
 
 
 @pytest.mark.parametrize("order", range(5))
@@ -540,13 +531,13 @@ def _make_synthetic_combinator() -> FaultCombinator:
         independent exhaustive-oracle comparison.
     """
     indexed_faults = (
-        (0b00, _unsigned_pauli_string_to_mask("Z_Z")),
-        (0b01, _unsigned_pauli_string_to_mask("X__")),
-        (0b01, _unsigned_pauli_string_to_mask("_X_")),
-        (0b10, _unsigned_pauli_string_to_mask("__Z")),
-        (0b10, _unsigned_pauli_string_to_mask("Y__")),
-        (0b11, _unsigned_pauli_string_to_mask("_Y_")),
-        (0b11, _unsigned_pauli_string_to_mask("ZZ_")),
+        (0b00, pauli_mask("Z_Z")),
+        (0b01, pauli_mask("X__")),
+        (0b01, pauli_mask("_X_")),
+        (0b10, pauli_mask("__Z")),
+        (0b10, pauli_mask("Y__")),
+        (0b11, pauli_mask("_Y_")),
+        (0b11, pauli_mask("ZZ_")),
     )
     basis: defaultdict[int, dict[int, int]] = defaultdict(dict)
     for index, (syndrome, effect) in enumerate(indexed_faults):
@@ -643,7 +634,7 @@ def test_synthetic_order_three_matches_exhaustive_subset_oracle():
         cultivated_states=cultivated_states,
     )
     assert actual == expected
-    effect_mask = _unsigned_pauli_string_to_mask('_Z')
+    effect_mask = pauli_mask('_Z')
     assert frozenset({1, 4, 5}) in actual['S'][3][effect_mask][2]
 
 
@@ -773,8 +764,8 @@ def test_full_effects_with_same_data_restriction_merge_configurations():
     contribute to one retained data effect without overwriting either fault.
     """
     combinator = FaultCombinator.__new__(FaultCombinator)
-    x_identity = _unsigned_pauli_string_to_mask("X_")
-    x_z = _unsigned_pauli_string_to_mask("XZ")
+    x_identity = pauli_mask("X_")
+    x_z = pauli_mask("XZ")
     combinator.basis = {
         0: {
             x_identity: 0,
@@ -797,7 +788,7 @@ def test_full_effects_with_same_data_restriction_merge_configurations():
         cultivated_states=('S', 'T'),
     )
 
-    data_effect = _unsigned_pauli_string_to_mask('X')
+    data_effect = pauli_mask('X')
     configurations_for_s = kept_effects['S'][1][data_effect][2]
     configurations_for_t = kept_effects['T'][1][data_effect][2]
     assert configurations_for_s == {frozenset({0}), frozenset({1})}

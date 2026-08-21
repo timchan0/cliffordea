@@ -4,7 +4,7 @@ import math
 
 import stim
 
-from cliffordep.combinators import error_event_count
+from cliffordep.combinators._base import error_event_count
 
 
 def test_1_effect(dummy_error_event_count, update_undetected_configurations):

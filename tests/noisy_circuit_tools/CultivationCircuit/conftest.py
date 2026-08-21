@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from cliffordep.combinators import error_event_count
+from cliffordep.combinators._base import error_event_count
 from cliffordep.type_aliases import ErrorLocation
 
 

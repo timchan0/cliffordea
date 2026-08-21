@@ -28,7 +28,7 @@ _SIGN_TO_J_POWER: dict[complex, Literal[0, 1, 2, 3]] = {
     (0-1j): 3,
 }
 
-_PAULI_CODE_TO_CHAR = ('_', 'X', 'Z', 'Y')
+_PAULI_VALUE_TO_CHAR = ('_', 'X', 'Z', 'Y')
 """Unsigned Pauli character indexed by packed X/Z bits."""
 
 
@@ -147,7 +147,7 @@ class _TransversalGate:
         return sum((
             stim.Tableau.from_named_gate(self._PUSH_THROUGH_MAP[
                 physical_gate
-            ][_PAULI_CODE_TO_CHAR[
+            ][_PAULI_VALUE_TO_CHAR[
                 ((pauli_mask >> qubit_index) & 1)
                 | (((pauli_mask >> (qubit_count + qubit_index)) & 1) << 1)
             ]])
@@ -166,7 +166,7 @@ class _TransversalGate:
         """
         qubit_count = len(self.PHYSICAL_GATES)
         options: list[tuple[str, ...]] = [
-            PUSH_THROUGH_MAP[physical_gate][_PAULI_CODE_TO_CHAR[
+            PUSH_THROUGH_MAP[physical_gate][_PAULI_VALUE_TO_CHAR[
                 ((pauli_mask >> qubit_index) & 1)
                 | (((pauli_mask >> (qubit_count + qubit_index)) & 1) << 1)
             ]]

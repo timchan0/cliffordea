@@ -3,7 +3,8 @@ import itertools
 from collections import Counter, defaultdict
 import stim
 
-from cliffordep.combinators import FaultCombinatorExclusive, error_event_count
+from cliffordep.combinators import FaultCombinatorExclusive
+from cliffordep.combinators._base import error_event_count
 from cliffordep.noisy_circuit_tools import CultivationCircuit
 from cliffordep.pauli_string_tools import forget_sign
 

@@ -1,16 +1,18 @@
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Sequence
-from functools import cache, cached_property, lru_cache
+from functools import cached_property, lru_cache
 import itertools
 import math
 from typing import Literal
 
 import pandas as pd
-import stim
 from tqdm.auto import tqdm
 
-from cliffordep.noisy_circuit_tools import CultivationCircuit
-from cliffordep.combinators._base import Combinator
+from cliffordep.noisy_circuit_tools import (
+    CultivationCircuit,
+    mask_to_unsigned_pauli,
+)
+from cliffordep.combinators._base import Combinator, classify
 from cliffordep.logical_analyzers import LogicalAnalyzer
 from cliffordep.type_aliases import (
     ErrorEvent,
@@ -20,13 +22,10 @@ from cliffordep.type_aliases import (
     SyndromeMask,
 )
 from cliffordep import noiseless_circuit_tools
-from cliffordep.constants import ONE_QUBIT_ERROR_EVENTS
 
 
 CultivatedState = Literal['T', 'S', 'Z']
 LogicalAnalysis = tuple[float, float]
-PauliBasis = Literal['X', 'Z']
-PauliGenerator = tuple[int, int, PauliBasis]
 MaskAnalysis = tuple[int, int]
 
 
@@ -51,109 +50,6 @@ DiagramType = Literal[
     'interactive-html',
 ]
 """Stim diagram type."""
-
-
-def _decompose_error_event(error_event: ErrorEvent) -> tuple[PauliGenerator, ...]:
-    """Decompose a non-measurement Pauli event into X/Z generators.
-
-    :param error_event: The physical Pauli error event to decompose.
-    :return generators: Elementary ``(timeslice, qubit, basis)`` generators
-        whose unsigned product equals the original event.
-    """
-    timeslice, name, targets = error_event
-    if name.startswith('M'):
-        raise ValueError('Measurement errors are not Pauli-generator events.')
-
-    if name == 'E':
-        components = tuple(
-            (target.value, target.pauli_type) for target in targets
-        )
-    else:
-        target, = targets
-        components = ((target.value, name[0]),)
-
-    generators: list[PauliGenerator] = []
-    for qubit, pauli_type in components:
-        if pauli_type == 'X':
-            generators.append((timeslice, qubit, 'X'))
-        elif pauli_type == 'Y':
-            generators.extend((
-                (timeslice, qubit, 'X'),
-                (timeslice, qubit, 'Z'),
-            ))
-        elif pauli_type == 'Z':
-            generators.append((timeslice, qubit, 'Z'))
-        else:
-            raise ValueError(f'Unsupported Pauli component: {pauli_type!r}.')
-    return tuple(generators)
-
-
-def _make_error_event_analyzer(
-        circuit: CultivationCircuit,
-) -> Callable[[ErrorEvent], MaskAnalysis]:
-    """Create a mask-valued event analyzer with a local generator cache.
-
-    :param circuit: The cultivation circuit through which errors are propagated.
-    :return analyze_error_event: A callable that maps a physical error event to
-        its integer syndrome and effect masks.
-    """
-    @cache
-    def analyze_generator(
-            timeslice: int,
-            qubit: int,
-            basis: PauliBasis,
-    ) -> MaskAnalysis:
-        """Propagate and cache one elementary Pauli generator.
-
-        :param timeslice: The circuit timeslice where the generator occurs.
-        :param qubit: The qubit on which the generator acts.
-        :param basis: Whether the generator is an X or Z error.
-        :return analysis: The propagated syndrome and effect as integer masks.
-        """
-        generator_event = (
-            timeslice,
-            f'{basis}_ERROR',
-            (stim.GateTarget(qubit),),
-        )
-        syndrome, effect = circuit.get_pauli_error_syndrome_and_effect(
-            generator_event,
-        )
-        return (
-            _bools_to_mask(syndrome),
-            _unsigned_pauli_string_to_mask(effect),
-        )
-
-    def analyze_error_event(error_event: ErrorEvent) -> MaskAnalysis:
-        """Analyze one physical event using cached generators when possible.
-
-        :param error_event: The physical error event to propagate.
-        :return analysis: The event's syndrome and effect as integer masks.
-        """
-        _, name, _ = error_event
-        if name.startswith('M'):
-            syndrome = circuit.get_measurement_error_syndrome(error_event)
-            return _bools_to_mask(syndrome), 0
-
-        syndrome_mask = 0
-        effect_mask = 0
-        for generator in _decompose_error_event(error_event):
-            generator_syndrome_mask, generator_effect_mask = analyze_generator(
-                *generator,
-            )
-            syndrome_mask ^= generator_syndrome_mask
-            effect_mask ^= generator_effect_mask
-        return syndrome_mask, effect_mask
-
-    return analyze_error_event
-
-
-def _bools_to_mask(values: Iterable[bool]) -> int:
-    """Pack a little-endian boolean sequence into an integer mask.
-
-    :param values: Boolean coefficients ordered from least-significant bit.
-    :return mask: The packed integer mask.
-    """
-    return sum(bool(value) << index for index, value in enumerate(values))
 
 
 def _iter_zero_syndrome_configurations(
@@ -211,12 +107,11 @@ class FaultCombinator(Combinator):
         _basis: defaultdict[SyndromeMask, dict[PauliMask, int]] = defaultdict(dict)
         _index_to_bag: defaultdict[int, list[int]] = defaultdict(lambda: [0, 0, 0])
         event_fault_indices: list[int] = []
-        analyze_error_event = _make_error_event_analyzer(_circuit)
 
         for (_, process_name, _), group in _circuit.group_error_events_by_location().items():
-            process_class = self._classify(process_name)
+            process_class = classify(process_name)
             for error_event in group:
-                syndrome_mask, effect_mask = analyze_error_event(error_event)
+                syndrome_mask, effect_mask = _circuit._get_syndrome_and_effect_masks(error_event)
                 index = _basis[syndrome_mask].setdefault(
                     effect_mask,
                     len(_index_to_bag),
@@ -460,7 +355,7 @@ class FaultCombinator(Combinator):
             ))
             for effect_mask, index in effect_dict.items():
                 bag = self.index_to_bag[index]
-                effect = _pauli_mask_to_unsigned_string(effect_mask, qubit_count)
+                effect = mask_to_unsigned_pauli(effect_mask, qubit_count)
                 bag_str = bag
                 lines.append(f"  {effect}: {index}, {bag_str}")
         print('\n'.join(lines))
@@ -573,31 +468,6 @@ class FaultCombinator(Combinator):
 
 
     @staticmethod
-    def _classify(process_name: str) -> int:
-        """Classify an error process by how many error events it can make.
-
-        :param process_name: The name of the Stim gate that gives rise to error events.
-            This can be 'DEPOLARIZE1', 'DEPOLARIZE2',
-            or a member of `ONE_QUBIT_ERROR_EVENTS`.
-
-        :return:
-            An integer indicating the type of error process:
-
-                * 0 if `process_name` is in `ONE_QUBIT_ERROR_EVENTS`.
-                * 1 if it makes 3 error events (DEPOLARIZE1).
-                * 2 if it makes 15 error events (DEPOLARIZE2).
-        """
-        if process_name in ONE_QUBIT_ERROR_EVENTS:
-            return 0
-        elif process_name == 'DEPOLARIZE1':
-            return 1
-        elif process_name == 'DEPOLARIZE2':
-            return 2
-        else:
-            raise ValueError(f"Unknown error process: {process_name}")
-
-
-    @staticmethod
     def _decomposed_probability(
             class_: int,
             noise_level: float,
@@ -620,49 +490,6 @@ class FaultCombinator(Combinator):
             return -15**(7/8)*(15 - 16*noise_level)**(1/8)/30 + 1/2
         else:
             raise ValueError(f"Invalid `class_`: {class_}. Only 0, 1, and 2 are supported.")
-    
-
-def _unsigned_pauli_string_to_mask(unsigned_string: str) -> int:
-    """Pack an unsigned Pauli string into one integer.
-
-    The lower ``n`` bits encode X support and the next ``n`` bits encode Z
-    support. Consequently, ``Y`` sets both corresponding bits and unsigned
-    Pauli multiplication is integer XOR.
-
-    :param unsigned_string: A signless Pauli string using ``_`` or ``I`` for
-        identity and ``X``, ``Y``, or ``Z`` for nonidentity Paulis.
-
-    :return mask: The packed X/Z-support mask.
-    """
-    x_mask = 0
-    z_mask = 0
-    for index, pauli in enumerate(unsigned_string):
-        bit = 1 << index
-        if pauli in ('X', 'Y'):
-            x_mask |= bit
-        if pauli in ('Z', 'Y'):
-            z_mask |= bit
-    return x_mask | (z_mask << len(unsigned_string))
-
-
-def _pauli_mask_to_unsigned_string(mask: int, qubit_count: int) -> str:
-    """Decode a packed Pauli mask into a canonical unsigned string.
-
-    :param mask: An integer whose lower ``qubit_count`` bits encode X support
-        and whose next ``qubit_count`` bits encode Z support.
-    :param qubit_count: The number of qubits represented by each support mask.
-
-    :return unsigned_string: The decoded string, using ``_`` for identity.
-    """
-    support_mask = (1 << qubit_count) - 1
-    x_mask = mask & support_mask
-    z_mask = (mask >> qubit_count) & support_mask
-    paulis = []
-    for index in range(qubit_count):
-        x = bool(x_mask & (1 << index))
-        z = bool(z_mask & (1 << index))
-        paulis.append('Y' if x and z else 'X' if x else 'Z' if z else '_')
-    return ''.join(paulis)
 
 
 def _make_pauli_mask_restrictor(

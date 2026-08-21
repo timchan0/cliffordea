@@ -13,7 +13,7 @@ from cliffordep.combinators._base import BaseExclusiveCombinator
 from cliffordep.type_aliases import ErrorLocation, ErrorEvent
 from cliffordep.noisy_circuit_tools import CultivationCircuit
 from cliffordep.pauli_string_tools import forget_sign
-from cliffordep.combinators import error_event_count
+from cliffordep.combinators._base import error_event_count
 
 
 class ErrorEventCombinator(BaseExclusiveCombinator):

@@ -7,6 +7,8 @@ import numpy as np
 import numpy.typing as npt
 import stim
 
+from cliffordep.constants import ONE_QUBIT_ERROR_EVENTS
+
 
 class Combinator(abc.ABC):
     """Class to find all fault configurations that are undetectable i.e. lead to trivial syndrome."""
@@ -132,3 +134,40 @@ def get_trivial_syndrome_combinations(
         resultant_syndrome: npt.NDArray[np.int_] = np.array(combo).sum(axis=0) % 2
         if not any(resultant_syndrome):
             yield Counter(combo)
+
+
+def classify(process_name: str) -> int:
+    """Classify an error process by how many error events it can make.
+
+    :param process_name: The name of the Stim gate that gives rise to error events.
+        This can be 'DEPOLARIZE1', 'DEPOLARIZE2',
+        or a member of `ONE_QUBIT_ERROR_EVENTS`.
+
+    :return process_class:
+        An integer indicating the class of error process:
+
+            * 0 if `process_name` is in `ONE_QUBIT_ERROR_EVENTS`.
+            * 1 if it makes 3 error events (DEPOLARIZE1).
+            * 2 if it makes 15 error events (DEPOLARIZE2).
+    """
+    if process_name in ONE_QUBIT_ERROR_EVENTS:
+        return 0
+    elif process_name == 'DEPOLARIZE1':
+        return 1
+    elif process_name == 'DEPOLARIZE2':
+        return 2
+    else:
+        raise ValueError(f"Unknown error process: {process_name}")
+
+
+def error_event_count(process_name: str) -> int:
+    """Return the number of error events an error process can make.
+
+    :param process_name: The name of the Stim gate that gives rise to error events.
+        This can be 'DEPOLARIZE1', 'DEPOLARIZE2',
+        or a member of `ONE_QUBIT_ERROR_EVENTS`.
+
+    :return: The number of error events the error process can make.
+        This indicates the noise strength divided by the probability of each error event.
+    """
+    return {0: 1, 1: 3, 2: 15}[classify(process_name)]

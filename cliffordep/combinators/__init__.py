@@ -1,3 +1,4 @@
-from cliffordep.combinators.fault_combinator_exclusive import FaultCombinatorExclusive, error_event_count
+from cliffordep.combinators._base import error_event_count
+from cliffordep.combinators.fault_combinator_exclusive import FaultCombinatorExclusive
 from cliffordep.combinators.error_event_combinator import ErrorEventCombinator
 from cliffordep.combinators.fault_combinator import FaultCombinator

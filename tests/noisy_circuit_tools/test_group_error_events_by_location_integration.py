@@ -3,9 +3,7 @@ import stim
 
 from cliffordep.combinators import FaultCombinator
 from cliffordep.combinators.fault_combinator import (
-    _bools_to_mask,
     _iter_zero_syndrome_configurations,
-    _unsigned_pauli_string_to_mask,
 )
 from cliffordep.constants import ONE_QUBIT_ERROR_EVENTS
 from cliffordep.noisy_circuit_tools import CultivationCircuit
@@ -62,9 +60,7 @@ class TestD3DoubleCatCheck:
         assert effect == '_' * noisy_d3_double_cat_check_circuit.num_qubits
 
         combinator = FaultCombinator(noisy_d3_double_cat_check_circuit)
-        fault_index = combinator.basis[
-            _bools_to_mask(syndrome)
-        ][_unsigned_pauli_string_to_mask(effect)]
+        fault_index = combinator.basis[0b1001][0]
         assert combinator.fault_count == 158
         assert combinator.index_to_bag[fault_index] == (1, 0, 5)
 

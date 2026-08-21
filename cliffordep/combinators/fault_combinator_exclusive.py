@@ -8,28 +8,7 @@ import stim
 from cliffordep.noisy_circuit_tools import CultivationCircuit
 from cliffordep.pauli_string_tools import forget_sign
 from cliffordep.type_aliases import EffectMap, ErrorLocation
-from cliffordep.combinators._base import BaseExclusiveCombinator, get_trivial_syndrome_combinations
-from cliffordep.constants import ONE_QUBIT_ERROR_EVENTS
-
-
-def error_event_count(process_name: str) -> int:
-    """Return the number of error events an error process can make.
-
-    :param process_name: The name of the Stim gate that gives rise to faults.
-        This can be 'DEPOLARIZE1', 'DEPOLARIZE2',
-        or a member of `ONE_QUBIT_ERROR_EVENTS`.
-
-    :return: The number of error events the error process can make.
-        This indicates the noise strength divided by the probability of each error event.
-    """
-    if process_name in ONE_QUBIT_ERROR_EVENTS:
-        return 1
-    elif process_name == 'DEPOLARIZE1':
-        return 3
-    elif process_name == 'DEPOLARIZE2':
-        return 15
-    else:
-        raise ValueError(f"Unknown error process: {process_name}")
+from cliffordep.combinators._base import BaseExclusiveCombinator, error_event_count, get_trivial_syndrome_combinations
 
 
 class FaultCombinatorExclusive(BaseExclusiveCombinator):

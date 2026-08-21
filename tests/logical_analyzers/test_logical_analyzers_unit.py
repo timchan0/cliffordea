@@ -11,9 +11,10 @@ from cliffordep.logical_analyzers import (
 from cliffordep import circuits
 from cliffordep.combinators.fault_combinator import (
     _make_pauli_mask_restrictor,
-    _unsigned_pauli_string_to_mask,
 )
 from cliffordep.pauli_string_tools import forget_sign
+from tests.conftest import pauli_mask
+
 
 class TestPauliMasksAndJPower:
     
@@ -66,7 +67,7 @@ class TestDistance3:
 
 
     def test_x_tensor_n(self, analyzer: LogicalAnalyzer):
-        effect_mask = _unsigned_pauli_string_to_mask(
+        effect_mask = pauli_mask(
             forget_sign(analyzer.X_TENSOR_N),
         )
         assert analyzer.analyze('T', effect_mask) == (1.0, True)
@@ -79,14 +80,14 @@ class TestDistance3:
             source_qubit_count=len(full_effect),
         )
         data_effect = restrict_effect(
-            _unsigned_pauli_string_to_mask(full_effect),
+            pauli_mask(full_effect),
         )
         assert analyzer.analyze('T', data_effect) == (0.0, False)
 
 
     def test_nontrivial_acceptance_probability(self, analyzer: LogicalAnalyzer):
         """Check a distance-3 example whose trivial-syndrome probability is 1/4."""
-        effect_mask = _unsigned_pauli_string_to_mask('YX_X___')
+        effect_mask = pauli_mask('YX_X___')
         assert analyzer.analyze('T', effect_mask) == (0.25, False)
 
 
@@ -158,7 +159,7 @@ class TestDistance3:
             stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
             logical_s=circuit.LOGICAL_S,
         )
-        effect_mask = _unsigned_pauli_string_to_mask(restricted)
+        effect_mask = pauli_mask(restricted)
         clifford_probability, clifford_fidelity = clifford_analyzer.analyze(
             'T', effect_mask,
         )
@@ -183,7 +184,7 @@ class TestDistance5:
 
 
     def test_x_tensor_n(self, analyzer: CliffordLogicalAnalyzer):
-        effect_mask = _unsigned_pauli_string_to_mask(
+        effect_mask = pauli_mask(
             forget_sign(analyzer.X_TENSOR_N),
         )
         assert analyzer.analyze('T', effect_mask) == (1.0, True)
@@ -196,7 +197,7 @@ class TestDistance5:
             source_qubit_count=len(full_effect),
         )
         data_effect = restrict_effect(
-            _unsigned_pauli_string_to_mask(full_effect),
+            pauli_mask(full_effect),
         )
         assert analyzer.analyze('T', data_effect) == (0.0, False)
 
@@ -221,7 +222,7 @@ class TestDistance5:
             logical_s=circuit.LOGICAL_S,
             precheck_z_stabilizers=False,
         )
-        effect_mask = _unsigned_pauli_string_to_mask(restricted)
+        effect_mask = pauli_mask(restricted)
         assert enabled_analyzer.analyze(
             'T', effect_mask,
         ) == disabled_analyzer.analyze('T', effect_mask)
@@ -361,7 +362,7 @@ def test_inapplicable_factoring_uses_general_path(
         **analyzer_arguments,
         factor_transversal_errors=False,
     )
-    effect_mask = _unsigned_pauli_string_to_mask('YX_X___')
+    effect_mask = pauli_mask('YX_X___')
 
     assert candidate.analyze('T', effect_mask) == general.analyze(
         'T',
