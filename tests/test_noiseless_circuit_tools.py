@@ -1,6 +1,3 @@
-from unittest.mock import patch
-
-import pytest
 import stim
 
 from cliffordep import noiseless_circuit_tools

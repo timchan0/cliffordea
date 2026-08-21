@@ -257,15 +257,12 @@ def extract_malignant_configurations(
     """Extract accepted configurations with non-unit logical fidelity."""
     effects_by_order = kept_effects[cultivated_state]
     selected_orders = range(len(effects_by_order)) if orders is None else orders
-    configurations: set[tuple[int, ...]] = set()
+    configurations: list[tuple[int, ...]] = []
     for order in selected_orders:
         for accept_probability, logical_fidelity, effect_configurations in (
                 effects_by_order[order].values()):
             if accept_probability and not math.isclose(float(logical_fidelity), 1.0):
-                configurations.update(
-                    tuple(sorted(configuration))
-                    for configuration in effect_configurations
-                )
+                configurations.extend(effect_configurations)
     return tuple(sorted(configurations, key=lambda item: (len(item), item)))
 
 
@@ -926,7 +923,7 @@ def find_malignant_configurations(
         maxsize=262_144,
     )
 
-    malignant: set[tuple[int, ...]] = set()
+    malignant: list[tuple[int, ...]] = []
     for order in range(max_order + 1):
         visited = 0
         for data_effect, fault_indices in _iter_zero_syndrome_configurations(
@@ -936,7 +933,7 @@ def find_malignant_configurations(
             visited += 1
             ((accept_probability, logical_fidelity),) = analyze(data_effect)
             if accept_probability and not math.isclose(logical_fidelity, 1.0):
-                malignant.add(tuple(sorted(fault_indices)))
+                malignant.append(fault_indices)
                 if (
                     maximum_configurations is not None
                     and len(malignant) >= maximum_configurations

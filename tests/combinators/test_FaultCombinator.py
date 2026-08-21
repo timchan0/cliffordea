@@ -513,7 +513,7 @@ def _exhaustive_kept_effects_oracle(
     result = {state: [] for state in cultivated_states}
     for order in range(max_order + 1):
         configurations_by_state = {
-            state: defaultdict(set) for state in cultivated_states
+            state: defaultdict(list) for state in cultivated_states
         }
         analyses_by_state = {state: {} for state in cultivated_states}
         for combination in itertools.combinations(faults, order):
@@ -525,7 +525,7 @@ def _exhaustive_kept_effects_oracle(
             if resultant_syndrome:
                 continue
             data_effect = restrict_effect(full_effect)
-            fault_indices = frozenset(fault[0] for fault in combination)
+            fault_indices = tuple(fault[0] for fault in combination)
             for state in cultivated_states:
                 if data_effect not in analyses_by_state[state]:
                     analyses_by_state[state][data_effect] = (
@@ -533,7 +533,7 @@ def _exhaustive_kept_effects_oracle(
                     )
                 analysis = analyses_by_state[state][data_effect]
                 if analysis[0]:
-                    configurations_by_state[state][data_effect].add(
+                    configurations_by_state[state][data_effect].append(
                         fault_indices
                     )
         for state in cultivated_states:
@@ -695,17 +695,39 @@ def test_synthetic_order_three_matches_exhaustive_subset_oracle():
         max_order=3,
         cultivated_states=cultivated_states,
     )
-    assert actual == expected
+    assert actual.keys() == expected.keys()
+    for state in cultivated_states:
+        assert len(actual[state]) == len(expected[state])
+        for actual_effects, expected_effects in zip(
+                actual[state],
+                expected[state],
+                strict=True,
+        ):
+            assert actual_effects.keys() == expected_effects.keys()
+            for effect_mask in actual_effects:
+                actual_probability, actual_fidelity, actual_configurations = (
+                    actual_effects[effect_mask]
+                )
+                expected_probability, expected_fidelity, expected_configurations = (
+                    expected_effects[effect_mask]
+                )
+                assert (actual_probability, actual_fidelity) == (
+                    expected_probability,
+                    expected_fidelity,
+                )
+                assert sorted(actual_configurations) == sorted(
+                    expected_configurations
+                )
     effect_mask = pauli_mask('_Z')
-    assert frozenset({1, 4, 5}) in actual['S'][3][effect_mask][2]
+    assert (1, 4, 5) in actual['S'][3][effect_mask][2]
 
 
-def test_d3_cache_sizes_preserve_kept_effects_and_share_configuration_sets():
+def test_d3_cache_sizes_preserve_kept_effects_and_share_configuration_lists():
     """Check cache-size invariance and cross-state configuration sharing.
 
     Disabled, bounded, default-sized, and unbounded caches must retain equal
     distance-3 results. Effects accepted for both S and T should also refer to
-    the same configuration-set object.
+    the same configuration-list object.
     """
     circuit = cliffordep.circuits.D3A6()
     noisy_circuit = cliffordep.noise.uniformly_depolarize(
@@ -819,8 +841,8 @@ def test_clifford_linear_precheck_preserves_results_and_reduces_enumeration(
     )
 
 
-def test_full_effects_with_same_data_restriction_merge_configurations():
-    """Check that equal data restrictions merge their fault configurations.
+def test_full_effects_merge_canonical_configuration_lists():
+    """Equal data effects share one list of canonical fault-index tuples.
 
     Two full-circuit effects that differ only on a discarded qubit should
     contribute to one retained data effect without overwriting either fault.
@@ -853,7 +875,16 @@ def test_full_effects_with_same_data_restriction_merge_configurations():
     data_effect = pauli_mask('X')
     configurations_for_s = kept_effects['S'][1][data_effect][2]
     configurations_for_t = kept_effects['T'][1][data_effect][2]
-    assert configurations_for_s == {frozenset({0}), frozenset({1})}
+    assert configurations_for_s == [(0,), (1,)]
+    assert isinstance(configurations_for_s, list)
+    assert all(
+        isinstance(configuration, tuple)
+        and all(
+            left_index < right_index
+            for left_index, right_index in itertools.pairwise(configuration)
+        )
+        for configuration in configurations_for_s
+    )
     assert configurations_for_s is configurations_for_t
 
 

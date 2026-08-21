@@ -246,7 +246,7 @@ class FaultCombinator(Combinator):
 
         for order in range(max_order + 1):
             configurations_by_mask: dict[
-                PauliMask, set[frozenset[int]]
+                PauliMask, list[tuple[int, ...]]
             ] = {}
             triples_by_state: dict[
                 str, dict[PauliMask, LogicalTriple]
@@ -275,8 +275,8 @@ class FaultCombinator(Combinator):
                 if not any(accept_probability for accept_probability, _ in analyses):
                     continue
 
-                configurations = configurations_by_mask.setdefault(data_effect_mask, set())
-                configurations.add(frozenset(fault_indices))
+                configurations = configurations_by_mask.setdefault(data_effect_mask, [])
+                configurations.append(fault_indices)
                 for state, (accept_probability, logical_fidelity) in zip(
                         cultivated_states, analyses, strict=True):
                     if accept_probability and data_effect_mask not in triples_by_state[state]:
@@ -383,16 +383,16 @@ class FaultCombinator(Combinator):
             for degree, effects in enumerate(effects_for_state):
                 i_entropy, e_entropy = 0, 0
                 i_count, e_count = 0, 0
-                for accept_probability, logical_fidelity, set_of_configurations in effects.values():
+                for accept_probability, logical_fidelity, configurations in effects.values():
                     entropy = sum(math.prod(self._bag_to_entropy(self.index_to_bag[index])
-                        for index in config) for config in set_of_configurations)
+                        for index in config) for config in configurations)
                     i_entropy += accept_probability * logical_fidelity * entropy
                     e_entropy += accept_probability * (1-logical_fidelity) * entropy
                     if accept_probability > 0:
                         if logical_fidelity == 1:
-                            i_count += len(set_of_configurations)
+                            i_count += len(configurations)
                         else:
-                            e_count += len(set_of_configurations)
+                            e_count += len(configurations)
                 dict_[state, degree] = (i_count, e_count, i_entropy, e_entropy)
         data = pd.DataFrame(dict_).T
         data.index.set_names(['cultivated_state', 'degree'], inplace=True)
@@ -453,7 +453,7 @@ class FaultCombinator(Combinator):
         """Visualize multiple fault configurations one by one.
         
         :param configurations: A sequence of fault configurations.
-            Each fault configuration is a frozen set of fault indices.
+            Each fault configuration is an iterable of fault indices.
         :param probability_increment: The increment in error probability for each fault in the configuration.
             I.e. all error events realizing the kth fault have probability `k*probability_increment`.
             This is used to distinguish error events realizing different faults.
@@ -618,7 +618,7 @@ def _sum_logical_weights(
     """Sum acceptance-weighted logical identity and error contributions.
 
     :param logical_triples: Logical-analysis results containing an acceptance
-        probability, logical fidelity, and set of fault configurations for
+        probability, logical fidelity, and list of fault configurations for
         each retained effect. Configuration multiplicity is not included in
         this diagnostic sum.
 
@@ -644,12 +644,16 @@ def _sum_odds(
 
             * an acceptance probability,
             * a logical fidelity,
-            * a set of frozen sets of fault indices that defines the combination.
+            * a list of canonical fault-index tuples that defines the
+              configurations.
     :param index_to_odds: A map from each fault index to the odds of it flipping.
     """
     i_odds, e_odds = 0, 0
-    for accept_probability, logical_fidelity, set_of_configurations in logical_triples:
-        prob = sum(math.prod(index_to_odds[index] for index in combo) for combo in set_of_configurations)
+    for accept_probability, logical_fidelity, configurations in logical_triples:
+        prob = sum(
+            math.prod(index_to_odds[index] for index in configuration)
+            for configuration in configurations
+        )
         i_odds += accept_probability * logical_fidelity * prob
         e_odds += accept_probability * (1-logical_fidelity) * prob
     return i_odds, e_odds
