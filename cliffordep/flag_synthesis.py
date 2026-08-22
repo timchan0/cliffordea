@@ -39,6 +39,7 @@ from cliffordep.type_aliases import ErrorEvent, LogicalTriple, PauliMask
 
 
 PauliBasis = Literal["X", "Z"]
+CandidateSource = Literal["direct-envelope", "nearby-envelope", "single-seed-fallback"]
 ObjectiveName = Literal["flag_qubits", "added_cnot_layers", "flag_cnot_count"]
 
 
@@ -95,19 +96,46 @@ class FaultBundle:
 
 
 @dataclass(frozen=True, slots=True)
+class FaultEffectClassification:
+    """Data-restricted packed effect weights for one abstract fault."""
+
+    fault_index: int
+    data_effect: PauliMask
+    x_data_mask: int
+    z_data_mask: int
+    data_pauli_weight: int
+    x_data_weight: int
+    z_data_weight: int
+    is_targetable_hook: bool
+
+
+@dataclass(frozen=True, slots=True)
+class CandidatePoolRestrictions:
+    """Finite search restrictions used to generate a candidate pool."""
+
+    maximum_duration: int
+    maximum_interactions: int
+    nearby_boundary_radius: int
+    includes_single_seed_fallback: bool
+    boundary_range: tuple[int, int]
+
+
+@dataclass(frozen=True, slots=True)
 class FlagCandidate:
-    """A valid CSS detecting region implementable by one flag lifecycle.
+    """A valid pure-Z detecting region implementable by one flag lifecycle.
 
     ``interactions`` lists the nonzero boundary terms of the detecting
     region. Each pair consists of a boundary index and the qubits on which
-    the pure-X or pure-Z boundary Pauli is supported.
+    the pure-Z boundary Pauli is supported. The ``basis`` name describes the
+    detecting region: a Z region physically detects X/Y errors using a
+    ``|0>`` flag, circuit-to-flag CNOTs, and a Z measurement.
     """
 
     identifier: str
     basis: PauliBasis
     interactions: tuple[tuple[int, tuple[int, ...]], ...]
     response_mask: int
-    source: str = "path-envelope"
+    source: CandidateSource = "direct-envelope"
 
     @property
     def start_boundary(self) -> int:
@@ -134,6 +162,9 @@ class FlagSynthesisProblem:
     malignant_configurations: tuple[tuple[int, ...], ...]
     candidates: tuple[FlagCandidate, ...]
     realization_count: int
+    fault_classifications: tuple[FaultEffectClassification, ...] = ()
+    target_fault_indices: tuple[int, ...] = ()
+    candidate_pool_restrictions: CandidatePoolRestrictions | None = None
 
     def bundle(self, fault_index: int) -> FaultBundle:
         """Return a fault bundle by its combinator index."""
@@ -266,15 +297,69 @@ def extract_malignant_configurations(
     return tuple(sorted(configurations, key=lambda item: (len(item), item)))
 
 
+def classify_fault_effect(
+        *,
+        fault_index: int,
+        effect_mask: PauliMask,
+        source_qubit_count: int,
+        data_indices: Sequence[int],
+) -> FaultEffectClassification:
+    """Restrict a packed fault effect and classify its data X hook weight.
+
+    :param fault_index: The dense abstract-fault index for diagnostics.
+    :param effect_mask: The full packed effect with X bits below Z bits.
+    :param source_qubit_count: The width of each packed support half.
+    :param data_indices: Circuit-qubit indices retained in compact data order.
+    :return: The compact data masks, component weights, and hook decision.
+    """
+    x_data_mask = 0
+    z_data_mask = 0
+    for data_index, circuit_index in enumerate(data_indices):
+        x_data_mask |= ((effect_mask >> circuit_index) & 1) << data_index
+        z_data_mask |= (
+            (effect_mask >> (source_qubit_count + circuit_index)) & 1
+        ) << data_index
+    data_qubit_count = len(data_indices)
+    return FaultEffectClassification(
+        fault_index=fault_index,
+        data_effect=x_data_mask | (z_data_mask << data_qubit_count),
+        x_data_mask=x_data_mask,
+        z_data_mask=z_data_mask,
+        data_pauli_weight=(x_data_mask | z_data_mask).bit_count(),
+        x_data_weight=x_data_mask.bit_count(),
+        z_data_weight=z_data_mask.bit_count(),
+        is_targetable_hook=x_data_mask.bit_count() > 1,
+    )
+
+
 def build_flag_synthesis_problem(
         *,
         combinator: FaultCombinator,
         malignant_configurations: Iterable[Iterable[int]],
+        data_indices: Sequence[int],
         maximum_candidate_interactions: int = 8,
+        maximum_candidate_duration: int = 10,
         minimum_candidate_duration: int = 1,
+        nearby_boundary_radius: int = 1,
+        include_single_seed_fallback: bool = False,
         candidate_boundary_range: tuple[int, int] | None = None,
 ) -> FlagSynthesisProblem:
-    """Build trajectories and valid elementary CSS flag candidates."""
+    """Build a nuisance-aware, hook-directed Z-only synthesis problem.
+
+    Every fault in each malignant configuration remains a physical-realization
+    bundle, but only faults with multi-qubit data X support seed candidates.
+
+    :param combinator: The abstract faults and their physical error events.
+    :param malignant_configurations: Low-order abstract-fault configurations.
+    :param data_indices: Original data-qubit indices used for hook classification.
+    :param maximum_candidate_interactions: Maximum CNOT count per lifecycle.
+    :param maximum_candidate_duration: Maximum boundary span per lifecycle.
+    :param minimum_candidate_duration: Minimum boundary span per lifecycle.
+    :param nearby_boundary_radius: Endpoint displacement around direct envelopes.
+    :param include_single_seed_fallback: Whether to add general valid Z paths.
+    :param candidate_boundary_range: Optional inclusive range of usable boundaries.
+    :return: The local realization bundles and finite Z-candidate pool.
+    """
     configurations = tuple(sorted(
         {tuple(sorted(configuration)) for configuration in malignant_configurations},
         key=lambda item: (len(item), item),
@@ -283,6 +368,40 @@ def build_flag_synthesis_problem(
         raise ValueError("At least one malignant configuration is required.")
     relevant_faults = tuple(sorted({index for c in configurations for index in c}))
     noiseless_circuit = combinator.circuit.noiseless_circuit
+    classifications = tuple(
+        classify_fault_effect(
+            fault_index=fault_index,
+            effect_mask=combinator.indexed_faults[fault_index][1],
+            source_qubit_count=noiseless_circuit.num_qubits,
+            data_indices=data_indices,
+        )
+        for fault_index in relevant_faults
+    )
+    classification_by_fault = {
+        classification.fault_index: classification
+        for classification in classifications
+    }
+    for configuration in configurations:
+        if any(
+                classification_by_fault[fault_index].is_targetable_hook
+                for fault_index in configuration):
+            continue
+        effects = "; ".join(
+            f"fault {fault_index}: data_effect=0x{classification_by_fault[fault_index].data_effect:x}, "
+            f"X={classification_by_fault[fault_index].x_data_weight}, "
+            f"Z={classification_by_fault[fault_index].z_data_weight}, "
+            f"total={classification_by_fault[fault_index].data_pauli_weight}"
+            for fault_index in configuration
+        )
+        raise FlagSynthesisError(
+            f"Malignant configuration {configuration} contains no targetable "
+            f"multi-X hook fault ({effects})."
+        )
+    target_fault_indices = tuple(
+        classification.fault_index
+        for classification in classifications
+        if classification.is_targetable_hook
+    )
     ordinal = 0
     bundles: list[FaultBundle] = []
     for fault_index in relevant_faults:
@@ -295,21 +414,40 @@ def build_flag_synthesis_problem(
             ))
             ordinal += 1
         bundles.append(FaultBundle(fault_index, tuple(realizations)))
-    candidates = _generate_elementary_candidates(
+    layers = split_by_ticks(noiseless_circuit)
+    boundary_range = (
+        (1, len(layers) - 2)
+        if candidate_boundary_range is None
+        else candidate_boundary_range
+    )
+    candidates = _generate_hook_candidates(
         circuit=noiseless_circuit,
         fault_bundles=bundles,
+        target_fault_indices=target_fault_indices,
         maximum_interactions=maximum_candidate_interactions,
+        maximum_duration=maximum_candidate_duration,
         minimum_duration=minimum_candidate_duration,
-        boundary_range=candidate_boundary_range,
+        nearby_boundary_radius=nearby_boundary_radius,
+        include_single_seed_fallback=include_single_seed_fallback,
+        boundary_range=boundary_range,
     )
     if not candidates:
-        raise FlagSynthesisError("No valid candidate detecting regions respond to the faults.")
+        raise FlagSynthesisError("No valid Z detecting regions respond to the hook faults.")
     return FlagSynthesisProblem(
         circuit=noiseless_circuit,
         fault_bundles=tuple(bundles),
         malignant_configurations=configurations,
         candidates=candidates,
         realization_count=ordinal,
+        fault_classifications=classifications,
+        target_fault_indices=target_fault_indices,
+        candidate_pool_restrictions=CandidatePoolRestrictions(
+            maximum_duration=maximum_candidate_duration,
+            maximum_interactions=maximum_candidate_interactions,
+            nearby_boundary_radius=nearby_boundary_radius,
+            includes_single_seed_fallback=include_single_seed_fallback,
+            boundary_range=boundary_range,
+        ),
     )
 
 
@@ -572,6 +710,9 @@ def shortlist_flag_synthesis_problem(
         malignant_configurations=problem.malignant_configurations,
         candidates=retained_candidates,
         realization_count=problem.realization_count,
+        fault_classifications=problem.fault_classifications,
+        target_fault_indices=problem.target_fault_indices,
+        candidate_pool_restrictions=problem.candidate_pool_restrictions,
     )
 
 
@@ -638,6 +779,10 @@ def build_flagged_circuit(
     flag_indices = tuple(first_flag_index + offset for offset in range(solution.flag_count))
     candidate_to_color = dict(solution.candidate_to_flag)
     selected = solution.selected_candidate_indices
+    if any(problem.candidates[index].basis != "Z" for index in selected):
+        raise FlagSynthesisError(
+            "Synthesized flags must use pure-Z detecting regions."
+        )
     last_candidate_end_by_color = {
         color: max(
             problem.candidates[index].end_boundary
@@ -690,20 +835,12 @@ def build_flagged_circuit(
             boundary_zero_preparations if boundary == 0
             else layer_suffixes[boundary - 1]
         )
-        z_flags = [
+        flag_qubits = [
             first_flag_index + candidate_to_color[index]
             for index in sorted(candidate_indices)
-            if problem.candidates[index].basis == "Z"
         ]
-        x_flags = [
-            first_flag_index + candidate_to_color[index]
-            for index in sorted(candidate_indices)
-            if problem.candidates[index].basis == "X"
-        ]
-        if z_flags:
-            preparations.append("R", z_flags)
-        if x_flags:
-            preparations.append("RX", x_flags)
+        if flag_qubits:
+            preparations.append("R", flag_qubits)
 
     for boundary, candidate_indices in ends_by_boundary.items():
         measurements = (
@@ -711,15 +848,13 @@ def build_flagged_circuit(
             else layer_prefixes[boundary]
         )
         for candidate_index in sorted(candidate_indices):
-            candidate = problem.candidates[candidate_index]
             color = candidate_to_color[candidate_index]
             flag_index = first_flag_index + color
-            is_reused = candidate.end_boundary < last_candidate_end_by_color[color]
-            measurement = (
-                "MR" if candidate.basis == "Z" else "MRX"
-            ) if is_reused else (
-                "M" if candidate.basis == "Z" else "MX"
+            is_reused = (
+                problem.candidates[candidate_index].end_boundary
+                < last_candidate_end_by_color[color]
             )
+            measurement = "MR" if is_reused else "M"
             measurements.append(measurement, [flag_index])
             measurements.append(
                 "DETECTOR",
@@ -739,11 +874,7 @@ def build_flagged_circuit(
             for item in sorted(
                     (i for i in boundary_interactions if i.layer == added_layer),
                     key=lambda i: (i.flag_index, i.data_index)):
-                candidate = problem.candidates[item.candidate_index]
-                if candidate.basis == "Z":
-                    targets.extend((item.data_index, item.flag_index))
-                else:
-                    targets.extend((item.flag_index, item.data_index))
+                targets.extend((item.data_index, item.flag_index))
             result.append("CX", targets)
             result.append("TICK")
 
@@ -755,7 +886,47 @@ def build_flagged_circuit(
         result += layer_suffixes[boundary]
         if boundary < len(layers) - 1:
             result.append("TICK")
+    assert_z_basis_flag_construction(result, flag_indices=flag_indices)
     return result, flag_indices
+
+
+def assert_z_basis_flag_construction(
+        circuit: stim.Circuit,
+        *,
+        flag_indices: Iterable[int],
+) -> None:
+    """Assert that named flags use only the intended X-hook construction.
+
+    :param circuit: The built Stim circuit containing the flag lifecycles.
+    :param flag_indices: Qubits that must be ``|0>``/Z-basis flag targets.
+    :return: None.
+    """
+    flags = set(flag_indices)
+    for instruction in circuit:
+        if isinstance(instruction, stim.CircuitRepeatBlock):
+            raise ValueError("Flag synthesis does not support REPEAT blocks.")
+        targets = instruction.targets_copy()
+        touched_flags = {
+            target.qubit_value
+            for target in targets
+            if target.qubit_value in flags
+        }
+        if not touched_flags:
+            continue
+        if instruction.name in {"RX", "MX", "MRX"}:
+            raise FlagSynthesisError(
+                f"Flag qubits {sorted(touched_flags)} use {instruction.name}."
+            )
+        if instruction.name == "CX":
+            for control, target in zip(targets[::2], targets[1::2], strict=True):
+                if control.qubit_value in flags:
+                    raise FlagSynthesisError(
+                        f"Flag qubit {control.qubit_value} controls a circuit CNOT."
+                    )
+                if target.qubit_value not in flags:
+                    raise FlagSynthesisError(
+                        "A synthesized flag CNOT must target a flag qubit."
+                    )
 
 
 def insertion_layer_counts(
@@ -908,7 +1079,7 @@ def find_malignant_configurations(
     detector_count = combinator.circuit.noisy_circuit.num_detectors
     extended_syndromes: list[int] = []
     data_effects: list[int] = []
-    for circuit_syndrome, full_effect in combinator._indexed_faults:
+    for circuit_syndrome, full_effect in combinator.indexed_faults:
         data_effect = restrict_effect(full_effect)
         precheck_syndrome = logical_analyzer.linear_precheck_syndrome(
             data_effect,
@@ -979,10 +1150,17 @@ def write_solution_artifacts(
         "schema_version": 1,
         "solution_id": solution_id,
         "objective": list(solution.objective_order),
+        "optimality_scope": "finite_candidate_pool",
+        "globally_optimal": False,
         "flag_count": solution.flag_count,
         "added_cnot_layers": solution.added_cnot_layers,
         "flag_cnot_count": solution.interaction_count,
         "optimal_within_candidate_pool": solution.optimal_within_candidate_pool,
+        "candidate_pool_restrictions": (
+            None
+            if problem.candidate_pool_restrictions is None
+            else asdict(problem.candidate_pool_restrictions)
+        ),
         "selected_candidates": [
             {
                 "index": index,
@@ -999,6 +1177,11 @@ def write_solution_artifacts(
         ],
         "candidate_to_flag": solution.candidate_to_flag,
         "metrics": asdict(solution.metrics),
+        "verified_through_order": (
+            verification.max_order
+            if verification is not None and verification.passed
+            else None
+        ),
         "verification": None if verification is None else asdict(verification),
         "files": {name: path.name for name, path in paths.items() if name != "manifest"},
     }
@@ -1096,36 +1279,191 @@ def _propagate_error_through_layer(
     return result
 
 
-def _generate_elementary_candidates(
+def precompute_x_trajectory_masks(
+        realizations: Sequence[PhysicalFaultRealization],
+        *,
+        boundary_count: int,
+        qubit_count: int,
+) -> tuple[tuple[int, ...], ...]:
+    """Index realization X support by circuit boundary and qubit.
+
+    :param realizations: Problem-local physical trajectories with dense ordinals.
+    :param boundary_count: Number of spacetime boundaries in each trajectory.
+    :param qubit_count: Number of circuit qubits represented by each trajectory.
+    :return: Boundary-major masks whose bits identify responding realizations.
+    """
+    masks = [[0] * qubit_count for _ in range(boundary_count)]
+    for realization in realizations:
+        realization_bit = 1 << realization.ordinal
+        for boundary, pauli in enumerate(realization.trajectory):
+            x_support = pauli.x
+            while x_support:
+                least_bit = x_support & -x_support
+                qubit = least_bit.bit_length() - 1
+                masks[boundary][qubit] |= realization_bit
+                x_support ^= least_bit
+    return tuple(tuple(row) for row in masks)
+
+
+def candidate_response_mask(
+        interactions: Sequence[tuple[int, Sequence[int]]],
+        x_trajectory_masks: Sequence[Sequence[int]],
+) -> int:
+    """Compute a pure-Z candidate response by XORing endpoint term masks.
+
+    :param interactions: Detecting-region boundary terms and qubit supports.
+    :param x_trajectory_masks: Precomputed X-trajectory masks by boundary/qubit.
+    :return: The realization bitset with odd binary symplectic response.
+    """
+    response_mask = 0
+    for boundary, support in interactions:
+        for qubit in support:
+            response_mask ^= x_trajectory_masks[boundary][qubit]
+    return response_mask
+
+
+def _generate_hook_candidates(
         *,
         circuit: stim.Circuit,
         fault_bundles: Sequence[FaultBundle],
+        target_fault_indices: Sequence[int],
         maximum_interactions: int,
+        maximum_duration: int,
         minimum_duration: int,
-        boundary_range: tuple[int, int] | None,
+        nearby_boundary_radius: int,
+        include_single_seed_fallback: bool,
+        boundary_range: tuple[int, int],
 ) -> tuple[FlagCandidate, ...]:
+    """Generate staged pure-Z paths directed by target hook trajectories.
+
+    :param circuit: The noiseless circuit whose boundaries paths traverse.
+    :param fault_bundles: All target and nuisance realization bundles.
+    :param target_fault_indices: Multi-X faults allowed to seed candidates.
+    :param maximum_interactions: Maximum endpoint support size in total.
+    :param maximum_duration: Maximum lifecycle span in circuit boundaries.
+    :param minimum_duration: Minimum lifecycle span in circuit boundaries.
+    :param nearby_boundary_radius: Direct-envelope endpoint variation radius.
+    :param include_single_seed_fallback: Whether to add general Z path seeds.
+    :param boundary_range: Inclusive usable start/end boundary range.
+    :return: The deduplicated Z-only candidate pool in stable order.
+    """
     layers = split_by_ticks(circuit)
     trajectories = tuple(
         realization
         for bundle in fault_bundles
         for realization in bundle.realizations
     )
-    raw: dict[tuple[PauliBasis, tuple[tuple[int, tuple[int, ...]], ...]], int] = {}
-    qubit_count = circuit.num_qubits
-    minimum_boundary, maximum_boundary = (
-        (1, len(layers) - 2) if boundary_range is None else boundary_range
+    target_fault_set = set(target_fault_indices)
+    target_bundles = tuple(
+        bundle for bundle in fault_bundles
+        if bundle.fault_index in target_fault_set
     )
-    if not 0 <= minimum_boundary < maximum_boundary <= len(layers):
-        raise ValueError(
-            "candidate_boundary_range must be an increasing pair of circuit "
-            "boundary indices."
-        )
+    target_realization_mask = sum(
+        1 << realization.ordinal
+        for bundle in target_bundles
+        for realization in bundle.realizations
+    )
+    x_trajectory_masks = precompute_x_trajectory_masks(
+        trajectories,
+        boundary_count=len(layers) + 1,
+        qubit_count=circuit.num_qubits,
+    )
+    minimum_boundary, maximum_boundary = boundary_range
+    raw: dict[
+        tuple[tuple[int, tuple[int, ...]], ...],
+        tuple[CandidateSource, int],
+    ] = {}
+    source_priority = {
+        "direct-envelope": 0,
+        "nearby-envelope": 1,
+        "single-seed-fallback": 2,
+    }
 
-    for basis in ("X", "Z"):
+    def add_interactions(
+            interactions: tuple[tuple[int, tuple[int, ...]], ...],
+            source: CandidateSource,
+    ) -> None:
+        """Retain a bounded path that responds to at least one hook realization.
+
+        :param interactions: The two pure-Z endpoint support terms.
+        :param source: The staged family that produced the path.
+        :return: None.
+        """
+        start = interactions[0][0]
+        end = interactions[-1][0]
+        duration = end - start
+        if not minimum_duration <= duration <= maximum_duration:
+            return
+        if sum(len(support) for _, support in interactions) > maximum_interactions:
+            return
+        response_mask = candidate_response_mask(interactions, x_trajectory_masks)
+        if not response_mask & target_realization_mask:
+            return
+        previous = raw.get(interactions)
+        if previous is None or source_priority[source] < source_priority[previous[0]]:
+            raw[interactions] = source, response_mask
+
+    for bundle in target_bundles:
+        hook_boundaries = []
+        for realization in bundle.realizations:
+            hook_boundaries.append(next(
+                boundary
+                for boundary, pauli in enumerate(realization.trajectory)
+                if pauli.x.bit_count() > 1
+            ))
+        direct_start = max(
+            minimum_boundary,
+            min(realization.event[0] for realization in bundle.realizations),
+        )
+        direct_end = min(maximum_boundary, max(hook_boundaries))
+        bundle_realization_mask = sum(
+            1 << realization.ordinal for realization in bundle.realizations
+        )
+        for start_shift in range(-nearby_boundary_radius, nearby_boundary_radius + 1):
+            for end_shift in range(-nearby_boundary_radius, nearby_boundary_radius + 1):
+                start = direct_start + start_shift
+                end = direct_end + end_shift
+                if not minimum_boundary <= start < end <= maximum_boundary:
+                    continue
+                source: CandidateSource = (
+                    "direct-envelope"
+                    if start_shift == end_shift == 0
+                    else "nearby-envelope"
+                )
+                for end_qubit in range(circuit.num_qubits):
+                    if not x_trajectory_masks[end][end_qubit] & bundle_realization_mask:
+                        continue
+                    pauli = _single_basis_pauli(
+                        circuit.num_qubits,
+                        end_qubit,
+                        "Z",
+                    )
+                    valid = True
+                    for layer_index in range(end - 1, start - 1, -1):
+                        propagated = _propagate_region_through_layer(
+                            pauli,
+                            layers[layer_index],
+                            forwards=False,
+                        )
+                        if propagated is None:
+                            valid = False
+                            break
+                        pauli = propagated
+                    if not valid:
+                        continue
+                    start_support = _pure_basis_support(pauli, "Z")
+                    if start_support is not None:
+                        add_interactions(
+                            ((start, start_support), (end, (end_qubit,))),
+                            source,
+                        )
+
+    if include_single_seed_fallback:
         for start in range(minimum_boundary, maximum_boundary):
-            for qubit in range(qubit_count):
-                pauli = _single_basis_pauli(qubit_count, qubit, basis)
-                for end in range(start + 1, maximum_boundary + 1):
+            maximum_end = min(maximum_boundary, start + maximum_duration)
+            for qubit in range(circuit.num_qubits):
+                pauli = _single_basis_pauli(circuit.num_qubits, qubit, "Z")
+                for end in range(start + 1, maximum_end + 1):
                     propagated = _propagate_region_through_layer(
                         pauli,
                         layers[end - 1],
@@ -1134,19 +1472,18 @@ def _generate_elementary_candidates(
                     if propagated is None:
                         break
                     pauli = propagated
-                    if end - start < minimum_duration:
-                        continue
-                    end_support = _pure_basis_support(pauli, basis)
-                    if end_support is None:
-                        continue
-                    interactions = ((start, (qubit,)), (end, end_support))
-                    if sum(len(support) for _, support in interactions) <= maximum_interactions:
-                        raw.setdefault((basis, interactions), 0)
+                    end_support = _pure_basis_support(pauli, "Z")
+                    if end_support is not None:
+                        add_interactions(
+                            ((start, (qubit,)), (end, end_support)),
+                            "single-seed-fallback",
+                        )
 
         for end in range(minimum_boundary + 1, maximum_boundary + 1):
-            for qubit in range(qubit_count):
-                pauli = _single_basis_pauli(qubit_count, qubit, basis)
-                for start in range(end - 1, minimum_boundary - 1, -1):
+            minimum_start = max(minimum_boundary, end - maximum_duration)
+            for qubit in range(circuit.num_qubits):
+                pauli = _single_basis_pauli(circuit.num_qubits, qubit, "Z")
+                for start in range(end - 1, minimum_start - 1, -1):
                     propagated = _propagate_region_through_layer(
                         pauli,
                         layers[start],
@@ -1155,28 +1492,23 @@ def _generate_elementary_candidates(
                     if propagated is None:
                         break
                     pauli = propagated
-                    if end - start < minimum_duration:
-                        continue
-                    start_support = _pure_basis_support(pauli, basis)
-                    if start_support is None:
-                        continue
-                    interactions = ((start, start_support), (end, (qubit,)))
-                    if sum(len(support) for _, support in interactions) <= maximum_interactions:
-                        raw.setdefault((basis, interactions), 0)
+                    start_support = _pure_basis_support(pauli, "Z")
+                    if start_support is not None:
+                        add_interactions(
+                            ((start, start_support), (end, (qubit,))),
+                            "single-seed-fallback",
+                        )
 
-    candidates: list[FlagCandidate] = []
-    for basis, interactions in sorted(raw):
-        response_mask = _candidate_response_mask(basis, interactions, trajectories)
-        if not response_mask:
-            continue
-        identifier = _candidate_identifier(basis, interactions)
-        candidates.append(FlagCandidate(
-            identifier=identifier,
-            basis=basis,
+    return tuple(
+        FlagCandidate(
+            identifier=_candidate_identifier("Z", interactions),
+            basis="Z",
             interactions=interactions,
             response_mask=response_mask,
-        ))
-    return tuple(candidates)
+            source=source,
+        )
+        for interactions, (source, response_mask) in sorted(raw.items())
+    )
 
 
 def _candidate_response_mask(
@@ -1596,7 +1928,9 @@ def _error_event_key(event: ErrorEvent) -> tuple:
 
 
 __all__ = [
+    "CandidatePoolRestrictions",
     "FaultBundle",
+    "FaultEffectClassification",
     "FlagCandidate",
     "FlagCircuitSolution",
     "FlagSynthesisError",
@@ -1609,14 +1943,18 @@ __all__ = [
     "SynthesisLimits",
     "SynthesisMetrics",
     "VerificationResult",
+    "assert_z_basis_flag_construction",
     "build_flag_synthesis_problem",
     "build_flagged_circuit",
     "build_solution_from_candidate_indices",
     "assert_flag_detectors_deterministic",
+    "candidate_response_mask",
+    "classify_fault_effect",
     "extract_malignant_configurations",
     "find_malignant_configurations",
     "greedy_verified_candidate_indices",
     "insertion_layer_counts",
+    "precompute_x_trajectory_masks",
     "synthesize_flag_circuit",
     "shortlist_flag_synthesis_problem",
     "update_boundary_map_after_insertion",

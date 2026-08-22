@@ -1,39 +1,91 @@
 import itertools
 
 import numpy as np
+import pytest
 import stim
 
 from cliffordep import circuits, noise
+from cliffordep.circuits import distance_5_circuits
 from cliffordep.combinators import FaultCombinator
 from cliffordep.flag_synthesis import (
     FaultBundle,
     FlagCandidate,
     FlagCircuitSolution,
+    FlagSynthesisError,
     FlagSynthesisProblem,
     PhysicalFaultRealization,
     ScheduledInteraction,
     SymplecticPauli,
     SynthesisLimits,
     SynthesisMetrics,
+    assert_flag_detectors_deterministic,
+    assert_z_basis_flag_construction,
+    build_flag_synthesis_problem,
     build_flagged_circuit,
+    candidate_response_mask,
+    classify_fault_effect,
     extract_malignant_configurations,
     find_malignant_configurations,
+    precompute_x_trajectory_masks,
+    shortlist_flag_synthesis_problem,
     synthesize_flag_circuit,
+    verify_flag_solution,
 )
+from cliffordep.flag_synthesis import _candidate_response_mask
+from cliffordep.flag_synthesis import _color_candidate_intervals
 from cliffordep.flag_synthesis import _edge_color_bipartite
+from cliffordep.flag_synthesis import _find_zero_response_witnesses
 from cliffordep.flag_synthesis import _rewrite_original_record_targets
 from cliffordep.logical_analyzers import CliffordLogicalAnalyzer
 
 
-def _realization(ordinal: int) -> PhysicalFaultRealization:
+def _realization(
+        ordinal: int,
+        trajectory: tuple[SymplecticPauli, ...] = (SymplecticPauli(),),
+) -> PhysicalFaultRealization:
+    """Build a compact synthetic physical realization for parity tests.
+
+    :param ordinal: The problem-local realization bit position.
+    :param trajectory: The symplectic state at each circuit boundary.
+    :return: A deterministic synthetic X error-event realization.
+    """
     return PhysicalFaultRealization(
         ordinal=ordinal,
         event=(0, "X_ERROR", (stim.GateTarget(0),)),
-        trajectory=(SymplecticPauli(),),
+        trajectory=trajectory,
     )
 
 
+@pytest.fixture(scope="module")
+def d3_synthesis_inputs():
+    """Share the enumerated D3 failures across focused integration tests.
+
+    :return: The unflagged D3 double-check circuit wrapper.
+    :return: Its Clifford logical analyzer.
+    :return: Its mask-native abstract-fault combinator.
+    :return: Its four malignant order-two configurations.
+    """
+    circuit = circuits.D3A6()
+    analyzer = CliffordLogicalAnalyzer(
+        data_indices=circuit.DATA_INDICES,
+        stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+        logical_s=circuit.LOGICAL_S,
+    )
+    combinator = FaultCombinator(noise.uniformly_depolarize(
+        circuit.INNER_CIRCUIT,
+        noise_level=1e-3,
+    ))
+    malignant = find_malignant_configurations(
+        combinator=combinator,
+        logical_analyzer=analyzer,
+        max_order=2,
+        cultivated_state="T",
+    )
+    return circuit, analyzer, combinator, malignant
+
+
 def test_symplectic_inner_product():
+    """Binary symplectic products detect only odd crossed X/Z overlap."""
     x0 = SymplecticPauli(x=1)
     z0 = SymplecticPauli(z=1)
     x1 = SymplecticPauli(x=2)
@@ -45,6 +97,7 @@ def test_symplectic_inner_product():
 
 
 def test_fault_bundle_is_refined_only_when_candidate_responses_differ():
+    """Lazy classes split an abstract bundle only on selected signatures."""
     problem = FlagSynthesisProblem(
         circuit=stim.Circuit(),
         fault_bundles=(FaultBundle(7, (_realization(0), _realization(1))),),
@@ -65,6 +118,7 @@ def test_fault_bundle_is_refined_only_when_candidate_responses_differ():
 
 
 def test_lazy_separator_covers_every_physical_realization_product():
+    """Synthesis adds witnesses until every realization product is detected."""
     problem = FlagSynthesisProblem(
         circuit=stim.Circuit("I 0\nTICK\nI 0"),
         fault_bundles=(
@@ -97,6 +151,7 @@ def test_lazy_separator_covers_every_physical_realization_product():
 
 
 def test_bipartite_edge_coloring_uses_maximum_degree_layers():
+    """Endpoint CNOTs schedule in the bipartite graph's optimal layer count."""
     edges = (
         (0, 0, 0),
         (0, 1, 1),
@@ -114,6 +169,7 @@ def test_bipartite_edge_coloring_uses_maximum_degree_layers():
 
 
 def test_build_flagged_circuit_has_deterministic_new_detector():
+    """A Z-region candidate builds a deterministic |0>-to-Z flag lifecycle."""
     base = stim.Circuit("""
         R 0
         TICK
@@ -163,6 +219,7 @@ def test_build_flagged_circuit_has_deterministic_new_detector():
 
 
 def test_inserted_flag_measurement_preserves_original_record_targets():
+    """A new earlier flag measurement leaves original detector identities intact."""
     layers = (
         stim.Circuit("M 0"),
         stim.Circuit("M 1\nDETECTOR rec[-1] rec[-2]"),
@@ -177,25 +234,11 @@ def test_inserted_flag_measurement_preserves_original_record_targets():
     assert [target.value for target in detector.targets_copy()] == [-1, -3]
 
 
-def test_mask_native_verifier_finds_distance_three_malignant_configurations():
+def test_mask_native_verifier_finds_distance_three_malignant_configurations(
+        d3_synthesis_inputs,
+):
     """Both mask-native flag inputs recover the four D3 weight-two failures."""
-    circuit = circuits.D3A6()
-    combinator = FaultCombinator(noise.uniformly_depolarize(
-        circuit.INNER_CIRCUIT,
-        noise_level=1e-3,
-    ))
-    analyzer = CliffordLogicalAnalyzer(
-        data_indices=circuit.DATA_INDICES,
-        stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
-        logical_s=circuit.LOGICAL_S,
-    )
-
-    malignant = find_malignant_configurations(
-        combinator=combinator,
-        logical_analyzer=analyzer,
-        max_order=2,
-        cultivated_state="T",
-    )
+    _, analyzer, combinator, malignant = d3_synthesis_inputs
     kept_effects = combinator.get_kept_effects(
         logical_analyzer=analyzer,
         max_order=2,
@@ -213,3 +256,310 @@ def test_mask_native_verifier_finds_distance_three_malignant_configurations():
         cultivated_state="T",
         orders=(2,),
     ) == malignant
+
+
+def test_fault_effect_restriction_uses_arbitrary_data_index_order():
+    """Packed X/Z supports restrict into compact, caller-specified data order."""
+    classification = classify_fault_effect(
+        fault_index=12,
+        effect_mask=(1 << 4) | (1 << 5) | (1 << 7) | (1 << 11),
+        source_qubit_count=6,
+        data_indices=(4, 1, 5),
+    )
+
+    assert classification.data_effect == 0b110101
+    assert classification.x_data_mask == 0b101
+    assert classification.z_data_mask == 0b110
+    assert classification.data_pauli_weight == 3
+    assert classification.x_data_weight == 2
+    assert classification.z_data_weight == 2
+    assert classification.is_targetable_hook
+
+
+@pytest.mark.parametrize(
+    ("effect_mask", "expected_total", "expected_x", "expected_z", "is_hook"),
+    (
+        (1 << 4, 1, 1, 0, False),
+        ((1 << 10) | (1 << 7), 2, 0, 2, False),
+        ((1 << 4) | (1 << 1), 2, 2, 0, True),
+    ),
+)
+def test_only_multi_x_data_effects_are_synthesis_targets(
+        effect_mask,
+        expected_total,
+        expected_x,
+        expected_z,
+        is_hook,
+):
+    """Weight-one and Z-only effects are nuisances while multi-X effects target."""
+    classification = classify_fault_effect(
+        fault_index=0,
+        effect_mask=effect_mask,
+        source_qubit_count=6,
+        data_indices=(4, 1),
+    )
+
+    assert classification.data_pauli_weight == expected_total
+    assert classification.x_data_weight == expected_x
+    assert classification.z_data_weight == expected_z
+    assert classification.is_targetable_hook is is_hook
+
+
+def test_nuisance_response_can_cancel_a_hook_response():
+    """A hook and nuisance that both flip one flag XOR to an undetected product."""
+    problem = FlagSynthesisProblem(
+        circuit=stim.Circuit("I 0\nTICK\nI 0"),
+        fault_bundles=(
+            FaultBundle(0, (_realization(0),)),
+            FaultBundle(1, (_realization(1),)),
+        ),
+        malignant_configurations=((0, 1),),
+        candidates=(
+            FlagCandidate("cancels", "Z", ((0, (0,)), (1, (0,))), 0b11),
+            FlagCandidate("detects", "Z", ((0, (1,)), (1, (1,))), 0b01),
+        ),
+        realization_count=2,
+        target_fault_indices=(0,),
+    )
+
+    assert _find_zero_response_witnesses(problem, (0,)) == {0b11}
+    solution = synthesize_flag_circuit(
+        problem,
+        limits=SynthesisLimits(
+            milp_time_limit_seconds=5,
+            total_time_limit_seconds=15,
+        ),
+    )
+    assert solution.selected_candidate_indices == (1,)
+
+
+def test_bitmask_response_matches_direct_symplectic_products():
+    """Boundary/qubit realization bitsets reproduce direct endpoint products."""
+    realizations = (
+        _realization(0, (
+            SymplecticPauli(),
+            SymplecticPauli(x=0b01),
+            SymplecticPauli(x=0b11),
+        )),
+        _realization(1, (
+            SymplecticPauli(x=0b10),
+            SymplecticPauli(x=0b10, z=0b01),
+            SymplecticPauli(x=0b01),
+        )),
+    )
+    interactions = ((0, (1,)), (2, (0, 1)))
+    masks = precompute_x_trajectory_masks(
+        realizations,
+        boundary_count=3,
+        qubit_count=2,
+    )
+
+    optimized = candidate_response_mask(interactions, masks)
+    direct = _candidate_response_mask("Z", interactions, realizations)
+
+    assert optimized == direct
+
+
+def test_continuous_path_distinguishes_late_realizations():
+    """A lifecycle ending before a later event catches only the early realization."""
+    realizations = (
+        _realization(0, (
+            SymplecticPauli(),
+            SymplecticPauli(x=1),
+            SymplecticPauli(x=1),
+        )),
+        _realization(1, (
+            SymplecticPauli(),
+            SymplecticPauli(),
+            SymplecticPauli(x=1),
+        )),
+    )
+    masks = precompute_x_trajectory_masks(
+        realizations,
+        boundary_count=3,
+        qubit_count=1,
+    )
+
+    assert candidate_response_mask(((0, (0,)), (1, (0,))), masks) == 0b01
+
+
+def test_closed_lifecycles_include_one_boundary_of_cooldown():
+    """A physical flag is reused only after disjoint closed active intervals."""
+    problem = FlagSynthesisProblem(
+        circuit=stim.Circuit("I 0\nTICK\nI 0\nTICK\nI 0\nTICK\nI 0\nTICK\nI 0"),
+        fault_bundles=(),
+        malignant_configurations=(),
+        candidates=(
+            FlagCandidate("first", "Z", ((1, (0,)), (2, (0,))), 0),
+            FlagCandidate("cooldown_overlap", "Z", ((3, (0,)), (4, (0,))), 0),
+            FlagCandidate("reusable", "Z", ((4, (0,)), (5, (0,))), 0),
+        ),
+        realization_count=0,
+    )
+
+    colors = dict(_color_candidate_intervals(problem, (0, 1, 2)))
+
+    assert colors[0] != colors[1]
+    assert colors[0] == colors[2]
+
+
+def test_observable_record_target_survives_flag_measurement_insertion():
+    """An observable continues to reference its original measurement identity."""
+    layers = (
+        stim.Circuit("M 0"),
+        stim.Circuit("OBSERVABLE_INCLUDE(0) rec[-1]"),
+    )
+
+    rewritten = _rewrite_original_record_targets(
+        layers,
+        added_measurements_by_boundary={1: 1},
+    )
+
+    observable = tuple(rewritten[1])[0]
+    assert [target.value for target in observable.targets_copy()] == [-2]
+
+
+def test_multiple_insertions_preserve_original_measurement_identities():
+    """Per-boundary rewrites account for several inserted measurements at once."""
+    layers = (
+        stim.Circuit("M 0"),
+        stim.Circuit("M 1"),
+        stim.Circuit(
+            "DETECTOR rec[-1] rec[-2]\n"
+            "OBSERVABLE_INCLUDE(0) rec[-2]"
+        ),
+    )
+
+    rewritten = _rewrite_original_record_targets(
+        layers,
+        added_measurements_by_boundary={1: 1, 2: 2},
+    )
+
+    detector, observable = tuple(rewritten[2])
+    assert [target.value for target in detector.targets_copy()] == [-3, -5]
+    assert [target.value for target in observable.targets_copy()] == [-5]
+
+
+def test_hook_invariant_reports_concrete_nuisance_configuration(
+        d3_synthesis_inputs,
+):
+    """Problem construction reports effects when a configuration has no hook."""
+    circuit, _, combinator, _ = d3_synthesis_inputs
+
+    with pytest.raises(
+            FlagSynthesisError,
+            match=r"Malignant configuration \(146,\).*no targetable multi-X hook.*fault 146",
+    ):
+        build_flag_synthesis_problem(
+            combinator=combinator,
+            malignant_configurations=((146,),),
+            data_indices=circuit.DATA_INDICES,
+        )
+
+
+def test_d3_z_only_synthesis_eliminates_all_order_two_failures(
+        d3_synthesis_inputs,
+):
+    """The staged Z-only synthesizer restores D3 fault distance through order two."""
+    circuit, analyzer, combinator, malignant = d3_synthesis_inputs
+    envelope_problem = build_flag_synthesis_problem(
+        combinator=combinator,
+        malignant_configurations=malignant,
+        data_indices=circuit.DATA_INDICES,
+    )
+    problem = build_flag_synthesis_problem(
+        combinator=combinator,
+        malignant_configurations=malignant,
+        data_indices=circuit.DATA_INDICES,
+        include_single_seed_fallback=True,
+    )
+    problem = shortlist_flag_synthesis_problem(problem)
+
+    assert {candidate.source for candidate in envelope_problem.candidates} <= {
+        "direct-envelope",
+        "nearby-envelope",
+    }
+    assert all(candidate.basis == "Z" for candidate in problem.candidates)
+    assert set(problem.target_fault_indices) == {54, 65, 74, 111}
+    assert {146, 148, 150} <= {
+        bundle.fault_index for bundle in problem.fault_bundles
+    }
+
+    solution = synthesize_flag_circuit(
+        problem,
+        limits=SynthesisLimits(
+            milp_time_limit_seconds=60,
+            total_time_limit_seconds=180,
+        ),
+    )
+    flagged, flag_indices = build_flagged_circuit(
+        base_circuit=circuit.INNER_CIRCUIT,
+        problem=problem,
+        solution=solution,
+    )
+    assert_z_basis_flag_construction(flagged, flag_indices=flag_indices)
+    assert_flag_detectors_deterministic(
+        flagged,
+        expected_count=len(solution.selected_candidate_indices),
+    )
+
+    verification = verify_flag_solution(
+        circuit=flagged,
+        logical_analyzer=analyzer,
+        max_order=2,
+        cultivated_state="T",
+    )
+
+    assert verification.passed
+    assert verification.malignant_configurations == ()
+
+
+def test_d5_loader_accepts_the_verified_generated_artifact():
+    """Verified D5 flags use unique iteration columns in both circuit views."""
+    circuit = circuits.D5A19Flagged()
+    manifest = circuit.SYNTHESIS_MANIFEST
+    iterations = manifest["iterations"]
+
+    assert manifest["verified_through_order"] == 4
+    assert len(circuit.FLAG_INDICES) == manifest["total_flag_qubits"]
+    assert [item["coordinate_column"] for item in iterations] == [9, 10, 11]
+
+    expected_coordinates = {}
+    first_flag_index = min(circuit.FLAG_INDICES)
+    for item in iterations:
+        flag_count = item["solution"]["flag_count"]
+        for row, flag_index in enumerate(
+                range(first_flag_index, first_flag_index + flag_count)):
+            expected_coordinates[flag_index] = [
+                float(item["coordinate_column"]),
+                float(row),
+            ]
+        first_flag_index += flag_count
+
+    for generated_circuit in (circuit.INNER_CIRCUIT, circuit.CIRCUIT):
+        coordinates = generated_circuit.get_final_qubit_coordinates()
+        actual_coordinates = {
+            flag_index: coordinates[flag_index]
+            for flag_index in circuit.FLAG_INDICES
+        }
+        assert actual_coordinates == expected_coordinates
+        assert len({tuple(coords) for coords in actual_coordinates.values()}) == 21
+        for item in iterations:
+            assert_flag_detectors_deterministic(
+                generated_circuit,
+                coordinate_prefix=(item["coordinate_column"],),
+                expected_count=len(item["solution"]["selected_candidates"]),
+            )
+
+
+def test_d5_loader_rejects_an_unverified_manifest(tmp_path, monkeypatch):
+    """A null verification marker cannot be loaded as a finished D5 solution."""
+    generated = tmp_path / "generated"
+    generated.mkdir()
+    (generated / "d5a19_checkpoint.json").write_text(
+        '{"verified_through_order": null}\n'
+    )
+    monkeypatch.setattr(distance_5_circuits, "_STIM_FILES_DIR", tmp_path)
+
+    with pytest.raises(ValueError, match="unverified"):
+        circuits.D5A19Flagged("checkpoint")

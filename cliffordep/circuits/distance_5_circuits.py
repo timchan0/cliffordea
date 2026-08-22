@@ -70,6 +70,12 @@ class D5A19Flagged(D5A19):
     """A synthesized flagged D5A19 circuit loaded from its manifest."""
 
     def __init__(self, solution_id: str = "lowest_flags"):
+        """Load a circuit only after exhaustive order-four verification.
+
+        :param self: The flagged distance-five circuit being initialized.
+        :param solution_id: The generated circuit and manifest identifier.
+        :return: None.
+        """
         generated_directory = _STIM_FILES_DIR / "generated"
         manifest_path = generated_directory / f"d5a19_{solution_id}.json"
         if not manifest_path.exists():
@@ -78,6 +84,11 @@ class D5A19Flagged(D5A19):
                 f"Run tim_code/workflow_d5_flags.py first."
             )
         manifest = json.loads(manifest_path.read_text())
+        if manifest.get("verified_through_order") != 4:
+            raise ValueError(
+                f"Generated D5A19 flag solution {solution_id!r} is unverified; "
+                "its manifest must declare verified_through_order=4."
+            )
         files = manifest["files"]
         self.INNER_CIRCUIT = stim.Circuit.from_file(
             generated_directory / files["inner_circuit"]

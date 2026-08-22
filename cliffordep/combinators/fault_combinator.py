@@ -322,6 +322,16 @@ class FaultCombinator(Combinator):
     def fault_count(self) -> int:
         return len(self._indexed_faults)
 
+
+    @property
+    def indexed_faults(self) -> tuple[tuple[SyndromeMask, PauliMask], ...]:
+        """Expose packed fault syndromes and effects in index order.
+
+        :param self: The fault combinator whose canonical faults are requested.
+        :return: The immutable syndrome-and-effect pair for every fault index.
+        """
+        return self._indexed_faults
+
     
     @cached_property
     def index_to_events(self):
