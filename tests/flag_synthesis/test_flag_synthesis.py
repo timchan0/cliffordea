@@ -5,6 +5,7 @@ import pytest
 import stim
 
 from cliffordep import circuits, noise
+import cliffordep.flag_synthesis as flag_synthesis_module
 from cliffordep.circuits import distance_5_circuits
 from cliffordep.combinators import FaultCombinator
 from cliffordep.flag_synthesis import (
@@ -25,8 +26,11 @@ from cliffordep.flag_synthesis import (
     candidate_response_mask,
     classify_fault_effect,
     extract_malignant_configurations,
+    find_flag_lifecycles,
     find_malignant_configurations,
+    greedily_prune_flag_lifecycles,
     precompute_x_trajectory_masks,
+    remove_flag_lifecycle,
     shortlist_flag_synthesis_problem,
     synthesize_flag_circuit,
     verify_flag_solution,
@@ -440,6 +444,122 @@ def test_multiple_insertions_preserve_original_measurement_identities():
     assert [target.value for target in observable.targets_copy()] == [-5]
 
 
+def test_lifecycle_removal_preserves_surviving_record_targets():
+    """Removing a flag measurement keeps later detector identities intact.
+
+    :return: None.
+    """
+    circuit = stim.Circuit("""
+        QUBIT_COORDS(9, 0) 1
+        R 0 1
+        M 0
+        CX 0 1
+        M 1
+        DETECTOR(9, 0, 1) rec[-1]
+        DETECTOR(0, 0, 0) rec[-2]
+        OBSERVABLE_INCLUDE(0) rec[-2]
+    """)
+    lifecycle, = find_flag_lifecycles(circuit, flag_indices=(1,))
+
+    pruned = remove_flag_lifecycle(
+        circuit,
+        flag_indices=(1,),
+        lifecycle=lifecycle,
+    )
+
+    detector, observable = tuple(pruned)[-2:]
+    assert pruned.num_measurements == 1
+    assert pruned.num_detectors == 1
+    assert find_flag_lifecycles(pruned, flag_indices=(1,)) == ()
+    assert [target.value for target in detector.targets_copy()] == [-1]
+    assert [target.value for target in observable.targets_copy()] == [-1]
+
+
+def test_greedy_lifecycle_pruning_stops_at_a_verified_fixed_point(monkeypatch):
+    """Greedy pruning accepts one safe lifecycle and retains the required one.
+
+    :param monkeypatch: Pytest helper replacing exhaustive verification.
+    :return: None.
+    """
+    circuit = stim.Circuit("""
+        QUBIT_COORDS(9, 0) 1
+        R 0 1
+        CX 0 1
+        TICK
+        CX 0 1
+        MR 1
+        DETECTOR(9, 0, 1) rec[-1]
+        R 1
+        CX 0 1
+        TICK
+        CX 0 1
+        M 1
+        DETECTOR(9, 0, 2) rec[-1]
+    """)
+    monkeypatch.setattr(
+        flag_synthesis_module,
+        "verify_flag_solution",
+        lambda **kwargs: flag_synthesis_module.VerificationResult(
+            max_order=kwargs["max_order"],
+            cultivated_state=kwargs["cultivated_state"],
+            malignant_configurations=(
+                () if kwargs["circuit"].num_detectors else ((0,),)
+            ),
+            elapsed_seconds=0.0,
+        ),
+    )
+
+    result = greedily_prune_flag_lifecycles(
+        inner_circuit=circuit,
+        full_circuit=circuit,
+        flag_indices=(1,),
+        logical_analyzer=object(),
+        max_order=2,
+    )
+
+    remaining = find_flag_lifecycles(result.inner_circuit, flag_indices=(1,))
+    assert result.attempt_count == 2
+    assert len(result.removed_lifecycles) == 1
+    assert len(remaining) == 1
+    assert remaining[0].interaction_count == 2
+    assert result.inner_circuit == result.full_circuit
+
+
+def test_lifecycle_controlling_a_later_flag_is_not_independently_removable():
+    """Cross-iteration flag controls prevent unsafe singleton removal.
+
+    :return: None.
+    """
+    circuit = stim.Circuit("""
+        QUBIT_COORDS(9, 0) 1
+        QUBIT_COORDS(10, 0) 2
+        R 0 1
+        CX 0 1
+        R 2
+        CX 1 2
+        TICK
+        CX 1 2
+        M 2
+        DETECTOR(10, 0, 1) rec[-1]
+        CX 0 1
+        M 1
+        DETECTOR(9, 0, 2) rec[-1]
+    """)
+    lifecycles = find_flag_lifecycles(circuit, flag_indices=(1, 2))
+    controlling = next(item for item in lifecycles if item.flag_index == 1)
+
+    assert controlling.controlled_interaction_count == 2
+    with pytest.raises(
+            FlagSynthesisError,
+            match="controlling another synthesized flag",
+    ):
+        remove_flag_lifecycle(
+            circuit,
+            flag_indices=(1, 2),
+            lifecycle=controlling,
+        )
+
+
 def test_hook_invariant_reports_concrete_nuisance_configuration(
         d3_synthesis_inputs,
 ):
@@ -519,10 +639,22 @@ def test_d5_loader_accepts_the_verified_generated_artifact():
     circuit = circuits.D5A19Flagged()
     manifest = circuit.SYNTHESIS_MANIFEST
     iterations = manifest["iterations"]
+    pruning = manifest["post_synthesis_lifecycle_pruning"]
+    removed_coordinates = {
+        tuple(item["detector_coordinates"])
+        for item in pruning["removed_lifecycles"]
+    }
 
     assert manifest["verified_through_order"] == 4
     assert len(circuit.FLAG_INDICES) == manifest["total_flag_qubits"]
     assert [item["coordinate_column"] for item in iterations] == [9, 10, 11]
+    assert manifest["total_flag_lifecycles"] == 43
+    assert manifest["total_flag_cnot_count"] == 138
+    assert pruning["pre_pruning_lifecycle_count"] == 48
+    assert pruning["post_pruning_lifecycle_count"] == 43
+    assert {
+        item["candidate_index"] for item in pruning["removed_lifecycles"]
+    } == {8, 18, 102, 112, 251}
 
     expected_coordinates = {}
     first_flag_index = min(circuit.FLAG_INDICES)
@@ -538,17 +670,39 @@ def test_d5_loader_accepts_the_verified_generated_artifact():
 
     for generated_circuit in (circuit.INNER_CIRCUIT, circuit.CIRCUIT):
         coordinates = generated_circuit.get_final_qubit_coordinates()
+        lifecycles = find_flag_lifecycles(
+            generated_circuit,
+            flag_indices=circuit.FLAG_INDICES,
+        )
+        flag_cnot_count = sum(
+            target.qubit_value in circuit.FLAG_INDICES
+            for instruction in generated_circuit
+            if instruction.name == "CX"
+            for _, target in instruction.target_groups()
+        )
         actual_coordinates = {
             flag_index: coordinates[flag_index]
             for flag_index in circuit.FLAG_INDICES
         }
         assert actual_coordinates == expected_coordinates
         assert len({tuple(coords) for coords in actual_coordinates.values()}) == 21
+        assert len(lifecycles) == manifest["total_flag_lifecycles"]
+        assert flag_cnot_count == manifest["total_flag_cnot_count"]
+        assert not removed_coordinates & {
+            lifecycle.detector_coordinates for lifecycle in lifecycles
+        }
         for item in iterations:
+            removed_count = sum(
+                record["iteration"] == item["iteration"]
+                for record in pruning["removed_lifecycles"]
+            )
             assert_flag_detectors_deterministic(
                 generated_circuit,
                 coordinate_prefix=(item["coordinate_column"],),
-                expected_count=len(item["solution"]["selected_candidates"]),
+                expected_count=(
+                    len(item["solution"]["selected_candidates"])
+                    - removed_count
+                ),
             )
 
 

@@ -13,7 +13,83 @@
   "cultivated_state": "T",
   "total_flag_qubits": 21,
   "total_added_cnot_layers": 84,
-  "total_flag_cnot_count": 154,
+  "total_flag_lifecycles": 43,
+  "total_flag_cnot_count": 138,
+  "post_synthesis_lifecycle_pruning": {
+    "strategy": "greedy_single_lifecycle_fixed_point",
+    "pre_pruning_lifecycle_count": 48,
+    "post_pruning_lifecycle_count": 43,
+    "pre_pruning_flag_cnot_count": 154,
+    "post_pruning_flag_cnot_count": 138,
+    "attempt_count": 129,
+    "maximum_malignant_configurations_per_trial": 1,
+    "verification_seconds": 395.9132804599067,
+    "elapsed_seconds": 435.0924783750088,
+    "verified_through_order": 4,
+    "cultivated_state": "T",
+    "removed_lifecycles": [
+      {
+        "iteration": 0,
+        "candidate_index": 112,
+        "identifier": "path_Z_b03q27__b08q22-23-24-25-26-27",
+        "flag_index": 41,
+        "detector_coordinates": [
+          9,
+          3,
+          8
+        ],
+        "interaction_count": 7
+      },
+      {
+        "iteration": 1,
+        "candidate_index": 18,
+        "identifier": "path_Z_b06q3__b07q3-5",
+        "flag_index": 56,
+        "detector_coordinates": [
+          10,
+          3,
+          7
+        ],
+        "interaction_count": 3
+      },
+      {
+        "iteration": 0,
+        "candidate_index": 251,
+        "identifier": "path_Z_b11q30__b13q30",
+        "flag_index": 42,
+        "detector_coordinates": [
+          9,
+          4,
+          13
+        ],
+        "interaction_count": 2
+      },
+      {
+        "iteration": 1,
+        "candidate_index": 8,
+        "identifier": "path_Z_b05q3__b06q3",
+        "flag_index": 53,
+        "detector_coordinates": [
+          10,
+          0,
+          6
+        ],
+        "interaction_count": 2
+      },
+      {
+        "iteration": 1,
+        "candidate_index": 102,
+        "identifier": "path_Z_b19q3__b20q3",
+        "flag_index": 54,
+        "detector_coordinates": [
+          10,
+          1,
+          20
+        ],
+        "interaction_count": 2
+      }
+    ]
+  },
   "iterations": [
     {
       "iteration": 0,

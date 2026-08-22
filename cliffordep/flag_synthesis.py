@@ -272,6 +272,34 @@ class VerificationResult:
         return not self.malignant_configurations
 
 
+@dataclass(frozen=True, slots=True)
+class FlagLifecycle:
+    """One prepared, coupled, measured, and detected flag-qubit lifetime."""
+
+    flag_index: int
+    ordinal: int
+    preparation_instruction_index: int
+    measurement_instruction_index: int
+    detector_instruction_index: int
+    detector_index: int
+    measurement_index: int
+    detector_coordinates: tuple[float, ...]
+    interaction_count: int
+    controlled_interaction_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class FlagLifecyclePruningResult:
+    """Circuits and metrics produced by verified greedy lifecycle removal."""
+
+    inner_circuit: stim.Circuit = field(compare=False, repr=False)
+    full_circuit: stim.Circuit = field(compare=False, repr=False)
+    removed_lifecycles: tuple[FlagLifecycle, ...]
+    attempt_count: int
+    verification_seconds: float
+    elapsed_seconds: float
+
+
 class FlagSynthesisError(RuntimeError):
     """Raised when the candidate pool cannot produce a feasible circuit."""
 
@@ -929,6 +957,267 @@ def assert_z_basis_flag_construction(
                     )
 
 
+def find_flag_lifecycles(
+        circuit: stim.Circuit,
+        *,
+        flag_indices: Iterable[int],
+) -> tuple[FlagLifecycle, ...]:
+    """Locate complete synthesized flag lifecycles in circuit order.
+
+    :param circuit: The circuit containing prepared and measured flag qubits.
+    :param flag_indices: Qubits whose lifecycles should be located.
+    :return: The lifecycles ordered by their detector instructions.
+    """
+    flags = set(flag_indices)
+    active: dict[int, tuple[int, int, int]] = {}
+    next_ordinal: dict[int, int] = defaultdict(int)
+    pending_by_measurement: dict[
+        int,
+        tuple[int, int, int, int, int, int],
+    ] = {}
+    lifecycles: list[FlagLifecycle] = []
+    measurement_count = 0
+    detector_index = 0
+
+    for instruction_index, instruction in enumerate(circuit):
+        if isinstance(instruction, stim.CircuitRepeatBlock):
+            raise ValueError(
+                "Flag lifecycle discovery does not support REPEAT blocks."
+            )
+        targets = instruction.targets_copy()
+        if instruction.name == "R":
+            for target in targets:
+                flag_index = target.qubit_value
+                if flag_index not in flags:
+                    continue
+                if flag_index in active:
+                    raise FlagSynthesisError(
+                        f"Flag qubit {flag_index} is reset during an active lifecycle."
+                    )
+                active[flag_index] = instruction_index, 0, 0
+        elif instruction.name == "CX":
+            for control, target in instruction.target_groups():
+                control_index = control.qubit_value
+                flag_index = target.qubit_value
+                if control_index in flags and flag_index not in flags:
+                    raise FlagSynthesisError(
+                        f"Flag qubit {control_index} controls a non-flag CNOT."
+                    )
+                if flag_index in flags:
+                    if flag_index not in active:
+                        raise FlagSynthesisError(
+                            f"Flag qubit {flag_index} interacts outside a lifecycle."
+                        )
+                    preparation_index, interaction_count, controlled_count = (
+                        active[flag_index]
+                    )
+                    active[flag_index] = (
+                        preparation_index,
+                        interaction_count + 1,
+                        controlled_count,
+                    )
+                if control_index in flags:
+                    if control_index not in active:
+                        raise FlagSynthesisError(
+                            f"Flag qubit {control_index} controls outside a lifecycle."
+                        )
+                    preparation_index, interaction_count, controlled_count = (
+                        active[control_index]
+                    )
+                    active[control_index] = (
+                        preparation_index,
+                        interaction_count,
+                        controlled_count + 1,
+                    )
+        elif instruction.name in {"M", "MR"}:
+            if instruction.num_measurements != len(targets):
+                raise FlagSynthesisError(
+                    f"Unsupported grouped flag measurement {instruction}."
+                )
+            for offset, target in enumerate(targets):
+                flag_index = target.qubit_value
+                if flag_index not in flags:
+                    continue
+                if flag_index not in active:
+                    raise FlagSynthesisError(
+                        f"Flag qubit {flag_index} is measured outside a lifecycle."
+                    )
+                (
+                    preparation_index,
+                    interaction_count,
+                    controlled_interaction_count,
+                ) = active.pop(flag_index)
+                ordinal = next_ordinal[flag_index]
+                next_ordinal[flag_index] += 1
+                measurement_index = measurement_count + offset
+                pending_by_measurement[measurement_index] = (
+                    flag_index,
+                    ordinal,
+                    preparation_index,
+                    instruction_index,
+                    interaction_count,
+                    controlled_interaction_count,
+                )
+        elif instruction.name == "DETECTOR":
+            referenced_measurements = {
+                measurement_count + target.value
+                for target in targets
+                if target.is_measurement_record_target
+            }
+            pending_measurements = (
+                referenced_measurements & pending_by_measurement.keys()
+            )
+            if pending_measurements:
+                if len(pending_measurements) != 1 or len(targets) != 1:
+                    raise FlagSynthesisError(
+                        "A synthesized flag detector must reference one flag measurement."
+                    )
+                measurement_index = pending_measurements.pop()
+                (
+                    flag_index,
+                    ordinal,
+                    preparation_index,
+                    measurement_instruction_index,
+                    interaction_count,
+                    controlled_interaction_count,
+                ) = pending_by_measurement.pop(measurement_index)
+                coordinates = tuple(instruction.gate_args_copy())
+                if len(coordinates) < 2:
+                    raise FlagSynthesisError(
+                        "A synthesized flag detector needs qubit-coordinate arguments."
+                    )
+                lifecycles.append(FlagLifecycle(
+                    flag_index=flag_index,
+                    ordinal=ordinal,
+                    preparation_instruction_index=preparation_index,
+                    measurement_instruction_index=measurement_instruction_index,
+                    detector_instruction_index=instruction_index,
+                    detector_index=detector_index,
+                    measurement_index=measurement_index,
+                    detector_coordinates=coordinates,
+                    interaction_count=interaction_count,
+                    controlled_interaction_count=controlled_interaction_count,
+                ))
+            detector_index += 1
+        measurement_count += instruction.num_measurements
+
+    if active:
+        raise FlagSynthesisError(
+            f"Unmeasured flag lifecycles remain on qubits {sorted(active)}."
+        )
+    if pending_by_measurement:
+        raise FlagSynthesisError(
+            "Flag measurements are missing their single-result detectors."
+        )
+    return tuple(lifecycles)
+
+
+def remove_flag_lifecycle(
+        circuit: stim.Circuit,
+        *,
+        flag_indices: Iterable[int],
+        lifecycle: FlagLifecycle,
+) -> stim.Circuit:
+    """Remove one complete flag lifecycle while preserving record identities.
+
+    :param circuit: The synthesized circuit to transform.
+    :param flag_indices: All synthesized flag qubits in the circuit.
+    :param lifecycle: The discovered lifecycle to remove.
+    :return: The circuit without that lifecycle or its detector.
+    """
+    flags = tuple(flag_indices)
+    if lifecycle not in find_flag_lifecycles(circuit, flag_indices=flags):
+        raise ValueError("The requested lifecycle does not belong to the circuit.")
+    if lifecycle.controlled_interaction_count:
+        raise FlagSynthesisError(
+            "A lifecycle controlling another synthesized flag cannot be removed alone."
+        )
+    instructions = tuple(circuit)
+    measurement_instruction = instructions[lifecycle.measurement_instruction_index]
+    measurement_targets = measurement_instruction.targets_copy()
+    removed_offsets = [
+        offset
+        for offset, target in enumerate(measurement_targets)
+        if target.qubit_value == lifecycle.flag_index
+    ]
+    if len(removed_offsets) != 1:
+        raise FlagSynthesisError(
+            "The lifecycle measurement does not uniquely identify its flag qubit."
+        )
+    removed_offset = removed_offsets[0]
+
+    old_to_new_measurement: dict[int, int] = {}
+    old_measurement_count = 0
+    new_measurement_count = 0
+    for instruction_index, instruction in enumerate(instructions):
+        for offset in range(instruction.num_measurements):
+            old_index = old_measurement_count + offset
+            if (
+                    instruction_index == lifecycle.measurement_instruction_index
+                    and offset == removed_offset):
+                continue
+            old_to_new_measurement[old_index] = new_measurement_count
+            new_measurement_count += 1
+        old_measurement_count += instruction.num_measurements
+
+    result = stim.Circuit()
+    old_measurement_count = 0
+    new_measurement_count = 0
+    for instruction_index, instruction in enumerate(instructions):
+        if instruction_index == lifecycle.detector_instruction_index:
+            old_measurement_count += instruction.num_measurements
+            continue
+        original_targets = instruction.targets_copy()
+        targets = original_targets
+        if instruction_index == lifecycle.preparation_instruction_index:
+            targets = [
+                target for target in targets
+                if target.qubit_value != lifecycle.flag_index
+            ]
+        elif (
+                lifecycle.preparation_instruction_index
+                <= instruction_index
+                <= lifecycle.measurement_instruction_index
+                and instruction.name == "CX"):
+            targets = [
+                target
+                for control, target_flag in instruction.target_groups()
+                if target_flag.qubit_value != lifecycle.flag_index
+                for target in (control, target_flag)
+            ]
+        elif instruction_index == lifecycle.measurement_instruction_index:
+            targets = [
+                target for target in targets
+                if target.qubit_value != lifecycle.flag_index
+            ]
+
+        targets = _rewrite_measurement_record_targets(
+            targets,
+            old_measurement_count=old_measurement_count,
+            new_measurement_count=new_measurement_count,
+            old_to_new_measurement=old_to_new_measurement,
+        )
+
+        if targets or not original_targets:
+            result.append(
+                instruction.name,
+                targets,
+                instruction.gate_args_copy(),
+                tag=instruction.tag,
+            )
+        old_measurement_count += instruction.num_measurements
+        new_measurement_count += instruction.num_measurements
+        if instruction_index == lifecycle.measurement_instruction_index:
+            new_measurement_count -= 1
+
+    if result.num_measurements != circuit.num_measurements - 1:
+        raise AssertionError("Lifecycle removal changed the wrong measurements.")
+    if result.num_detectors != circuit.num_detectors - 1:
+        raise AssertionError("Lifecycle removal changed the wrong detectors.")
+    find_flag_lifecycles(result, flag_indices=flags)
+    return result
+
+
 def insertion_layer_counts(
         problem: FlagSynthesisProblem,
         solution: FlagCircuitSolution,
@@ -1038,6 +1327,192 @@ def verify_flag_solution(
         max_order=max_order,
         cultivated_state=cultivated_state,
         malignant_configurations=malignant,
+        elapsed_seconds=time.monotonic() - started,
+    )
+
+
+def _assert_flag_lifecycle_detectors_deterministic(
+        circuit: stim.Circuit,
+        *,
+        flag_indices: Iterable[int],
+) -> None:
+    """Check every discovered flag detector group for deterministic outcomes.
+
+    :param circuit: The circuit whose flag detectors should be checked.
+    :param flag_indices: Synthesized flag qubits in the circuit.
+    :return: None.
+    """
+    counts_by_column: dict[tuple[float], int] = defaultdict(int)
+    for lifecycle in find_flag_lifecycles(
+            circuit,
+            flag_indices=flag_indices,
+    ):
+        coordinate_column = lifecycle.detector_coordinates[:1]
+        if len(coordinate_column) != 1:
+            raise FlagSynthesisError(
+                "A synthesized flag detector needs a coordinate column."
+            )
+        counts_by_column[coordinate_column] += 1
+    for coordinate_column, count in counts_by_column.items():
+        assert_flag_detectors_deterministic(
+            circuit,
+            coordinate_prefix=coordinate_column,
+            expected_count=count,
+        )
+
+
+def greedily_prune_flag_lifecycles(
+        *,
+        inner_circuit: stim.Circuit,
+        full_circuit: stim.Circuit,
+        flag_indices: Iterable[int],
+        logical_analyzer,
+        max_order: int = 4,
+        cultivated_state: str = "T",
+        noise_level: float = 1e-3,
+        print_progress: bool = False,
+) -> FlagLifecyclePruningResult:
+    """Greedily remove complete lifecycles while preserving verification.
+
+    Trials with a malignant configuration stop after their first
+    counterexample. A successful trial necessarily exhausts every physical
+    realization through ``max_order`` before it is accepted.
+
+    :param inner_circuit: The logical core used for noisy verification.
+    :param full_circuit: The corresponding full circuit artifact.
+    :param flag_indices: Synthesized flag qubits shared by both circuits.
+    :param logical_analyzer: The analyzer classifying accepted logical effects.
+    :param max_order: The largest physical fault-event order to verify.
+    :param cultivated_state: The cultivated logical state that must be protected.
+    :param noise_level: The nonzero reference strength used to enumerate faults.
+    :param print_progress: Whether to report lifecycle trials and enumeration.
+    :return: The pruned circuits, accepted removals, and verification metrics.
+    """
+    started = time.monotonic()
+    flags = tuple(flag_indices)
+    current_inner = inner_circuit
+    current_full = full_circuit
+    removed: list[FlagLifecycle] = []
+    attempt_count = 0
+    verification_seconds = 0.0
+
+    for circuit in (current_inner, current_full):
+        _assert_flag_lifecycle_detectors_deterministic(
+            circuit,
+            flag_indices=flags,
+        )
+    initial_verification = verify_flag_solution(
+        circuit=current_inner,
+        logical_analyzer=logical_analyzer,
+        max_order=max_order,
+        cultivated_state=cultivated_state,
+        noise_level=noise_level,
+        print_progress=print_progress,
+        maximum_malignant_configurations=1,
+    )
+    verification_seconds += initial_verification.elapsed_seconds
+    if not initial_verification.passed:
+        raise FlagSynthesisError(
+            "Lifecycle pruning requires an initially verified circuit."
+        )
+
+    while True:
+        inner_lifecycles = find_flag_lifecycles(
+            current_inner,
+            flag_indices=flags,
+        )
+        full_lifecycles = find_flag_lifecycles(
+            current_full,
+            flag_indices=flags,
+        )
+        full_by_key = {
+            (lifecycle.flag_index, lifecycle.ordinal): lifecycle
+            for lifecycle in full_lifecycles
+        }
+        if {
+                (lifecycle.flag_index, lifecycle.ordinal)
+                for lifecycle in inner_lifecycles
+        } != set(full_by_key):
+            raise FlagSynthesisError(
+                "Inner and full circuits contain different flag lifecycles."
+            )
+
+        accepted = False
+        ordered_lifecycles = sorted(
+            (
+                lifecycle for lifecycle in inner_lifecycles
+                if not lifecycle.controlled_interaction_count
+            ),
+            key=lambda lifecycle: (
+                -lifecycle.interaction_count,
+                lifecycle.flag_index,
+                lifecycle.ordinal,
+            ),
+        )
+        for lifecycle in ordered_lifecycles:
+            key = lifecycle.flag_index, lifecycle.ordinal
+            full_lifecycle = full_by_key[key]
+            if (
+                    full_lifecycle.interaction_count != lifecycle.interaction_count
+                    or full_lifecycle.controlled_interaction_count
+                    != lifecycle.controlled_interaction_count):
+                raise FlagSynthesisError(
+                    f"Lifecycle {key} has inconsistent inner/full interactions."
+                )
+            trial_inner = remove_flag_lifecycle(
+                current_inner,
+                flag_indices=flags,
+                lifecycle=lifecycle,
+            )
+            trial_full = remove_flag_lifecycle(
+                current_full,
+                flag_indices=flags,
+                lifecycle=full_lifecycle,
+            )
+            for circuit in (trial_inner, trial_full):
+                _assert_flag_lifecycle_detectors_deterministic(
+                    circuit,
+                    flag_indices=flags,
+                )
+            verification = verify_flag_solution(
+                circuit=trial_inner,
+                logical_analyzer=logical_analyzer,
+                max_order=max_order,
+                cultivated_state=cultivated_state,
+                noise_level=noise_level,
+                print_progress=print_progress,
+                maximum_malignant_configurations=1,
+            )
+            attempt_count += 1
+            verification_seconds += verification.elapsed_seconds
+            if not verification.passed:
+                if print_progress:
+                    print(
+                        f"Kept flag lifecycle {key}: found a malignant "
+                        "configuration.",
+                        flush=True,
+                    )
+                continue
+            current_inner = trial_inner
+            current_full = trial_full
+            removed.append(lifecycle)
+            accepted = True
+            if print_progress:
+                print(
+                    f"Removed flag lifecycle {key} with "
+                    f"{lifecycle.interaction_count} CNOTs.",
+                    flush=True,
+                )
+            break
+        if not accepted:
+            break
+
+    return FlagLifecyclePruningResult(
+        inner_circuit=current_inner,
+        full_circuit=current_full,
+        removed_lifecycles=tuple(removed),
+        attempt_count=attempt_count,
+        verification_seconds=verification_seconds,
         elapsed_seconds=time.monotonic() - started,
     )
 
@@ -1189,6 +1664,37 @@ def write_solution_artifacts(
     return paths
 
 
+def _rewrite_measurement_record_targets(
+        targets: Sequence[stim.GateTarget],
+        *,
+        old_measurement_count: int,
+        new_measurement_count: int,
+        old_to_new_measurement: Mapping[int, int],
+) -> list[stim.GateTarget]:
+    """Retarget record references through a measurement-index mapping.
+
+    :param targets: Instruction targets that may reference prior measurements.
+    :param old_measurement_count: Old results preceding the instruction.
+    :param new_measurement_count: New results preceding the instruction.
+    :param old_to_new_measurement: Surviving old-to-new result indices.
+    :return: Targets preserving the referenced measurement identities.
+    """
+    rewritten = []
+    for target in targets:
+        if not target.is_measurement_record_target:
+            rewritten.append(target)
+            continue
+        old_index = old_measurement_count + target.value
+        if old_index not in old_to_new_measurement:
+            raise FlagSynthesisError(
+                "A surviving instruction references a removed measurement."
+            )
+        rewritten.append(stim.target_rec(
+            old_to_new_measurement[old_index] - new_measurement_count
+        ))
+    return rewritten
+
+
 def _rewrite_original_record_targets(
         layers: Sequence[stim.Circuit],
         *,
@@ -1219,17 +1725,13 @@ def _rewrite_original_record_targets(
         for instruction in layer:
             if isinstance(instruction, stim.CircuitRepeatBlock):
                 raise ValueError("Flag synthesis does not support REPEAT blocks.")
-            targets = instruction.targets_copy()
-            if any(target.is_measurement_record_target for target in targets):
-                new_current_count = original_measurement_count + added_measurement_count
-                targets = [
-                    stim.target_rec(
-                        original_to_new_measurement[
-                            original_measurement_count + target.value
-                        ] - new_current_count
-                    ) if target.is_measurement_record_target else target
-                    for target in targets
-                ]
+            new_current_count = original_measurement_count + added_measurement_count
+            targets = _rewrite_measurement_record_targets(
+                instruction.targets_copy(),
+                old_measurement_count=original_measurement_count,
+                new_measurement_count=new_current_count,
+                old_to_new_measurement=original_to_new_measurement,
+            )
             rewritten.append(
                 instruction.name,
                 targets,
@@ -1933,6 +2435,8 @@ __all__ = [
     "FaultEffectClassification",
     "FlagCandidate",
     "FlagCircuitSolution",
+    "FlagLifecycle",
+    "FlagLifecyclePruningResult",
     "FlagSynthesisError",
     "FlagSynthesisProblem",
     "MilpRun",
@@ -1952,9 +2456,12 @@ __all__ = [
     "classify_fault_effect",
     "extract_malignant_configurations",
     "find_malignant_configurations",
+    "find_flag_lifecycles",
+    "greedily_prune_flag_lifecycles",
     "greedy_verified_candidate_indices",
     "insertion_layer_counts",
     "precompute_x_trajectory_masks",
+    "remove_flag_lifecycle",
     "synthesize_flag_circuit",
     "shortlist_flag_synthesis_problem",
     "update_boundary_map_after_insertion",
