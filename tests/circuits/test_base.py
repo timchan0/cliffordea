@@ -1,3 +1,6 @@
+import pytest
+import stim
+
 from cliffordep import circuits
 
 
@@ -53,3 +56,42 @@ def test_find_stabilizer_generators():
     }
     for ancilla_flag_counts, circuit in all_circuits.items():
         assert set(circuit._STABILIZER_GENERATOR_INDICES) == _STABILIZER_GENERATORS[ancilla_flag_counts]
+
+
+@pytest.mark.parametrize(
+    "ancilla_flag_counts, circuit",
+    [
+        ((19, 0), circuits.D5A19()),
+        ((19, 3), circuits.D5A19F3()),
+        ((19, 15), circuits.D5A19F15()),
+        ((19, 18), circuits.D5A19F18()),
+    ])
+def test_find_logical_s_gate(ancilla_flag_counts, circuit: circuits.Distance5DoubleCheck):
+    """Test LOGICAL_S agrees with hardcoded values."""
+    _LOGICAL_S = {
+        (19, 0): stim.Circuit(
+"""
+S 0 5 7 14 16 18 20 29 31 36
+S_DAG 9 11 13 22 24 26 34 32 3
+"""
+        ),
+        (19, 3): stim.Circuit(
+"""
+S 16 18 20 22 32 34 6 8 0 39
+S_DAG 3 10 12 14 26 24 28 35 37
+"""
+        ),
+        (19, 15): stim.Circuit(
+"""
+S 20 22 24 26 41 43 7 9 0 51
+S_DAG 4 14 32 16 18 36 34 48 46
+"""
+        ),
+        (19, 18): stim.Circuit(
+"""
+S 21 23 25 27 44 46 7 9 0 54
+S_DAG 4 15 35 17 19 39 37 51 49
+"""
+        ),
+    }
+    assert circuit.LOGICAL_S.to_tableau() == _LOGICAL_S[ancilla_flag_counts].to_tableau()

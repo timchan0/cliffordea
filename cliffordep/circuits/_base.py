@@ -38,3 +38,34 @@ def find_stabilizer_generators(circuit: stim.Circuit) -> tuple[tuple[int, ...], 
                     if target.qubit_value is not None
                 )))
     return tuple(result)
+
+
+def find_logical_s_gate(circuit: stim.Circuit) -> stim.Circuit:
+    """Return the logical S gate for a double-check circuit.
+
+    :param circuit: A logical-Clifford-measurement circuit containing
+        a logical S dagger,
+        an X-parity measurement,
+        and a logical S,
+        among other instructions.
+    :return logical_s: A stim circuit representing the logical S gate.
+    """
+    result = stim.Circuit()
+    instructions_containing_s = []
+    for instruction in circuit:
+        if isinstance(instruction, stim.CircuitRepeatBlock):
+            raise ValueError("Repeat blocks not supported.")
+        if instruction.name in {"S", "S_DAG"}:
+            instructions_containing_s.append(instruction)
+    if len(instructions_containing_s) == 4:
+        relevant_indices = (2, 3)
+    elif len(instructions_containing_s) == 2:
+        relevant_indices = (1,)
+    else:
+        raise ValueError(
+            "Expected either 2 or 4 S/S_DAG instructions in the circuit, "
+            f"but found {len(instructions_containing_s)}."
+        )
+    for index in relevant_indices:
+        result.append(instructions_containing_s[index])
+    return result

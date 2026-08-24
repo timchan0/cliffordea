@@ -3,7 +3,7 @@ import json
 
 import stim
 
-from cliffordep.circuits._base import find_data_indices, find_stabilizer_generators
+from cliffordep.circuits._base import find_data_indices, find_stabilizer_generators, find_logical_s_gate
 
 
 _STIM_FILES_DIR = Path(__file__).with_name("stim_files")
@@ -12,7 +12,6 @@ _STIM_FILES_DIR = Path(__file__).with_name("stim_files")
 class Distance5DoubleCheck:
     """Common constants for the distance-5 double-check circuit."""
 
-    TRANSVERSAL_S: stim.Circuit
     ANCILLA_INDICES: tuple[int, ...]
     """The indices of the ancilla qubits."""
     FLAG_INDICES: tuple[int, ...] = ()
@@ -50,6 +49,7 @@ class Distance5DoubleCheck:
                 else '_' for index in range(self.INNER_CIRCUIT.num_qubits)) # type: ignore
             for basis in ('X', 'Z')
         )
+        self.LOGICAL_S = find_logical_s_gate(circuit=self.CIRCUIT)
 
 
 class D5A19(Distance5DoubleCheck):
@@ -58,13 +58,6 @@ class D5A19(Distance5DoubleCheck):
     This is the circuit used in the paper.
     """
     ANCILLA_INDICES = tuple(sorted((21, 28, 2, 4, 6, 8, 17, 19, 35, 1, 10, 15, 33, 30, 12, 23, 25, 27, 37)))
-
-    LOGICAL_S = stim.Circuit(
-"""
-S 0 5 7 14 16 18 20 29 31 36
-S_DAG 9 11 13 22 24 26 34 32 3
-"""
-    )
 
 
 class D5A19F3(Distance5DoubleCheck):
@@ -77,12 +70,6 @@ class D5A19F3(Distance5DoubleCheck):
     """
     ANCILLA_INDICES = tuple(sorted((23, 31, 2, 5, 7, 9, 19, 21, 38, 1, 11, 17, 36, 33, 13, 25, 27, 29, 40)))
     FLAG_INDICES = tuple(sorted((4, 30, 15)))
-    LOGICAL_S = stim.Circuit(
-"""
-S 16 18 20 22 32 34 6 8 0 39
-S_DAG 3 10 12 14 26 24 28 35 37
-"""
-    )
 
 
 class D5A19F15(Distance5DoubleCheck):
@@ -96,12 +83,6 @@ class D5A19F15(Distance5DoubleCheck):
     """
     ANCILLA_INDICES = tuple(sorted((31, 40, 3, 6, 8, 10, 23, 25, 49, 1, 15, 21, 47, 42, 17, 33, 35, 37, 52)))
     FLAG_INDICES = tuple(sorted((2, 5, 11, 19, 27, 38, 44, 50, 39, 45, 28, 29, 30, 12, 13)))
-    LOGICAL_S = stim.Circuit(
-"""
-S 20 22 24 26 41 43 7 9 0 51
-S_DAG 4 14 32 16 18 36 34 48 46
-"""
-    )
 
 
 class D5A19F18(Distance5DoubleCheck):
@@ -117,12 +98,6 @@ class D5A19F18(Distance5DoubleCheck):
     """
     ANCILLA_INDICES = tuple(sorted((34, 43, 3, 6, 8, 10, 24, 26, 52, 1, 16, 22, 50, 45, 18, 36, 38, 40, 55)))
     FLAG_INDICES = tuple(sorted((2, 5, 11, 20, 28, 41, 47, 53, 42, 48, 31, 32, 33, 13, 14, 12, 29, 30)))
-    LOGICAL_S = stim.Circuit(
-"""
-S 21 23 25 27 44 46 7 9 0 54
-S_DAG 4 15 35 17 19 39 37 51 49
-"""
-    )
 
 
 class D5A19Flagged(D5A19):
