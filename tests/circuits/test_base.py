@@ -33,3 +33,23 @@ def test_find_data_indices():
     }
     for ancilla_flag_counts, circuit in all_circuits.items():
         assert circuit.DATA_INDICES == _DATA_INDICES[ancilla_flag_counts]
+
+
+def test_find_stabilizer_generators():
+    """Test STABILIZER_GENERATORS agrees with hardcoded values."""
+
+    all_circuits: dict[
+        tuple[int, int],
+        circuits.Distance5DoubleCheck,
+    ] = {
+        (19, 0): circuits.D5A19(),
+    }
+    _STABILIZER_GENERATORS = {
+        (19, 0): {tuple(sorted(indices)) for indices in [
+            (0, 9, 5, 3), (14, 32, 29, 22), (11, 16, 24, 18, 13, 7),
+            (22, 29, 34, 31, 24, 16), (3, 5, 11, 7), (13, 18, 26, 20),
+            (9, 14, 22, 16, 11, 5), (24, 31, 26, 18), (29, 32, 36, 34),
+        ]},
+    }
+    for ancilla_flag_counts, circuit in all_circuits.items():
+        assert set(circuit._STABILIZER_GENERATOR_INDICES) == _STABILIZER_GENERATORS[ancilla_flag_counts]
