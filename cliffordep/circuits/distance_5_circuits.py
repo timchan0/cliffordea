@@ -15,9 +15,13 @@ class Distance5DoubleCheck:
     TRANSVERSAL_S: stim.Circuit
     ANCILLA_INDICES: tuple[int, ...]
     """The indices of the ancilla qubits."""
+    FLAG_INDICES: tuple[int, ...] = ()
+    """The indices of the flag qubits."""
 
     def __init__(self):
-        circuit_name = f'd5a{len(self.ANCILLA_INDICES)}.stim'
+        _flag_count = len(self.FLAG_INDICES)
+        _flag_id = f'f{_flag_count}' if _flag_count else ''
+        circuit_name = f'd5a{len(self.ANCILLA_INDICES)}{_flag_id}.stim'
         self.INNER_CIRCUIT = stim.Circuit.from_file(
             _STIM_FILES_DIR / 'inner_circuits' / circuit_name)
         self.DATA_INDICES = find_data_indices(inner_circuit=self.INNER_CIRCUIT)
@@ -59,6 +63,18 @@ class D5A19(Distance5DoubleCheck):
 """
 S 0 5 7 14 16 18 20 29 31 36
 S_DAG 9 11 13 22 24 26 34 32 3
+"""
+    )
+
+
+class D5A19F15(Distance5DoubleCheck):
+    """The distance-5 double-check circuit using 19 ancillas and 15 flags."""
+    ANCILLA_INDICES = tuple(sorted((31, 40, 3, 6, 8, 10, 23, 25, 49, 1, 15, 21, 47, 42, 17, 33, 35, 37, 52)))
+    FLAG_INDICES = tuple(sorted((2, 5, 11, 19, 27, 38, 44, 50, 39, 45, 28, 29, 30, 12, 13)))
+    LOGICAL_S = stim.Circuit(
+"""
+S 20 22 24 26 41 43 7 9 0 51
+S_DAG 4 14 32 16 18 36 34 48 46
 """
     )
 
