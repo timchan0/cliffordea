@@ -2,6 +2,8 @@ from pathlib import Path
 
 import stim
 
+from cliffordep.circuits._base import find_data_indices
+
 
 _DATA_QUBIT_COUNT = 7
 _STIM_FILES_DIR = Path(__file__).with_name("stim_files")
@@ -52,19 +54,8 @@ class Distance3DoubleCheck:
         This is important as it lowers the number of errors that must be enumerated,
         thus improving the numeric performance considerably.
         """
-        data_indices_found = False
-        for instruction in self.INNER_CIRCUIT:
-            if isinstance(instruction, stim.CircuitRepeatBlock):
-                raise ValueError("Repeat blocks not supported.")
-            if instruction.name == "MPP":
-                self.DATA_INDICES = tuple(sorted(
-                    target.qubit_value for target in instruction.targets_copy()
-                    if target.qubit_value is not None
-                ))
-                """The indices of the data qubits in ascending order."""
-                data_indices_found = True
-        if not data_indices_found:
-            raise ValueError("No MPP instruction found in inner circuit, so could not determine data indices.")
+        self.DATA_INDICES = find_data_indices(inner_circuit=self.INNER_CIRCUIT)
+        """The indices of the data qubits in ascending order."""
 
         self.CIRCUIT = stim.Circuit.from_file(
             _STIM_FILES_DIR / 'full_circuits' / circuit_name)

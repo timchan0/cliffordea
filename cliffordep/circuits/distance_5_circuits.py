@@ -3,6 +3,8 @@ import json
 
 import stim
 
+from cliffordep.circuits._base import find_data_indices
+
 
 _STIM_FILES_DIR = Path(__file__).with_name("stim_files")
 
@@ -25,6 +27,8 @@ class Distance5DoubleCheck:
         circuit_name = f'd5a{len(self.ANCILLA_INDICES)}.stim'
         self.INNER_CIRCUIT = stim.Circuit.from_file(
             _STIM_FILES_DIR / 'inner_circuits' / circuit_name)
+        self.DATA_INDICES = find_data_indices(inner_circuit=self.INNER_CIRCUIT)
+        """The indices of the data qubits in ascending order."""
         self.CIRCUIT = stim.Circuit.from_file(
             _STIM_FILES_DIR / 'full_circuits' / circuit_name)
         """The full double-check circuit."""
@@ -32,7 +36,6 @@ class Distance5DoubleCheck:
 
     def _initialize_operators(self) -> None:
         """Build stabilizers and logicals at the loaded circuit width."""
-        self.DATA_INDICES: tuple[int, ...]
         self.STABILIZER_GENERATORS = {basis: tuple(stim.PauliString(
             basis if index in indices else '_' for index in range(self.INNER_CIRCUIT.num_qubits) # type: ignore
         ) for indices in self._UNRESTRICTED_STABILIZER_GENERATOR_INDICES
@@ -54,8 +57,6 @@ class D5A19(Distance5DoubleCheck):
     
     This is the circuit used in the paper.
     """
-
-    DATA_INDICES = tuple(sorted((3, 5, 0, 9, 14, 22, 32, 29, 34, 31, 24, 26, 20, 18, 13, 7, 11, 16, 36)))
     ANCILLA_INDICES = tuple(sorted((21, 28, 2, 4, 6, 8, 17, 19, 35, 1, 10, 15, 33, 30, 12, 23, 25, 27, 37)))
 
     LOGICAL_S = stim.Circuit(
@@ -82,6 +83,8 @@ class D5A19Flagged(D5A19):
         self.INNER_CIRCUIT = stim.Circuit.from_file(
             generated_directory / files["inner_circuit"]
         )
+        self.DATA_INDICES = find_data_indices(inner_circuit=self.INNER_CIRCUIT)
+        """The indices of the data qubits in ascending order."""
         self.CIRCUIT = stim.Circuit.from_file(
             generated_directory / files["full_circuit"]
         )
