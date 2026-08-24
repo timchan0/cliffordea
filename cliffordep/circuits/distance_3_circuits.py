@@ -141,3 +141,10 @@ class D3A6F3(Distance3DoubleCheck):
     DATA_INDICES = (0, 3, 7, 9, 11, 13, 14)
     ANCILLA_INDICES = (15, 12, 6, 2, 8, 1)
     FLAG_INDICES = (4, 5, 10)
+
+
+class D3A6F5(Distance3DoubleCheck):
+    """The distance-3 double-check circuit using 6 ancillas and 5 flags."""
+    DATA_INDICES = (0, 4, 7, 9, 12, 14, 16)
+    ANCILLA_INDICES = (17, 13, 6, 3, 8, 1)
+    FLAG_INDICES = (2, 5, 10, 15, 11)
