@@ -67,6 +67,24 @@ S_DAG 9 11 13 22 24 26 34 32 3
     )
 
 
+class D5A19F3(Distance5DoubleCheck):
+    """The distance-5 double-check circuit using 19 ancillas and 3 flags.
+
+    This circuit has fault distance 4.
+    The way this was designed was as follows:
+    the unflagged version has 3 malignant fault configurations of weight 3.
+    Each flag in this circuit detects exactly one of these configurations.
+    """
+    ANCILLA_INDICES = tuple(sorted((23, 31, 2, 5, 7, 9, 19, 21, 38, 1, 11, 17, 36, 33, 13, 25, 27, 29, 40)))
+    FLAG_INDICES = tuple(sorted((4, 30, 15)))
+    LOGICAL_S = stim.Circuit(
+"""
+S 16 18 20 22 32 34 6 8 0 39
+S_DAG 3 10 12 14 26 24 28 35 37
+"""
+    )
+
+
 class D5A19F15(Distance5DoubleCheck):
     """The distance-5 double-check circuit using 19 ancillas and 15 flags."""
     ANCILLA_INDICES = tuple(sorted((31, 40, 3, 6, 8, 10, 23, 25, 49, 1, 15, 21, 47, 42, 17, 33, 35, 37, 52)))
