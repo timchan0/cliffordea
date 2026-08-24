@@ -73,10 +73,10 @@ def test_inherits_syndrome_and_logicals():
     acquire their values from the following stabilizer round.
     """
     d3_data, d3_generators = _layout_supports(
-        circuits.D3A6()
+        circuits.Distance3DoubleCheck(ancilla_count=6)
     )
     d5_data, d5_generators = _layout_supports(
-        circuits.D5A19()
+        circuits.Distance5DoubleCheck()
     )
 
     for basis in ('X', 'Z'):

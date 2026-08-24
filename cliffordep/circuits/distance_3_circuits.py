@@ -31,15 +31,35 @@ class Distance3DoubleCheck:
     in the order given by `DATA_INDICES`.
     """
 
-    ANCILLA_INDICES: tuple[int, ...]
-    """The indices of the ancilla qubits."""
-    FLAG_INDICES: tuple[int, ...] = ()
-    """The indices of the flag qubits."""
+    def __init__(self, ancilla_count: int = 6, flag_count: int = 0):
+        """Possible values for (ancilla_count, flag_count):
+        
+        (1, 0)
 
-    def __init__(self):
-        _flag_count = len(self.FLAG_INDICES)
-        _flag_id = f'f{_flag_count}' if _flag_count else ''
-        circuit_name = f'd3a{len(self.ANCILLA_INDICES)}{_flag_id}.stim'
+        (2, 0)
+
+        (3, 0)
+
+        (4, 0)
+
+        (5, 0)
+
+        (6, 0): This is the circuit used in the paper.
+
+        (7, 0)
+
+        (6, 2)
+
+        (6, 3)
+
+        (6, 5)
+        """
+        self.ANCILLA_COUNT = ancilla_count
+        """The number of ancilla qubits in the circuit."""
+        self.FLAG_COUNT = flag_count
+        """The number of flag qubits in the circuit."""
+        _flag_id = f'f{flag_count}' if flag_count else ''
+        circuit_name = f'd3a{self.ANCILLA_COUNT}{_flag_id}.stim'
         self.INNER_CIRCUIT = stim.Circuit.from_file(
             _STIM_FILES_DIR / 'inner_circuits' / circuit_name)
         """The double-check circuit _within_ the two layers of T gates:
@@ -85,60 +105,3 @@ class Distance3DoubleCheck:
         self.LOGICAL_S: stim.Circuit = stim.Circuit()
         self.LOGICAL_S.append('S', _majority_indices_unrestricted)
         self.LOGICAL_S.append('S_DAG', set(self.DATA_INDICES) - _majority_indices_unrestricted)
-
-
-class D3A1(Distance3DoubleCheck):
-    """The distance-3 double-check circuit using 1 ancilla."""
-    ANCILLA_INDICES = (2,)
-
-
-class D3A2(Distance3DoubleCheck):
-    """The distance-3 double-check circuit using 2 ancillas."""
-    ANCILLA_INDICES = (2, 6)
-
-
-class D3A3(Distance3DoubleCheck):
-    """The distance-3 double-check circuit using 3 ancillas."""
-    ANCILLA_INDICES = (1, 3, 7)
-
-
-class D3A4(Distance3DoubleCheck):
-    """The distance-3 double-check circuit using 4 ancillas."""
-    ANCILLA_INDICES = (1, 3, 5, 8)
-
-
-class D3A5(Distance3DoubleCheck):
-    """The distance-3 double-check circuit using 5 ancillas."""
-    ANCILLA_INDICES = (1, 2, 4, 6, 9)
-
-
-class D3A6(Distance3DoubleCheck):
-    """The distance-3 double-check circuit using 6 ancillas.
-    
-    This is the circuit used in the paper.
-    """
-    ANCILLA_INDICES = (12, 9, 4, 2, 6, 1)
-
-
-class D3A7(Distance3DoubleCheck):
-    """The distance-3 double-check circuit using 7 ancillas."""
-    ANCILLA_INDICES = (13, 12, 9, 4, 2, 6, 1)
-
-
-class D3A6F2(Distance3DoubleCheck):
-    """The distance-3 double-check circuit using 6 ancillas and 2 flags."""
-    ANCILLA_INDICES = (14, 11, 6, 2, 8, 1)
-    FLAG_INDICES = (4, 5)
-
-
-class D3A6F3(Distance3DoubleCheck):
-    """The distance-3 double-check circuit using 6 ancillas and 3 flags."""
-    ANCILLA_INDICES = (15, 12, 6, 2, 8, 1)
-    FLAG_INDICES = (4, 5, 10)
-
-
-class D3A6F5(Distance3DoubleCheck):
-    """The distance-3 double-check circuit using 6 ancillas and 5 flags."""
-    DATA_INDICES = (0, 4, 7, 9, 12, 14, 16)
-    ANCILLA_INDICES = (17, 13, 6, 3, 8, 1)
-    FLAG_INDICES = (2, 5, 10, 15, 11)

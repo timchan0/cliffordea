@@ -59,7 +59,7 @@ def test_d5_factored_transversal_matches_general_workflow():
 
     :return: None.
     """
-    circuit = circuits.D5A19()
+    circuit = circuits.Distance5DoubleCheck()
     noisy_circuit = noise.uniformly_depolarize(
         circuit.INNER_CIRCUIT,
         noise_level=1e-3,

@@ -31,6 +31,8 @@ class TestD3DoubleCatCheck():
 
     def test_undetected_pairs(self, d3_double_cat_check_fault_source_combinator: FaultCombinatorExclusive):
         """Test that undetected pairs commute with the flag measurements at the end of `d3_double_cat_check`."""
+        d3a6 = cliffordep.circuits.Distance3DoubleCheck(ancilla_count=6)
+        d3a6_ancilla_indices = {q for q in range(d3a6.INNER_CIRCUIT.num_qubits) if q not in d3a6.DATA_INDICES}
         for _, resultant_paulis in d3_double_cat_check_fault_source_combinator.items():
             pairs = itertools.combinations(resultant_paulis.items(), 2)
             for (resultant_pauli_1, faults_1), (resultant_pauli_2, faults_2) in pairs:
@@ -38,5 +40,5 @@ class TestD3DoubleCatCheck():
                 string_2 = stim.PauliString(resultant_pauli_2)
                 prod = string_1 * string_2
                 if not any(name=='MX' for _, name, _ in (faults_1|faults_2).keys()):
-                    for index in cliffordep.circuits.D3A6.ANCILLA_INDICES:
+                    for index in d3a6_ancilla_indices:
                         assert prod[index] not in _get_anticommuting_paulis('MX')

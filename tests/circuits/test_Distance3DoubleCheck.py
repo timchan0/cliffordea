@@ -1,12 +1,12 @@
 import pytest
 import stim
 
-from cliffordep.circuits import Distance3DoubleCheck, D3A6
+from cliffordep.circuits import Distance3DoubleCheck
 
 
 @pytest.fixture
 def distance3_ancilla6():
-    return D3A6()
+    return Distance3DoubleCheck(ancilla_count=6)
 
 
 identity_tensor_7 = stim.PauliString(7)

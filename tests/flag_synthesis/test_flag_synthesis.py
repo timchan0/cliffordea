@@ -179,7 +179,7 @@ def test_inserted_flag_measurement_preserves_original_record_targets():
 
 def test_mask_native_verifier_finds_distance_three_malignant_configurations():
     """Both mask-native flag inputs recover the four D3 weight-two failures."""
-    circuit = circuits.D3A6()
+    circuit = circuits.Distance3DoubleCheck(ancilla_count=6)
     combinator = FaultCombinator(noise.uniformly_depolarize(
         circuit.INNER_CIRCUIT,
         noise_level=1e-3,

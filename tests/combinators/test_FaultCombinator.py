@@ -729,7 +729,7 @@ def test_d3_cache_sizes_preserve_kept_effects_and_share_configuration_lists():
     distance-3 results. Effects accepted for both S and T should also refer to
     the same configuration-list object.
     """
-    circuit = cliffordep.circuits.D3A6()
+    circuit = cliffordep.circuits.Distance3DoubleCheck(ancilla_count=6)
     noisy_circuit = cliffordep.noise.uniformly_depolarize(
         circuit.INNER_CIRCUIT,
         noise_level=1e-3,
@@ -766,7 +766,7 @@ def test_clifford_linear_precheck_preserves_results_and_reduces_enumeration(
     :param monkeypatch: Pytest fixture used to count configurations yielded by
         the meet-in-the-middle enumerator.
     """
-    circuit = cliffordep.circuits.D3A6()
+    circuit = cliffordep.circuits.Distance3DoubleCheck(ancilla_count=6)
     noisy_circuit = cliffordep.noise.uniformly_depolarize(
         circuit.INNER_CIRCUIT,
         noise_level=1e-3,
@@ -968,7 +968,7 @@ def test_d5_order_four_documented_weights_and_enumeration_counts(monkeypatch):
         '_iter_zero_syndrome_configurations',
         recording_iterator,
     )
-    circuit = cliffordep.circuits.D5A19()
+    circuit = cliffordep.circuits.Distance5DoubleCheck()
     noisy_circuit = cliffordep.noise.uniformly_depolarize(
         circuit.INNER_CIRCUIT,
         noise_level=1e-3,

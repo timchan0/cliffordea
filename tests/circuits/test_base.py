@@ -4,24 +4,27 @@ import stim
 from cliffordep import circuits
 
 
-def test_find_data_indices():
+@pytest.mark.parametrize("ancilla_count, flag_count", [
+    (1, 0),
+    (2, 0),
+    (3, 0),
+    (4, 0),
+    (5, 0),
+    (6, 0),
+    (7, 0),
+    (6, 2),
+    (6, 3),
+    (19, 0),
+])
+def test_find_data_indices(ancilla_count, flag_count):
     """Test DATA_INDICES agrees with hardcoded values."""
-
-    all_circuits: dict[
-        tuple[int, int],
-        circuits.Distance3DoubleCheck | circuits.Distance5DoubleCheck,
-    ] = {
-        (1, 0): circuits.D3A1(),
-        (2, 0): circuits.D3A2(),
-        (3, 0): circuits.D3A3(),
-        (4, 0): circuits.D3A4(),
-        (5, 0): circuits.D3A5(),
-        (6, 0): circuits.D3A6(),
-        (7, 0): circuits.D3A7(),
-        (6, 2): circuits.D3A6F2(),
-        (6, 3): circuits.D3A6F3(),
-        (19, 0): circuits.D5A19(),
-    }
+    if ancilla_count == 19:
+        circuit = circuits.Distance5DoubleCheck(flag_count=flag_count)
+    else:
+        circuit = circuits.Distance3DoubleCheck(
+            ancilla_count=ancilla_count,
+            flag_count=flag_count,
+        )
     _DATA_INDICES = {
         (1, 0): (0, 1, 3, 4, 5, 6, 7),
         (2, 0): (0, 1, 3, 4, 5, 7, 8),
@@ -34,8 +37,7 @@ def test_find_data_indices():
         (6, 3): (0, 3, 7, 9, 11, 13, 14),
         (19, 0): tuple(sorted((3, 5, 0, 9, 14, 22, 32, 29, 34, 31, 24, 26, 20, 18, 13, 7, 11, 16, 36)))
     }
-    for ancilla_flag_counts, circuit in all_circuits.items():
-        assert circuit.DATA_INDICES == _DATA_INDICES[ancilla_flag_counts]
+    assert circuit.DATA_INDICES == _DATA_INDICES[ancilla_count, flag_count]
 
 
 def test_find_stabilizer_generators():
@@ -45,7 +47,7 @@ def test_find_stabilizer_generators():
         tuple[int, int],
         circuits.Distance5DoubleCheck,
     ] = {
-        (19, 0): circuits.D5A19(),
+        (19, 0): circuits.Distance5DoubleCheck(),
     }
     _STABILIZER_GENERATORS = {
         (19, 0): {tuple(sorted(indices)) for indices in [
@@ -58,16 +60,15 @@ def test_find_stabilizer_generators():
         assert set(circuit._STABILIZER_GENERATOR_INDICES) == _STABILIZER_GENERATORS[ancilla_flag_counts]
 
 
-@pytest.mark.parametrize(
-    "ancilla_flag_counts, circuit",
-    [
-        ((19, 0), circuits.D5A19()),
-        ((19, 3), circuits.D5A19F3()),
-        ((19, 15), circuits.D5A19F15()),
-        ((19, 18), circuits.D5A19F18()),
-    ])
-def test_find_logical_s_gate(ancilla_flag_counts, circuit: circuits.Distance5DoubleCheck):
+@pytest.mark.parametrize("ancilla_count, flag_count", [
+    (19, 0),
+    (19, 3),
+    (19, 15),
+    (19, 18),
+])
+def test_find_logical_s_gate(ancilla_count, flag_count):
     """Test LOGICAL_S agrees with hardcoded values."""
+    circuit = circuits.Distance5DoubleCheck(flag_count=flag_count)
     _LOGICAL_S = {
         (19, 0): stim.Circuit(
 """
@@ -94,4 +95,4 @@ S_DAG 4 15 35 17 19 39 37 51 49
 """
         ),
     }
-    assert circuit.LOGICAL_S.to_tableau() == _LOGICAL_S[ancilla_flag_counts].to_tableau()
+    assert circuit.LOGICAL_S.to_tableau() == _LOGICAL_S[ancilla_count, flag_count].to_tableau()

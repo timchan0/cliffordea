@@ -9,7 +9,7 @@ from cliffordep.logical_analyzers import CliffordLogicalAnalyzer, SuperpositionL
 @pytest.fixture
 def noisy_d3_double_cat_check_circuit():
     """Noisy version of the distance-3 double-check circuit."""
-    circuit = cliffordep.circuits.D3A6().INNER_CIRCUIT
+    circuit = cliffordep.circuits.Distance3DoubleCheck(ancilla_count=6).INNER_CIRCUIT
     noisy_circuit = cliffordep.noise.uniformly_depolarize(circuit, noise_level=1e-3)
     return noisy_circuit
 
@@ -39,7 +39,7 @@ def d3_combinator_and_kept_effects_by_analyzer():
         Clifford-analyzer results.
     """
     noise_level = 1e-3
-    circuit = cliffordep.circuits.D3A6()
+    circuit = cliffordep.circuits.Distance3DoubleCheck(ancilla_count=6)
     noisy_circuit = cliffordep.noise.uniformly_depolarize(
         circuit.INNER_CIRCUIT,
         noise_level=noise_level,

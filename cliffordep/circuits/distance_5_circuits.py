@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+from typing import Literal
 
 import stim
 
@@ -9,18 +10,44 @@ from cliffordep.circuits._base import find_data_indices, find_stabilizer_generat
 _STIM_FILES_DIR = Path(__file__).with_name("stim_files")
 
 
+FlagCount = Literal[0, 3, 15, 18]
+
+
 class Distance5DoubleCheck:
-    """Common constants for the distance-5 double-check circuit."""
+    """Common constants for the distance-5 double-check circuit using 19 ancillas."""
 
-    ANCILLA_INDICES: tuple[int, ...]
+    ANCILLA_COUNT: int = 19
     """The indices of the ancilla qubits."""
-    FLAG_INDICES: tuple[int, ...] = ()
-    """The indices of the flag qubits."""
 
-    def __init__(self):
-        _flag_count = len(self.FLAG_INDICES)
-        _flag_id = f'f{_flag_count}' if _flag_count else ''
-        circuit_name = f'd5a{len(self.ANCILLA_INDICES)}{_flag_id}.stim'
+    def __init__(self, flag_count: Literal[0, 3, 15, 18] = 0):
+        """Possible values for flag_count:
+        
+        0:
+            This is the circuit used in the paper.
+        3:
+            This circuit has fault distance 4.
+            The way this was designed was as follows:
+            the unflagged version has 3 malignant fault configurations of weight 3.
+            Each flag in this circuit detects exactly one of these configurations.
+        15:
+            This circuit has fault distance 3.
+            The way this was designed was as follows:
+            once the X parity to be measured is positioned into a spanning tree,
+            we measure all but three pairwise Z parities between
+            neighboring qubits in the spanning tree.
+        18:
+            This circuit has fault distance 5.
+            The way this was designed was as follows:
+            once the X parity to be measured is positioned into a spanning tree,
+            we measure all pairwise Z parities between
+            neighboring qubits in the spanning tree.
+            The three delayed Z parity measurements are necessary for fault distance 5;
+            without them we have the 15-flag circuit of fault distance 3.
+        """
+        self.FLAG_COUNT = flag_count
+        """The number of flag qubits in the circuit."""
+        _flag_id = f'f{flag_count}' if flag_count else ''
+        circuit_name = f'd5a{self.ANCILLA_COUNT}{_flag_id}.stim'
         self.INNER_CIRCUIT = stim.Circuit.from_file(
             _STIM_FILES_DIR / 'inner_circuits' / circuit_name)
         self.DATA_INDICES = find_data_indices(inner_circuit=self.INNER_CIRCUIT)
@@ -28,13 +55,13 @@ class Distance5DoubleCheck:
         self.CIRCUIT = stim.Circuit.from_file(
             _STIM_FILES_DIR / 'full_circuits' / circuit_name)
         """The full double-check circuit."""
-        self._STABILIZER_GENERATOR_INDICES = find_stabilizer_generators(
-            circuit=self.CIRCUIT)
-        """Indices of the stabilizer generators."""
         self._initialize_operators()
 
     def _initialize_operators(self) -> None:
         """Build stabilizers and logicals at the loaded circuit width."""
+        self._STABILIZER_GENERATOR_INDICES = find_stabilizer_generators(
+            circuit=self.CIRCUIT)
+        """Indices of the stabilizer generators."""
         self.STABILIZER_GENERATORS = {basis: tuple(stim.PauliString(
             basis if index in indices else '_' for index in range(self.CIRCUIT.num_qubits) # type: ignore
         ) for indices in self._STABILIZER_GENERATOR_INDICES
@@ -52,55 +79,7 @@ class Distance5DoubleCheck:
         self.LOGICAL_S = find_logical_s_gate(circuit=self.CIRCUIT)
 
 
-class D5A19(Distance5DoubleCheck):
-    """The distance-5 double-check circuit using 19 ancillas.
-    
-    This is the circuit used in the paper.
-    """
-    ANCILLA_INDICES = tuple(sorted((21, 28, 2, 4, 6, 8, 17, 19, 35, 1, 10, 15, 33, 30, 12, 23, 25, 27, 37)))
-
-
-class D5A19F3(Distance5DoubleCheck):
-    """The distance-5 double-check circuit using 19 ancillas and 3 flags.
-
-    This circuit has fault distance 4.
-    The way this was designed was as follows:
-    the unflagged version has 3 malignant fault configurations of weight 3.
-    Each flag in this circuit detects exactly one of these configurations.
-    """
-    ANCILLA_INDICES = tuple(sorted((23, 31, 2, 5, 7, 9, 19, 21, 38, 1, 11, 17, 36, 33, 13, 25, 27, 29, 40)))
-    FLAG_INDICES = tuple(sorted((4, 30, 15)))
-
-
-class D5A19F15(Distance5DoubleCheck):
-    """The distance-5 double-check circuit using 19 ancillas and 15 flags.
-    
-    This circuit has fault distance 3.
-    The way this was designed was as follows:
-    once the X parity to be measured is positioned into a spanning tree,
-    we measure all but three pairwise Z parities between
-    neighboring qubits in the spanning tree.
-    """
-    ANCILLA_INDICES = tuple(sorted((31, 40, 3, 6, 8, 10, 23, 25, 49, 1, 15, 21, 47, 42, 17, 33, 35, 37, 52)))
-    FLAG_INDICES = tuple(sorted((2, 5, 11, 19, 27, 38, 44, 50, 39, 45, 28, 29, 30, 12, 13)))
-
-
-class D5A19F18(Distance5DoubleCheck):
-    """The distance-5 double-check circuit using 19 ancillas and 18 flags.
-    
-    This circuit has fault distance 5.
-    The way this was designed was as follows:
-    once the X parity to be measured is positioned into a spanning tree,
-    we measure all pairwise Z parities between
-    neighboring qubits in the spanning tree.
-    The three delayed Z parity measurements are necessary for fault distance 5;
-    without them we have `D5A19F15` of fault distance 3.
-    """
-    ANCILLA_INDICES = tuple(sorted((34, 43, 3, 6, 8, 10, 24, 26, 52, 1, 16, 22, 50, 45, 18, 36, 38, 40, 55)))
-    FLAG_INDICES = tuple(sorted((2, 5, 11, 20, 28, 41, 47, 53, 42, 48, 31, 32, 33, 13, 14, 12, 29, 30)))
-
-
-class D5A19Flagged(D5A19):
+class D5A19Flagged(Distance5DoubleCheck):
     """A synthesized flagged D5A19 circuit loaded from its manifest."""
 
     def __init__(self, solution_id: str = "lowest_flags"):
@@ -121,13 +100,8 @@ class D5A19Flagged(D5A19):
         self.CIRCUIT = stim.Circuit.from_file(
             generated_directory / files["full_circuit"]
         )
-        self._STABILIZER_GENERATOR_INDICES = find_stabilizer_generators(
-            circuit=self.CIRCUIT)
-        """Indices of the stabilizer generators."""
-        first_flag_index = max((*self.DATA_INDICES, *self.ANCILLA_INDICES)) + 1
-        self.FLAG_INDICES = tuple(
-            range(first_flag_index, self.INNER_CIRCUIT.num_qubits)
-        )
+        first_flag_index = len(self.DATA_INDICES) + self.ANCILLA_COUNT
+        self.FLAG_COUNT = self.INNER_CIRCUIT.num_qubits - first_flag_index
         self.SOLUTION_ID = solution_id
         self.SYNTHESIS_MANIFEST = manifest
         self._initialize_operators()
