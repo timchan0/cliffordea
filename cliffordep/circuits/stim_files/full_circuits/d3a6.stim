@@ -1,5 +1,6 @@
 # Copied from the Stim file in `make_chunk_d3_double_cat_check()`
 # in `code/src/cultiv/_construction/_cultivation_stage.py`.
+# Corrected logical S / S dagger gates.
 QUBIT_COORDS(0, 0) 0
 QUBIT_COORDS(0, 1) 1
 QUBIT_COORDS(1, 0) 2
@@ -39,7 +40,8 @@ TICK
 # CX sweep[10] 3 sweep[10] 5 sweep[10] 7 sweep[10] 10
 # CZ sweep[11] 5 sweep[11] 8 sweep[11] 10 sweep[11] 11
 # CX sweep[12] 5 sweep[12] 8 sweep[12] 10 sweep[12] 11
-S_DAG 0 3 5 7 8 10 11
+S 3 8 10
+S_DAG 0 5 7 11
 # CZ sweep[0] 0
 # CZ sweep[1] 3
 # CZ sweep[2] 5
@@ -96,7 +98,8 @@ TICK
 # CX sweep[16] 3 sweep[16] 5 sweep[16] 7 sweep[16] 10
 # CZ sweep[17] 5 sweep[17] 8 sweep[17] 10 sweep[17] 11
 # CX sweep[18] 5 sweep[18] 8 sweep[18] 10 sweep[18] 11
-S 5 10 11 8 7 3 0
+S 5 11 7 0
+S_DAG 3 8 10
 TICK
 MX 12 9 4 2 6 1
 DETECTOR(4, 1, 1) rec[-6]

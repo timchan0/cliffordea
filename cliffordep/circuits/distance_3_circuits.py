@@ -2,7 +2,7 @@ from pathlib import Path
 
 import stim
 
-from cliffordep.circuits._base import find_data_indices
+from cliffordep.circuits._base import find_data_indices, find_logical_s_gate
 
 
 _DATA_QUBIT_COUNT = 7
@@ -23,11 +23,6 @@ class Distance3DoubleCheck:
 
     _LOGICAL_INDICES = (0, 1, 3)
     """Indices of the logicals restricted to the 7 data qubits
-    in the order given by `DATA_INDICES`.
-    """
-
-    _MAJORITY_INDICES = (0, 2, 3, 6)
-    """Indices of the qubits that have S applied to them for logical S gate
     in the order given by `DATA_INDICES`.
     """
 
@@ -101,7 +96,4 @@ class Distance3DoubleCheck:
             stim.PauliString('*'.join(f'{basis}{self.DATA_INDICES[index]}' for index in self._LOGICAL_INDICES)) * logical_identity
             for basis in ('X', 'Z')
         )
-        _majority_indices_unrestricted = {self.DATA_INDICES[index] for index in self._MAJORITY_INDICES} 
-        self.LOGICAL_S: stim.Circuit = stim.Circuit()
-        self.LOGICAL_S.append('S', _majority_indices_unrestricted)
-        self.LOGICAL_S.append('S_DAG', set(self.DATA_INDICES) - _majority_indices_unrestricted)
+        self.LOGICAL_S = self.LOGICAL_S = find_logical_s_gate(circuit=self.CIRCUIT)

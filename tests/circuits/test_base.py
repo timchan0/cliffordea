@@ -63,7 +63,7 @@ def test_find_stabilizer_generators():
     (19, 3),
     (19, 18),
 ])
-def test_find_logical_s_gate(ancilla_count, flag_count):
+def test_find_logical_s_gate_distance_5(ancilla_count, flag_count):
     """Test LOGICAL_S agrees with hardcoded values."""
     circuit = circuits.Distance5DoubleCheck(flag_count=flag_count)
     _LOGICAL_S = {
@@ -87,3 +87,21 @@ S_DAG 4 15 35 17 19 39 37 51 49
         ),
     }
     assert circuit.LOGICAL_S.to_tableau() == _LOGICAL_S[ancilla_count, flag_count].to_tableau()
+
+
+@pytest.mark.parametrize("ancilla_count", range(1, 8))
+def test_find_logical_s_gate_distance_3(ancilla_count):
+    """Test LOGICAL_S agrees with hardcoded values."""
+    _MAJORITY_INDICES = (0, 2, 3, 6)
+    # Indices of the qubits that have S applied to them for logical S gate
+    # in the order given by `DATA_INDICES`.
+    circuit = circuits.Distance3DoubleCheck(ancilla_count=ancilla_count)
+    s_indices = {circuit.DATA_INDICES[index] for index in _MAJORITY_INDICES}
+    for instruction in circuit.LOGICAL_S:
+        if isinstance(instruction, stim.CircuitRepeatBlock):
+            raise NotImplementedError("LOGICAL_S should not contain repeat blocks.")
+        if instruction.name == 'S':
+            targets = {target.value for target in instruction.targets_copy()}
+            assert targets == s_indices
+        elif instruction.name != 'S_DAG':
+            raise NotImplementedError(f"LOGICAL_S should only contain S and S_DAG instructions, got {instruction.name}.")

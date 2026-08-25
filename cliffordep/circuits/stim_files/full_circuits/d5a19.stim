@@ -1,6 +1,6 @@
 # Copied from the Stim file in `make_chunk_d5_double_cat_check()`
 # in `code/src/cultiv/_construction/_cultivation_stage.py`.
-# Corrected logical S / S dagger gates
+# Corrected logical S / S dagger gates.
 QUBIT_COORDS(0, 0) 0
 QUBIT_COORDS(0, 1) 1
 QUBIT_COORDS(1, 0) 2

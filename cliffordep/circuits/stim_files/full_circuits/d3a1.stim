@@ -26,7 +26,8 @@ MPP Z7*Z5*Z3*Z6
 TICK
 RX 2
 TICK
-S_DAG 0 1 3 4 5 6 7
+S 1 5 6
+S_DAG 0 3 4 7
 TICK
 CX 2 3
 TICK
@@ -61,7 +62,8 @@ CX 3 0
 TICK
 CX 2 3
 TICK
-S 3 6 7 5 4 1 0
+S 3 7 4 0
+S_DAG 1 5 6
 TICK
 MX 2
 DETECTOR(2, 1, 1) rec[-1] rec[-2]
