@@ -86,12 +86,6 @@ class Distance3DoubleCheck:
         """Generators restricted to the 7 data qubits
         in the order given by `DATA_INDICES`.
         """
-        (self.LOGICAL_X_RESTRICTED, self.LOGICAL_Z_RESTRICTED) = tuple(
-            stim.PauliString(
-                basis if data_index in self._LOGICAL_INDICES
-                else '_' for data_index in range(_DATA_QUBIT_COUNT) # type: ignore
-            ) for basis in ('X', 'Z')
-        )
         (self.LOGICAL_X, self.LOGICAL_Z) = tuple(
             stim.PauliString('*'.join(f'{basis}{self.DATA_INDICES[index]}' for index in self._LOGICAL_INDICES)) * logical_identity
             for basis in ('X', 'Z')

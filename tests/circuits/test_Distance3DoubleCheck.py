@@ -25,7 +25,3 @@ STABILIZER_GENERATORS_RESTRICTED = {
 
 def test_stabilizer_generators_restricted(distance3_ancilla6: Distance3DoubleCheck):
     assert distance3_ancilla6.STABILIZER_GENERATORS_RESTRICTED == STABILIZER_GENERATORS_RESTRICTED
-
-def test_logicals_restricted(distance3_ancilla6: Distance3DoubleCheck):
-    assert distance3_ancilla6.LOGICAL_X_RESTRICTED == stim.PauliString('X0*X1*X3') * identity_tensor_7
-    assert distance3_ancilla6.LOGICAL_Z_RESTRICTED == stim.PauliString('Z0*Z1*Z3') * identity_tensor_7
