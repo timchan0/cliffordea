@@ -1,13 +1,11 @@
 from collections.abc import Iterable
 
 from cliffordep import circuits
-from cliffordep.circuits.distance_3_circuits import Distance3DoubleCheck
-from cliffordep.circuits.distance_5_circuits import Distance5DoubleCheck
+from cliffordep.circuits.distance_3_circuits import DoubleCheck
 
 
 Qubit = tuple[float, float]
 Support = frozenset[Qubit]
-ColorCodeLayout = Distance3DoubleCheck | Distance5DoubleCheck
 
 
 _BELL_PAIR_SUPPORTS: tuple[Support, ...] = tuple(map(frozenset, (
@@ -36,7 +34,7 @@ def _span(generators: Iterable[Support]) -> set[Support]:
 
 
 def _layout_supports(
-        layout: ColorCodeLayout,
+        layout: DoubleCheck,
 ) -> tuple[Support, dict[str, tuple[Support, ...]]]:
     """Express a colour-code layout and its checks using qubit coordinates.
 
@@ -73,10 +71,10 @@ def test_inherits_syndrome_and_logicals():
     acquire their values from the following stabilizer round.
     """
     d3_data, d3_generators = _layout_supports(
-        circuits.Distance3DoubleCheck(ancilla_count=6)
+        circuits.DoubleCheck(ancilla_count=6)
     )
     d5_data, d5_generators = _layout_supports(
-        circuits.Distance5DoubleCheck()
+        circuits.DoubleCheck(distance=5, ancilla_count=19)
     )
 
     for basis in ('X', 'Z'):

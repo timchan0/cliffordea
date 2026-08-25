@@ -58,7 +58,7 @@ class TestDistance3:
     @pytest.fixture(params=[CliffordLogicalAnalyzer, SuperpositionLogicalAnalyzer])
     def analyzer(self, request) -> LogicalAnalyzer:
         class_ = request.param
-        circuit = circuits.Distance3DoubleCheck(ancilla_count=6)
+        circuit = circuits.DoubleCheck(ancilla_count=6)
         return class_(
             data_indices=circuit.DATA_INDICES,
             stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
@@ -93,7 +93,7 @@ class TestDistance3:
 
     def test_clifford_tableau_is_encoding_circuit(self):
         """Check that the stabilizer-overlap analyzer fixes the logical X frame."""
-        circuit = circuits.Distance3DoubleCheck(ancilla_count=6)
+        circuit = circuits.DoubleCheck(ancilla_count=6)
         analyzer = CliffordLogicalAnalyzer(
             data_indices=circuit.DATA_INDICES,
             stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
@@ -148,7 +148,7 @@ class TestDistance3:
     ])
     def test_clifford_matches_pauli_sum(self, restricted: str):
         """Compare the stabilizer-overlap analyzer to the existing pauli sum analyzer."""
-        circuit = circuits.Distance3DoubleCheck(ancilla_count=6)
+        circuit = circuits.DoubleCheck(ancilla_count=6)
         clifford_analyzer = CliffordLogicalAnalyzer(
             data_indices=circuit.DATA_INDICES,
             stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
@@ -175,7 +175,7 @@ class TestDistance5:
     
     @pytest.fixture
     def analyzer(self):
-        circuit = circuits.Distance5DoubleCheck()
+        circuit = circuits.DoubleCheck(distance=5, ancilla_count=19)
         return CliffordLogicalAnalyzer(
             data_indices=circuit.DATA_INDICES,
             stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
@@ -209,7 +209,7 @@ class TestDistance5:
         "Z__________________",
     ])
     def test_z_stabilizer_precheck_matches_general_path(self, restricted: str):
-        circuit = circuits.Distance5DoubleCheck()
+        circuit = circuits.DoubleCheck(distance=5, ancilla_count=19)
         enabled_analyzer = CliffordLogicalAnalyzer(
             data_indices=circuit.DATA_INDICES,
             stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
@@ -239,7 +239,7 @@ def test_factored_transversal_matches_general_path_exhaustively(
         pure-Z stabilizer checks.
     :return: None.
     """
-    circuit = circuits.Distance3DoubleCheck(ancilla_count=6)
+    circuit = circuits.DoubleCheck(ancilla_count=6)
     analyzer_arguments = {
         'data_indices': circuit.DATA_INDICES,
         'stabilizer_generators': circuit.STABILIZER_GENERATORS_RESTRICTED,
@@ -278,7 +278,7 @@ def test_transversal_structure_cache_respects_maxsize(
     :param evicts: Whether requesting a second X support removes the first.
     :return: None.
     """
-    circuit = circuits.Distance3DoubleCheck(ancilla_count=6)
+    circuit = circuits.DoubleCheck(ancilla_count=6)
     analyzer = CliffordLogicalAnalyzer(
         data_indices=circuit.DATA_INDICES,
         stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
@@ -306,7 +306,7 @@ def test_z_variants_share_transversal_structure():
 
     :return: None.
     """
-    circuit = circuits.Distance3DoubleCheck(ancilla_count=6)
+    circuit = circuits.DoubleCheck(ancilla_count=6)
     analyzer = CliffordLogicalAnalyzer(
         data_indices=circuit.DATA_INDICES,
         stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
@@ -343,7 +343,7 @@ def test_inapplicable_factoring_uses_general_path(
         after the test.
     :return: None.
     """
-    circuit = circuits.Distance3DoubleCheck(ancilla_count=6)
+    circuit = circuits.DoubleCheck(ancilla_count=6)
     analyzer_arguments = {
         'data_indices': circuit.DATA_INDICES,
         'stabilizer_generators': circuit.STABILIZER_GENERATORS_RESTRICTED,

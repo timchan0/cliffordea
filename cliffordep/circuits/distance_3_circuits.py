@@ -8,43 +8,69 @@ from cliffordep.circuits._base import find_data_indices, find_logical_s_gate, fi
 _STIM_FILES_DIR = Path(__file__).with_name("stim_files")
 
 
-class Distance3DoubleCheck:
-    """Common constants for the distance-3 double-check circuit."""
+class DoubleCheck:
+    """The double-check circuit in magic state cultivation."""
 
-    _LOGICAL_INDICES = (0, 1, 3)
-    """Indices of the logicals restricted to the 7 data qubits
-    in the order given by `DATA_INDICES`.
-    """
-
-    def __init__(self, ancilla_count: int = 6, flag_count: int = 0):
-        """Possible values for (ancilla_count, flag_count):
+    def __init__(
+            self,
+            distance: int = 3,
+            ancilla_count: int = 6,
+            flag_count: int = 0,
+    ):
+        """Possible values for (distance, ancilla_count, flag_count):
         
-        (1, 0)
+        (3, 1, 0)
 
-        (2, 0)
+        (3, 2, 0)
 
-        (3, 0)
+        (3, 3, 0)
 
-        (4, 0)
+        (3, 4, 0)
 
-        (5, 0)
+        (3, 5, 0)
 
-        (6, 0): This is the original circuit.
+        (3, 6, 0):
+            This is the original distance-3 circuit.
+        (3, 7, 0)
 
-        (7, 0)
+        (3, 6, 2)
 
-        (6, 2)
+        (3, 6, 3)
 
-        (6, 3)
+        (3, 6, 5)
 
-        (6, 5)
+        (15, 19, 0):
+            This is the original distance-5 circuit.
+        (15, 19, 3):
+            This circuit has fault distance 4.
+            The way this was designed was as follows:
+            the unflagged version has 3 malignant fault configurations of weight 3.
+            Each flag in this circuit detects exactly one of these configurations.
+        (15, 19, 13):
+            This circuit has fault distance 5.
+            The way this was designed was as follows:
+            Start with the 18-flag circuit,
+            prune the five flags corresponding to the leaves of the spanning tree,
+            delay the X-parity folding of the three horizontal branches of the tree
+            by 1 tick (this can be done in the original circuit too),
+            then minimize the flag lifespans as much as possible.
+        (15, 19, 18):
+            This circuit has fault distance 5.
+            The way this was designed was as follows:
+            once the X parity to be measured is positioned into a spanning tree,
+            we measure all pairwise Z parities between
+            neighboring qubits in the spanning tree.
+            The three delayed Z parity measurements are necessary for fault distance 5;
+            without them the fault distance drops back down to 3.
         """
+        self.DISTANCE = distance
+        """The code distance of the circuit."""
         self.ANCILLA_COUNT = ancilla_count
         """The number of ancilla qubits in the circuit."""
         self.FLAG_COUNT = flag_count
         """The number of flag qubits in the circuit."""
         _flag_id = f'f{flag_count}' if flag_count else ''
-        circuit_name = f'd3a{self.ANCILLA_COUNT}{_flag_id}.stim'
+        circuit_name = f'd{distance}a{ancilla_count}{_flag_id}.stim'
         self.INNER_CIRCUIT = stim.Circuit.from_file(
             _STIM_FILES_DIR / 'inner_circuits' / circuit_name)
         """The double-check circuit _within_ the two layers of T gates:
@@ -65,7 +91,6 @@ class Distance3DoubleCheck:
         self.CIRCUIT = stim.Circuit.from_file(
             _STIM_FILES_DIR / 'full_circuits' / circuit_name)
         """The full double-check circuit."""
-        logical_identity = stim.PauliString(self.INNER_CIRCUIT.num_qubits)
         self._STABILIZER_GENERATOR_INDICES = find_stabilizer_generators(
                     circuit=self.CIRCUIT)
         """Indices of the stabilizer generators."""
@@ -81,7 +106,9 @@ class Distance3DoubleCheck:
         in the order given by `DATA_INDICES`.
         """
         (self.LOGICAL_X, self.LOGICAL_Z) = tuple(
-            stim.PauliString('*'.join(f'{basis}{self.DATA_INDICES[index]}' for index in self._LOGICAL_INDICES)) * logical_identity
+            stim.PauliString(
+                basis if index in self.DATA_INDICES
+                else '_' for index in range(self.INNER_CIRCUIT.num_qubits)) # type: ignore
             for basis in ('X', 'Z')
         )
-        self.LOGICAL_S = self.LOGICAL_S = find_logical_s_gate(circuit=self.CIRCUIT)
+        self.LOGICAL_S = find_logical_s_gate(circuit=self.CIRCUIT)

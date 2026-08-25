@@ -31,7 +31,7 @@ class TestD3DoubleCatCheck():
 
     def test_undetected_pairs(self, d3_double_cat_check_fault_source_combinator: FaultCombinatorExclusive):
         """Test that undetected pairs commute with the flag measurements at the end of `d3_double_cat_check`."""
-        d3a6 = cliffordep.circuits.Distance3DoubleCheck(ancilla_count=6)
+        d3a6 = cliffordep.circuits.DoubleCheck(ancilla_count=6)
         d3a6_ancilla_indices = {q for q in range(d3a6.INNER_CIRCUIT.num_qubits) if q not in d3a6.DATA_INDICES}
         for _, resultant_paulis in d3_double_cat_check_fault_source_combinator.items():
             pairs = itertools.combinations(resultant_paulis.items(), 2)
