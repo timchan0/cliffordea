@@ -1,6 +1,5 @@
 from pathlib import Path
 import json
-from typing import Literal
 
 import stim
 
@@ -10,16 +9,13 @@ from cliffordep.circuits._base import find_data_indices, find_stabilizer_generat
 _STIM_FILES_DIR = Path(__file__).with_name("stim_files")
 
 
-FlagCount = Literal[0, 3, 15, 18]
-
-
 class Distance5DoubleCheck:
     """Common constants for the distance-5 double-check circuit using 19 ancillas."""
 
     ANCILLA_COUNT: int = 19
     """The indices of the ancilla qubits."""
 
-    def __init__(self, flag_count: Literal[0, 3, 15, 18] = 0):
+    def __init__(self, flag_count: int = 0):
         """Possible values for flag_count:
         
         0:
@@ -29,12 +25,14 @@ class Distance5DoubleCheck:
             The way this was designed was as follows:
             the unflagged version has 3 malignant fault configurations of weight 3.
             Each flag in this circuit detects exactly one of these configurations.
-        15:
-            This circuit has fault distance 3.
+        13:
+            This circuit has fault distance 5.
             The way this was designed was as follows:
-            once the X parity to be measured is positioned into a spanning tree,
-            we measure all but three pairwise Z parities between
-            neighboring qubits in the spanning tree.
+            Start with the 18-flag circuit,
+            prune the five flags corresponding to the leaves of the spanning tree,
+            delay the X-parity folding of the three horizontal branches of the tree
+            by 1 tick (this can be done in the original circuit too),
+            then minimize the flag lifespans as much as possible.
         18:
             This circuit has fault distance 5.
             The way this was designed was as follows:
@@ -42,7 +40,7 @@ class Distance5DoubleCheck:
             we measure all pairwise Z parities between
             neighboring qubits in the spanning tree.
             The three delayed Z parity measurements are necessary for fault distance 5;
-            without them we have the 15-flag circuit of fault distance 3.
+            without them the fault distance drops back down to 3.
         """
         self.FLAG_COUNT = flag_count
         """The number of flag qubits in the circuit."""
