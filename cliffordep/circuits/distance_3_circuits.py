@@ -2,24 +2,14 @@ from pathlib import Path
 
 import stim
 
-from cliffordep.circuits._base import find_data_indices, find_logical_s_gate
+from cliffordep.circuits._base import find_data_indices, find_logical_s_gate, find_stabilizer_generators
 
 
-_DATA_QUBIT_COUNT = 7
 _STIM_FILES_DIR = Path(__file__).with_name("stim_files")
 
 
 class Distance3DoubleCheck:
     """Common constants for the distance-3 double-check circuit."""
-
-    _STABILIZER_GENERATOR_INDICES = (
-        (0, 1, 2, 4),
-        (1, 2, 3, 5),
-        (2, 4, 5, 6),
-    )
-    """Indices of the stabilizer generators restricted to the 7 data qubits
-    in the order given by `DATA_INDICES`.
-    """
 
     _LOGICAL_INDICES = (0, 1, 3)
     """Indices of the logicals restricted to the 7 data qubits
@@ -76,13 +66,17 @@ class Distance3DoubleCheck:
             _STIM_FILES_DIR / 'full_circuits' / circuit_name)
         """The full double-check circuit."""
         logical_identity = stim.PauliString(self.INNER_CIRCUIT.num_qubits)
+        self._STABILIZER_GENERATOR_INDICES = find_stabilizer_generators(
+                    circuit=self.CIRCUIT)
+        """Indices of the stabilizer generators."""
         self.STABILIZER_GENERATORS = {basis: tuple(stim.PauliString(
-            '*'.join(f'{basis}{self.DATA_INDICES[index]}' for index in indices)
-        ) * logical_identity for indices in self._STABILIZER_GENERATOR_INDICES) for basis in ('X', 'Z')}
+            basis if index in indices else '_' for index in range(self.CIRCUIT.num_qubits) # type: ignore
+        ) for indices in self._STABILIZER_GENERATOR_INDICES
+        ) for basis in ('X', 'Z')}
         self.STABILIZER_GENERATORS_RESTRICTED = {basis: tuple(stim.PauliString(
-            basis if data_index in indices
-            else '_' for data_index in range(_DATA_QUBIT_COUNT) # type: ignore
-        ) for indices in self._STABILIZER_GENERATOR_INDICES) for basis in ('X', 'Z')}
+            basis if index in indices else '_' for index in self.DATA_INDICES # type: ignore
+        ) for indices in self._STABILIZER_GENERATOR_INDICES
+        ) for basis in ('X', 'Z')}
         """Generators restricted to the 7 data qubits
         in the order given by `DATA_INDICES`.
         """

@@ -43,11 +43,17 @@ def test_find_stabilizer_generators():
 
     all_circuits: dict[
         tuple[int, int],
-        circuits.Distance5DoubleCheck,
+        circuits.Distance3DoubleCheck | circuits.Distance5DoubleCheck,
     ] = {
+        (6, 0): circuits.Distance3DoubleCheck(ancilla_count=6),
         (19, 0): circuits.Distance5DoubleCheck(),
     }
     _STABILIZER_GENERATORS = {
+        (6, 0): {
+            (0, 3, 5, 8),
+            (3, 5, 7, 10),
+            (5, 8, 10, 11),
+        },
         (19, 0): {tuple(sorted(indices)) for indices in [
             (0, 9, 5, 3), (14, 32, 29, 22), (11, 16, 24, 18, 13, 7),
             (22, 29, 34, 31, 24, 16), (3, 5, 11, 7), (13, 18, 26, 20),
