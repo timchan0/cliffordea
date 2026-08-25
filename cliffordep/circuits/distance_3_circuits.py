@@ -44,7 +44,7 @@ class Distance3DoubleCheck:
 
         (5, 0)
 
-        (6, 0): This is the circuit used in the paper.
+        (6, 0): This is the original circuit.
 
         (7, 0)
 

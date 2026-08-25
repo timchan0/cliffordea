@@ -23,7 +23,7 @@ class Distance5DoubleCheck:
         """Possible values for flag_count:
         
         0:
-            This is the circuit used in the paper.
+            This is the original circuit.
         3:
             This circuit has fault distance 4.
             The way this was designed was as follows:
