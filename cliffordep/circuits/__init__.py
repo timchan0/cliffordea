@@ -1,1 +1,1 @@
-from cliffordep.circuits.distance_3_circuits import *
+from cliffordep.circuits.main import *
