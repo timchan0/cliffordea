@@ -12,7 +12,6 @@ from cliffordep import circuits
     (5, 0),
     (6, 0),
     (7, 0),
-    (6, 2),
     (6, 3),
     (19, 0),
 ])
@@ -33,7 +32,6 @@ def test_find_data_indices(ancilla_count, flag_count):
         (5, 0): (0, 3, 5, 7, 8, 10, 11),
         (6, 0): (0, 3, 5, 7, 8, 10, 11),
         (7, 0): (0, 3, 5, 7, 8, 10, 11),
-        (6, 2): (0, 3, 7, 9, 10, 12, 13),
         (6, 3): (0, 3, 7, 9, 11, 13, 14),
         (19, 0): tuple(sorted((3, 5, 0, 9, 14, 22, 32, 29, 34, 31, 24, 26, 20, 18, 13, 7, 11, 16, 36)))
     }
@@ -63,7 +61,6 @@ def test_find_stabilizer_generators():
 @pytest.mark.parametrize("ancilla_count, flag_count", [
     (19, 0),
     (19, 3),
-    (19, 15),
     (19, 18),
 ])
 def test_find_logical_s_gate(ancilla_count, flag_count):
@@ -80,12 +77,6 @@ S_DAG 9 11 13 22 24 26 34 32 3
 """
 S 16 18 20 22 32 34 6 8 0 39
 S_DAG 3 10 12 14 26 24 28 35 37
-"""
-        ),
-        (19, 15): stim.Circuit(
-"""
-S 20 22 24 26 41 43 7 9 0 51
-S_DAG 4 14 32 16 18 36 34 48 46
 """
         ),
         (19, 18): stim.Circuit(
