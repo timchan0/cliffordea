@@ -41,4 +41,4 @@ DETECTOR(2, 1, 1) rec[-3] rec[-5]
 DETECTOR(1, 0, 1) rec[-2]
 DETECTOR(2, 2, 1) rec[-1]
 TICK
-RX 8 3 1 5
+R 8 3 1 5

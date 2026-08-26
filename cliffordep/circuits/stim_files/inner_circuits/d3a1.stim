@@ -47,4 +47,4 @@ TICK
 MX 2
 DETECTOR(2, 1, 1) rec[-1] rec[-2]
 TICK
-RX 2
+R 2

@@ -52,7 +52,6 @@ DETECTOR(1.5, 0.5, 1) rec[-2]
 DETECTOR(2.5, 0.5, 1) rec[-1]
 TICK
 MX 14 11 5 2 7 1
-R 4 9
 DETECTOR(4, 1, 2) rec[-6]
 DETECTOR(3, 1, 2) rec[-5]
 DETECTOR(2, 1, 2) rec[-4] rec[-9]
@@ -60,4 +59,4 @@ DETECTOR(1, 0, 2) rec[-3]
 DETECTOR(2, 2, 2) rec[-2]
 DETECTOR(0, 1, 2) rec[-1]
 TICK
-RX 1 2 5 7 11 14
+R 4 9 1 2 5 11 14 7
