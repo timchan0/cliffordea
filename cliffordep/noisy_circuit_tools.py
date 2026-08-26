@@ -4,6 +4,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import cached_property
+import re
 from typing import cast
 
 import numpy as np
@@ -37,6 +38,45 @@ GeneratorResponses = tuple[
     tuple[ResponseMask, ...],
 ]
 """X-generator responses followed by Z-generator responses."""
+
+
+def swap_t_and_s_gates(circuit: str) -> str:
+    """Swap T and S instructions in a circuit string.
+
+    :param circuit: A SymFT/Clifft circuit using T and/or S instructions.
+    :return swapped_circuit: The circuit with ``T``/``T_DAG`` and
+        ``S``/``S_DAG`` exchanged simultaneously.
+    """
+    gate_swaps = {
+        'T': 'S',
+        'T_DAG': 'S_DAG',
+        'S': 'T',
+        'S_DAG': 'T_DAG',
+    }
+    gate_pattern = re.compile(
+        r'(?m)^([ \t]*)(T_DAG|S_DAG|T|S)(?=[ \t\r\n]|$)'
+    )
+    return gate_pattern.sub(
+        lambda match: f'{match[1]}{gate_swaps[match[2]]}',
+        circuit,
+    )
+
+
+def replace_noise_level(
+        circuit: str,
+        old_noise_level: float,
+        new_noise_level: float,
+) -> str:
+    """Replace a hardcoded noise level in a circuit string.
+
+    :param circuit: A SymFT/Clifft circuit containing ``old_noise_level``.
+    :param old_noise_level: The noise level encoded in the input circuit.
+    :param new_noise_level: The noise level to encode in the output circuit.
+    :return updated_circuit: The circuit with every textual occurrence of the
+        old noise level replaced by the new noise level.
+    """
+    return circuit.replace(str(old_noise_level), str(new_noise_level))
+
 
 @dataclass(frozen=True, slots=True)
 class _ReversePropagationData:
