@@ -46,6 +46,19 @@ def add_noise_levels_argument(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_cuda_argument(parser: argparse.ArgumentParser) -> None:
+    """Add opt-in CUDA sampling to one sampling subcommand.
+
+    :param parser: Subcommand parser receiving the CUDA option.
+    :return: None.
+    """
+    parser.add_argument(
+        "--cuda",
+        action="store_true",
+        help="use SymFT's CUDA counts backend (requires an allocated NVIDIA GPU)",
+    )
+
+
 def resolve_circuit_name(reference: Path, circuit_name: str | None) -> str:
     """Choose an explicit circuit name or derive it from the filename.
 
@@ -76,6 +89,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="sample a tiny non-persisted T/S check at p=0.001 via Sinter",
     )
     add_reference_arguments(smoke)
+    add_cuda_argument(smoke)
     smoke.add_argument("--shots", type=int, default=DEFAULT_SMOKE_SHOTS)
 
     run = subparsers.add_parser(
@@ -84,6 +98,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_reference_arguments(run)
     add_noise_levels_argument(run)
+    add_cuda_argument(run)
     run.add_argument("--stats", type=Path, required=True)
     run.add_argument("--target-errors", type=int, default=DEFAULT_TARGET_ERRORS)
     run.add_argument("--max-shots", type=int, default=DEFAULT_MAX_SHOTS)
@@ -115,6 +130,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.reference,
             args.shots,
             circuit_name,
+            cuda=args.cuda,
         )
         return 0
 
@@ -127,6 +143,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         call_shots=args.chunk_shots,
         print_progress=True,
         noise_levels=args.noise_levels,
+        cuda=args.cuda,
     )
     return 0
 

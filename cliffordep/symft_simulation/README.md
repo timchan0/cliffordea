@@ -25,7 +25,8 @@ conda run --no-capture-output -n cliffordep \
 ```
 
 No additional installation is required when `symft`, `stim`, `sinter`,
-`cliffordep`, Matplotlib, and pytest are already available.
+`cliffordep`, Matplotlib, and pytest are already available. To use ARC H100
+jobs, install CUDA-enabled SymFT and pass `--cuda` to `smoke` or `run`.
 
 ## Validation and smoke sampling
 
@@ -66,20 +67,37 @@ conda run --no-capture-output -n cliffordep \
 
 Smoke sampling remains a fixed quick check of both variants at `p=0.001`.
 
-The SymFT adapter checks that accepted plus discarded equals attempted shots
-and that the requested CPU threads are active.
+The SymFT adapter checks that accepted plus discarded equals attempted shots.
+It also verifies eight active CPU workers for the CPU backend, or the one host
+worker reported by SymFT's CUDA backend.
 
 ## Production sampling and resume
 
-The production command uses one Sinter worker because its SymFT sampler already
-uses all eight CPU threads. It stops each task after 100 logical errors or
-1,000,000,000 attempted shots and limits each persisted SymFT call to
-10,000,000 shots:
+The production command uses one Sinter worker because each task owns its
+SymFT sampler. It stops each task after 100 logical errors or 1,000,000,000
+attempted shots and limits each persisted SymFT call to 10,000,000 shots:
 
 ```bash
 caffeinate -i conda run --no-capture-output -n cliffordep \
     python -m cliffordep.symft_simulation.run_simulation run \
     --stats /Users/timchan0/Documents/PhD/Code/Python/cliffordep/Chan2026/results/stats.csv
+```
+
+## CUDA on ARC
+
+After installing CUDA-enabled SymFT and requesting an NVIDIA GPU in an ARC HTC
+job, add `--cuda` to select the GPU backend. First run the GPU smoke check:
+
+```bash
+python -m cliffordep.symft_simulation.run_simulation smoke --cuda
+```
+
+Then run production sampling with a separate CUDA dataset identity:
+
+```bash
+python -m cliffordep.symft_simulation.run_simulation run \
+    --cuda \
+    --stats /path/to/cuda-stats.csv
 ```
 
 The limits remain configurable:

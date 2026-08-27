@@ -27,6 +27,7 @@ from cliffordep.symft_simulation.msc_framework import (
     inspect_circuit,
     make_variant_text,
     next_stream_ids,
+    sampler_settings,
     sha256_text,
     smoke_sample,
     validate_all_variants,
@@ -320,6 +321,29 @@ OBSERVABLE_INCLUDE(1) rec[-1]
         inspect_circuit(circuit_text)
 
 
+def test_cuda_tasks_have_distinct_sampler_metadata() -> None:
+    """CUDA is opt-in and creates task IDs distinct from CPU sampling."""
+    source_text = REFERENCE_PATH.read_text(encoding="utf-8")
+
+    cpu_task = build_tasks(source_text)[0]
+    cuda_task = build_tasks(source_text, cuda=True)[0]
+
+    assert cpu_task.strong_id() != cuda_task.strong_id()
+    assert sampler_settings() == cpu_task.json_metadata["sampler"]
+    assert cuda_task.json_metadata["sampler"] == {
+        "batch": True,
+        "observable": 0,
+        "postselect_detectors": True,
+        "threads": 1,
+        "batch_size": 0,
+        "sample_chunk_shots": 0,
+        "cuda": True,
+        "cuda_mode": "gpu",
+        "shots_per_launch": 0,
+        "threads_per_block": 0,
+    }
+
+
 def test_circuit_names_separate_otherwise_identical_sinter_tasks() -> None:
     """Human-readable circuit names participate in Sinter strong IDs."""
     source_text = REFERENCE_PATH.read_text(encoding="utf-8")
@@ -343,7 +367,11 @@ def test_compiled_adapter_maps_counts_caps_calls_and_advances_streams() -> None:
     fake = FakeSymftCountsSampler()
     adapter = CompiledSymftSinterSampler(
         sampler=fake,
-        sampler_info={"threads": 8, "sample_chunk_shots": 2},
+        sampler_info={
+            "backend": "batch",
+            "threads": 8,
+            "sample_chunk_shots": 2,
+        },
         call_shots=10,
         stream_sequence=_StreamSequence(7),
     )
@@ -365,12 +393,51 @@ def test_compiled_adapter_rejects_a_thread_count_mismatch() -> None:
     """A SymFT result using fewer threads than expected stops collection."""
     adapter = CompiledSymftSinterSampler(
         sampler=FakeSymftCountsSampler(active_threads=4),
-        sampler_info={"threads": 8, "sample_chunk_shots": 2},
+        sampler_info={
+            "backend": "batch",
+            "threads": 8,
+            "sample_chunk_shots": 2,
+        },
         call_shots=10,
         stream_sequence=_StreamSequence(0),
     )
 
     with pytest.raises(RuntimeError, match="used 4 threads; expected 5"):
+        adapter.sample(10)
+
+
+def test_compiled_adapter_accepts_cuda_single_host_worker() -> None:
+    """CUDA results report one host worker regardless of requested shot count."""
+    adapter = CompiledSymftSinterSampler(
+        sampler=FakeSymftCountsSampler(active_threads=1),
+        sampler_info={
+            "backend": "cuda",
+            "threads": 1,
+            "sample_chunk_shots": 1_048_576,
+        },
+        call_shots=10,
+        stream_sequence=_StreamSequence(0),
+    )
+
+    stat = adapter.sample(10)
+
+    assert stat.custom_counts[f"{ACTIVE_THREADS_PREFIX}1"] == 1
+
+
+def test_compiled_adapter_rejects_cuda_host_worker_mismatch() -> None:
+    """CUDA collection stops if SymFT does not report its one host worker."""
+    adapter = CompiledSymftSinterSampler(
+        sampler=FakeSymftCountsSampler(active_threads=2),
+        sampler_info={
+            "backend": "cuda",
+            "threads": 1,
+            "sample_chunk_shots": 1_048_576,
+        },
+        call_shots=10,
+        stream_sequence=_StreamSequence(0),
+    )
+
+    with pytest.raises(RuntimeError, match="used 2 threads; expected 1"):
         adapter.sample(10)
 
 
@@ -381,13 +448,21 @@ def test_recompiled_adapters_share_the_task_stream_sequence() -> None:
     second_fake = FakeSymftCountsSampler()
     first = CompiledSymftSinterSampler(
         sampler=first_fake,
-        sampler_info={"threads": 8, "sample_chunk_shots": 2},
+        sampler_info={
+            "backend": "batch",
+            "threads": 8,
+            "sample_chunk_shots": 2,
+        },
         call_shots=10,
         stream_sequence=sequence,
     )
     second = CompiledSymftSinterSampler(
         sampler=second_fake,
-        sampler_info={"threads": 8, "sample_chunk_shots": 2},
+        sampler_info={
+            "backend": "batch",
+            "threads": 8,
+            "sample_chunk_shots": 2,
+        },
         call_shots=10,
         stream_sequence=sequence,
     )
@@ -637,6 +712,7 @@ def test_cli_defaults_and_overrides_reference_identity(tmp_path: Path) -> None:
             "--noise-levels",
             "0.001",
             "0.004",
+            "--cuda",
         ]
     )
 
@@ -656,6 +732,8 @@ def test_cli_defaults_and_overrides_reference_identity(tmp_path: Path) -> None:
     ) == "other-reference"
     assert run_args.stats == stats_path
     assert run_args.noise_levels == [0.001, 0.004]
+    assert smoke_args.cuda is False
+    assert run_args.cuda is True
 
 
 def test_run_requires_a_stats_path() -> None:

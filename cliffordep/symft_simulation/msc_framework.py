@@ -36,7 +36,11 @@ SINTER_WORKERS = 1
 THREADS = 8
 BATCH_SIZE = 1024
 SAMPLE_CHUNK_SHOTS = 0
-CUDA = False
+# CPU is the portable default; ``--cuda`` selects GPU sampling per invocation.
+DEFAULT_CUDA = False
+CUDA_MODE = "gpu"
+CUDA_SHOTS_PER_LAUNCH = 0
+CUDA_THREADS_PER_BLOCK = 0
 
 DEFAULT_TARGET_ERRORS = 100
 DEFAULT_MAX_SHOTS = 1_000_000_000
@@ -101,20 +105,30 @@ def inspect_circuit(circuit_text: str) -> dict[str, int]:
     return metadata
 
 
-def sampler_settings() -> dict[str, Any]:
+def sampler_settings(cuda: bool = DEFAULT_CUDA) -> dict[str, Any]:
     """Return the compatibility-sensitive SymFT sampler configuration.
 
     :return: JSON-serializable settings included in every Sinter task ID.
     """
-    return {
+    settings = {
         "batch": True,
         "observable": 0,
         "postselect_detectors": True,
-        "threads": THREADS,
-        "batch_size": BATCH_SIZE,
+        # CUDA is launched by one host worker and chooses its own batch size.
+        "threads": 1 if cuda else THREADS,
+        "batch_size": 0 if cuda else BATCH_SIZE,
         "sample_chunk_shots": SAMPLE_CHUNK_SHOTS,
-        "cuda": CUDA,
+        "cuda": cuda,
     }
+    if cuda:
+        settings.update(
+            {
+                "cuda_mode": CUDA_MODE,
+                "shots_per_launch": CUDA_SHOTS_PER_LAUNCH,
+                "threads_per_block": CUDA_THREADS_PER_BLOCK,
+            }
+        )
+    return settings
 
 
 def task_metadata(
@@ -122,6 +136,7 @@ def task_metadata(
     noise_level: float,
     variant: str,
     circuit_name: str,
+    cuda: bool = DEFAULT_CUDA,
 ) -> dict[str, Any]:
     """Build the metadata that identifies one sampled SymFT distribution.
 
@@ -129,6 +144,7 @@ def task_metadata(
     :param noise_level: Physical noise strength of the circuit.
     :param variant: State variant, either ``"S"`` or ``"T"``.
     :param circuit_name: Human-readable reference-circuit identifier.
+    :param cuda: Whether this task uses SymFT's CUDA counts backend.
     :return: JSON-compatible metadata used by Sinter's strong task ID.
     """
     return {
@@ -140,7 +156,7 @@ def task_metadata(
         "variant": variant,
         "circuit_name": circuit_name,
         "circuit_sha256": sha256_text(circuit_text),
-        "sampler": sampler_settings(),
+        "sampler": sampler_settings(cuda),
     }
 
 
@@ -183,6 +199,7 @@ def build_tasks(
     reference_text: str,
     circuit_name: str = DEFAULT_CIRCUIT_NAME,
     noise_levels: Sequence[float] = DEFAULT_NOISE_LEVELS,
+    cuda: bool = DEFAULT_CUDA,
 ) -> list[sinter.Task]:
     """Build Sinter tasks for every requested noise level and variant.
 
@@ -192,6 +209,7 @@ def build_tasks(
     :param reference_text: Authoritative S-state circuit at noise 0.001.
     :param circuit_name: Human-readable reference-circuit identifier.
     :param noise_levels: Physical noise strengths to sample.
+    :param cuda: Whether tasks identify CUDA-backed SymFT sampling.
     :return: Tasks ordered from high to low noise, T before S.
     """
     tasks = []
@@ -217,6 +235,7 @@ def build_tasks(
                         noise_level,
                         variant,
                         circuit_name,
+                        cuda,
                     ),
                 )
             )
@@ -352,22 +371,26 @@ def next_stream_ids(
     return result
 
 
-def compile_counts_sampler(circuit_text: str) -> tuple[Any, dict[str, Any]]:
+def compile_counts_sampler(
+    circuit_text: str,
+    cuda: bool = DEFAULT_CUDA,
+) -> tuple[Any, dict[str, Any]]:
     """Compile and verify one high-throughput SymFT counts sampler.
 
     :param circuit_text: Actual S or T circuit to sample.
+    :param cuda: Whether to compile SymFT's CUDA counts backend.
     :return: Compiled SymFT counts sampler.
     :return: Normalized SymFT sampler information.
     :raises RuntimeError: If SymFT does not honor the locked configuration.
     """
     inspect_circuit(circuit_text)
     circuit = symft.Circuit(circuit_text)
-    sampler = circuit.compile_counts_sampler(**sampler_settings())
+    sampler = circuit.compile_counts_sampler(**sampler_settings(cuda))
     info = dict(sampler.info)
     expected = {
-        "backend": "batch",
-        "threads": THREADS,
-        "batch_size": BATCH_SIZE,
+        "backend": "cuda" if cuda else "batch",
+        "threads": 1 if cuda else THREADS,
+        "batch_size": 0 if cuda else BATCH_SIZE,
         "detector_postselection": True,
         "observable": 0,
     }
@@ -461,11 +484,14 @@ class CompiledSymftSinterSampler(sinter.CompiledSampler):
         if logical_errors > accepted:
             raise RuntimeError("SymFT logical-error count exceeds accepted shots")
 
-        sample_chunk_shots = int(self.sampler_info["sample_chunk_shots"])
-        expected_active_threads = min(
-            int(self.sampler_info["threads"]),
-            math.ceil(returned_shots / sample_chunk_shots),
-        )
+        if self.sampler_info["backend"] == "cuda":
+            expected_active_threads = 1
+        else:
+            sample_chunk_shots = int(self.sampler_info["sample_chunk_shots"])
+            expected_active_threads = min(
+                int(self.sampler_info["threads"]),
+                math.ceil(returned_shots / sample_chunk_shots),
+            )
         if active_threads != expected_active_threads:
             raise RuntimeError(
                 f"SymFT used {active_threads} threads; expected "
@@ -495,6 +521,7 @@ class SymftSinterSampler(sinter.Sampler):
         reference_text: str,
         call_shots: int,
         initial_stream_ids: Mapping[str, int],
+        cuda: bool = DEFAULT_CUDA,
     ) -> None:
         """Initialize the factory shared with Sinter's worker process.
 
@@ -502,10 +529,12 @@ class SymftSinterSampler(sinter.Sampler):
         :param reference_text: Authoritative S-state circuit text.
         :param call_shots: Maximum attempted shots per SymFT call.
         :param initial_stream_ids: First unused stream for each strong task ID.
+        :param cuda: Whether to compile SymFT's CUDA counts backend.
         :return: None.
         """
         self.reference_text = reference_text
         self.call_shots = call_shots
+        self.cuda = cuda
         self.stream_sequences = {
             strong_id: _StreamSequence(next_stream_id)
             for strong_id, next_stream_id in initial_stream_ids.items()
@@ -530,7 +559,7 @@ class SymftSinterSampler(sinter.Sampler):
         )
         if sha256_text(circuit_text) != metadata["circuit_sha256"]:
             raise RuntimeError("Sinter task circuit hash does not match SymFT input")
-        sampler, info = compile_counts_sampler(circuit_text)
+        sampler, info = compile_counts_sampler(circuit_text, cuda=self.cuda)
         return CompiledSymftSinterSampler(
             sampler=sampler,
             sampler_info=info,
@@ -549,6 +578,7 @@ def collect_stats(
     call_shots: int,
     print_progress: bool,
     noise_levels: Sequence[float] = DEFAULT_NOISE_LEVELS,
+    cuda: bool = DEFAULT_CUDA,
 ) -> list[sinter.TaskStats]:
     """Collect or resume all S/T points through Sinter.
 
@@ -560,17 +590,19 @@ def collect_stats(
     :param call_shots: Maximum attempted shots per SymFT call.
     :param print_progress: Whether Sinter should print progress to stderr.
     :param noise_levels: Physical noise strengths to collect.
+    :param cuda: Whether to run the CUDA counts backend.
     :return: Aggregated statistics for the current requested tasks.
     """
     reference_text = reference_path.read_text(encoding="utf-8")
     validate_all_variants(reference_text, noise_levels)
-    tasks = build_tasks(reference_text, circuit_name, noise_levels)
+    tasks = build_tasks(reference_text, circuit_name, noise_levels, cuda)
     stats_path.parent.mkdir(parents=True, exist_ok=True)
     existing_stats = read_sinter_stats(stats_path)
     resume_tasks = build_tasks(
         reference_text,
         circuit_name,
         _resume_noise_levels(existing_stats, circuit_name, noise_levels),
+        cuda,
     )
     validate_resume_stats(existing_stats, resume_tasks)
     initial_stream_ids = next_stream_ids(existing_stats, tasks)
@@ -578,6 +610,7 @@ def collect_stats(
         reference_text=reference_text,
         call_shots=call_shots,
         initial_stream_ids=initial_stream_ids,
+        cuda=cuda,
     )
     collected = sinter.collect(
         num_workers=SINTER_WORKERS,
@@ -596,24 +629,27 @@ def smoke_sample(
     reference_path: Path,
     shots: int,
     circuit_name: str = DEFAULT_CIRCUIT_NAME,
+    cuda: bool = DEFAULT_CUDA,
 ) -> None:
     """Run a small non-persisted Sinter collection at noise 0.001.
 
     :param reference_path: Authoritative S-state reference circuit.
     :param shots: Attempted shots for each state variant.
     :param circuit_name: Human-readable reference-circuit identifier.
+    :param cuda: Whether to run the CUDA counts backend.
     :return: None.
     """
     reference_text = reference_path.read_text(encoding="utf-8")
     tasks = [
         task
-        for task in build_tasks(reference_text, circuit_name)
+        for task in build_tasks(reference_text, circuit_name, cuda=cuda)
         if float(task.json_metadata["noise_level"]) == REFERENCE_NOISE_LEVEL
     ]
     sampler = SymftSinterSampler(
         reference_text=reference_text,
         call_shots=shots,
         initial_stream_ids={task.strong_id(): 0 for task in tasks},
+        cuda=cuda,
     )
     sinter.collect(
         num_workers=SINTER_WORKERS,
