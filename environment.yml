@@ -18,3 +18,4 @@ dependencies:
       - ldpc
       - pymatching
       - stim
+      - symft

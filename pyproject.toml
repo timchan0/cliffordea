@@ -15,7 +15,8 @@ dependencies = [
     "ldpc",
     "pymatching",
     "stim",
-    "tqdm"
+    "tqdm",
+    "symft",
 ]
 requires-python = ">=3.10"
 
