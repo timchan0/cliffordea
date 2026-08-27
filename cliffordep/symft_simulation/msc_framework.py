@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import collections
 import hashlib
+import json
 import math
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
@@ -52,6 +53,118 @@ TASK_SCHEMA_VERSION = 2
 STATS_FILENAME = "stats.csv"
 STREAM_COUNT_PREFIX = "stream_id="
 ACTIVE_THREADS_PREFIX = "active_threads="
+PLOT_ONLY_AGGREGATE_KEY = "plot_only_aggregate"
+PLOT_PROVENANCE_KEY = "plot_provenance"
+
+
+def _plot_physical_metadata(stat: sinter.TaskStats) -> dict[str, Any]:
+    """Extract metadata that defines a physical plotting data point.
+
+    :param stat: Raw Sinter statistic to normalize for plotting.
+    :return: Canonical metadata excluding simulator-build and runtime settings.
+    :raises RuntimeError: If the statistic lacks required cultivation metadata.
+    """
+    metadata = stat.json_metadata
+    if not isinstance(metadata, dict):
+        raise RuntimeError("plot aggregation requires dictionary JSON metadata")
+    sampler = metadata.get("sampler")
+    if not isinstance(sampler, dict):
+        raise RuntimeError("plot aggregation requires sampler JSON metadata")
+    try:
+        return {
+            "schema_version": metadata["schema_version"],
+            "experiment": metadata["experiment"],
+            "simulator": metadata["simulator"],
+            "circuit_name": metadata["circuit_name"],
+            "circuit_sha256": metadata["circuit_sha256"],
+            "noise_level": metadata["noise_level"],
+            "variant": metadata["variant"],
+            "sampler": {
+                "batch": sampler["batch"],
+                "observable": sampler["observable"],
+                "postselect_detectors": sampler["postselect_detectors"],
+            },
+        }
+    except KeyError as error:
+        raise RuntimeError(
+            f"plot aggregation metadata is missing {error.args[0]!r}"
+        ) from error
+
+
+def aggregate_stats_for_plot(
+    stats: Iterable[sinter.TaskStats],
+) -> list[sinter.TaskStats]:
+    """Pool raw CPU/CUDA counts into plotting-only physical data points.
+
+    This intentionally ignores SymFT version and runtime sampler settings while
+    retaining them in ``plot_provenance``. Its return value must never be used
+    as a Sinter resume file.
+
+    :param stats: Raw version- and backend-specific Sinter statistics.
+    :return: Deterministically ordered plotting-only pooled statistics.
+    :raises RuntimeError: If a source statistic lacks required metadata.
+    """
+    grouped: dict[str, list[sinter.TaskStats]] = collections.defaultdict(list)
+    group_metadata: dict[str, dict[str, Any]] = {}
+    for stat in stats:
+        metadata = _plot_physical_metadata(stat)
+        identity = {"decoder": stat.decoder, "metadata": metadata}
+        key = json.dumps(identity, sort_keys=True, separators=(",", ":"))
+        grouped[key].append(stat)
+        group_metadata[key] = metadata
+
+    aggregated = []
+    for key in sorted(grouped):
+        members = grouped[key]
+        versions = sorted(
+            {
+                str(member.json_metadata.get("symft_version", "<unspecified>"))
+                for member in members
+            }
+        )
+        sampler_configurations = sorted(
+            {
+                json.dumps(
+                    member.json_metadata["sampler"],
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                for member in members
+            }
+        )
+        metadata = {
+            **group_metadata[key],
+            PLOT_ONLY_AGGREGATE_KEY: True,
+            PLOT_PROVENANCE_KEY: {
+                "symft_versions": versions,
+                "sampler_configurations": [
+                    json.loads(configuration)
+                    for configuration in sampler_configurations
+                ],
+            },
+        }
+        aggregated.append(
+            sinter.TaskStats(
+                strong_id=f"plot-{sha256_text(key)}",
+                decoder=members[0].decoder,
+                json_metadata=metadata,
+                shots=sum(member.shots for member in members),
+                errors=sum(member.errors for member in members),
+                discards=sum(member.discards for member in members),
+                seconds=sum(member.seconds for member in members),
+                custom_counts=collections.Counter(),
+            )
+        )
+    return aggregated
+
+
+def read_plot_stats(path: Path) -> list[sinter.TaskStats]:
+    """Read raw Sinter statistics and derive plotting-only pooled statistics.
+
+    :param path: Raw append-only Sinter CSV to read without modifying it.
+    :return: Pooled statistics suitable only for plotting.
+    """
+    return aggregate_stats_for_plot(read_sinter_stats(path))
 
 
 def sha256_text(text: str) -> str:
@@ -314,6 +427,10 @@ def validate_resume_stats(
         metadata = stat.json_metadata
         if not isinstance(metadata, dict):
             continue
+        if metadata.get(PLOT_ONLY_AGGREGATE_KEY) is True:
+            raise RuntimeError(
+                "plot-only aggregated statistics cannot be used for resume"
+            )
         if "circuit_name" not in metadata:
             if (
                 stat.decoder == DECODER_NAME

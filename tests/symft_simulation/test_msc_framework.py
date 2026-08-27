@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import collections
+import json
 import math
 import re
 from pathlib import Path
@@ -17,16 +18,20 @@ from cliffordep.symft_simulation.msc_framework import (
     ACTIVE_THREADS_PREFIX,
     DEFAULT_CIRCUIT_NAME,
     DEFAULT_NOISE_LEVELS,
+    PLOT_ONLY_AGGREGATE_KEY,
+    PLOT_PROVENANCE_KEY,
     REFERENCE_PATH,
     STATS_FILENAME,
     STREAM_COUNT_PREFIX,
     CompiledSymftSinterSampler,
     _StreamSequence,
     _resume_noise_levels,
+    aggregate_stats_for_plot,
     build_tasks,
     inspect_circuit,
     make_variant_text,
     next_stream_ids,
+    read_plot_stats,
     sampler_settings,
     sha256_text,
     smoke_sample,
@@ -182,6 +187,37 @@ def _task_stat(
         discards=discards,
         seconds=0.001,
         custom_counts=custom_counts,
+    )
+
+
+def _plot_source_stat(
+    strong_id: str,
+    metadata: dict[str, Any],
+    *,
+    decoder: str = "symft_counts",
+    shots: int = 100,
+    errors: int = 3,
+    discards: int = 20,
+) -> sinter.TaskStats:
+    """Create one raw backend-specific statistic for plot aggregation tests.
+
+    :param strong_id: Version- and backend-specific raw task identity.
+    :param metadata: Raw SymFT metadata attached to the statistic.
+    :param decoder: Decoder identity used in the aggregation key.
+    :param shots: Attempted shots represented by the statistic.
+    :param errors: Logical errors represented by the statistic.
+    :param discards: Detector-rejected shots represented by the statistic.
+    :return: Raw Sinter statistic with one resume-only stream counter.
+    """
+    return sinter.TaskStats(
+        strong_id=strong_id,
+        decoder=decoder,
+        json_metadata=metadata,
+        shots=shots,
+        errors=errors,
+        discards=discards,
+        seconds=0.125,
+        custom_counts=collections.Counter({f"{STREAM_COUNT_PREFIX}0": 1}),
     )
 
 
@@ -342,6 +378,96 @@ def test_cuda_tasks_have_distinct_sampler_metadata() -> None:
         "shots_per_launch": 0,
         "threads_per_block": 0,
     }
+
+
+def test_plot_aggregation_pools_cpu_and_cuda_preserving_provenance() -> None:
+    """Equivalent CPU and CUDA rows become one plotting point, not resume data."""
+    source_text = REFERENCE_PATH.read_text(encoding="utf-8")
+    cpu_metadata = json.loads(json.dumps(build_tasks(source_text)[0].json_metadata))
+    cuda_metadata = json.loads(
+        json.dumps(build_tasks(source_text, cuda=True)[0].json_metadata)
+    )
+    cpu_metadata["symft_version"] = "0.1.1"
+    cuda_metadata["symft_version"] = "0.1.0"
+    cpu_stat = _plot_source_stat("cpu", cpu_metadata, shots=100, errors=3)
+    cuda_stat = _plot_source_stat("cuda", cuda_metadata, shots=250, errors=9)
+
+    pooled = aggregate_stats_for_plot([cpu_stat, cuda_stat])
+
+    assert len(pooled) == 1
+    stat = pooled[0]
+    assert stat.strong_id.startswith("plot-")
+    assert stat.shots == 350
+    assert stat.errors == 12
+    assert stat.discards == 40
+    assert stat.seconds == 0.25
+    assert stat.custom_counts == collections.Counter()
+    assert stat.json_metadata[PLOT_ONLY_AGGREGATE_KEY] is True
+    provenance = stat.json_metadata[PLOT_PROVENANCE_KEY]
+    assert provenance["symft_versions"] == ["0.1.0", "0.1.1"]
+    assert {
+        json.dumps(configuration, sort_keys=True)
+        for configuration in provenance["sampler_configurations"]
+    } == {
+        json.dumps(cpu_metadata["sampler"], sort_keys=True),
+        json.dumps(cuda_metadata["sampler"], sort_keys=True),
+    }
+
+
+def test_plot_aggregation_keeps_physical_or_decoder_differences_separate() -> None:
+    """A changed physical field or decoder always produces a separate point."""
+    source_text = REFERENCE_PATH.read_text(encoding="utf-8")
+    baseline = json.loads(json.dumps(build_tasks(source_text)[0].json_metadata))
+    cases = [
+        ("circuit_sha256", "different-circuit", None),
+        ("noise_level", 0.123, None),
+        ("variant", "different-variant", None),
+        ("sampler.observable", 1, None),
+        ("sampler.postselect_detectors", False, None),
+        (None, None, "another-decoder"),
+    ]
+    for index, (field, value, decoder) in enumerate(cases):
+        changed = json.loads(json.dumps(baseline))
+        if field is not None:
+            container = changed
+            *parents, leaf = field.split(".")
+            for parent in parents:
+                container = container[parent]
+            container[leaf] = value
+        pooled = aggregate_stats_for_plot(
+            [
+                _plot_source_stat("baseline", baseline),
+                _plot_source_stat(
+                    f"changed-{index}",
+                    changed,
+                    decoder="symft_counts" if decoder is None else decoder,
+                ),
+            ]
+        )
+        assert len(pooled) == 2
+
+
+def test_read_plot_stats_leaves_raw_csv_unchanged_and_cannot_resume(
+    tmp_path: Path,
+) -> None:
+    """Derived plotting rows do not alter raw storage and resume is rejected."""
+    source_text = REFERENCE_PATH.read_text(encoding="utf-8")
+    raw_stat = _plot_source_stat(
+        "raw",
+        json.loads(json.dumps(build_tasks(source_text)[0].json_metadata)),
+    )
+    stats_path = tmp_path / STATS_FILENAME
+    stats_path.write_text(
+        sinter.CSV_HEADER + "\n" + raw_stat.to_csv_line(),
+        encoding="utf-8",
+    )
+    before = stats_path.read_text(encoding="utf-8")
+
+    pooled = read_plot_stats(stats_path)
+
+    assert stats_path.read_text(encoding="utf-8") == before
+    with pytest.raises(RuntimeError, match="plot-only aggregated"):
+        validate_resume_stats(pooled, build_tasks(source_text))
 
 
 def test_circuit_names_separate_otherwise_identical_sinter_tasks() -> None:
