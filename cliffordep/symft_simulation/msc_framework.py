@@ -49,7 +49,7 @@ DEFAULT_CALL_SHOTS = 10_000_000
 DEFAULT_SMOKE_SHOTS = 100_000
 
 DECODER_NAME = "symft_counts"
-TASK_SCHEMA_VERSION = 2
+TASK_SCHEMA_VERSION = 3
 STATS_FILENAME = "stats.csv"
 STREAM_COUNT_PREFIX = "stream_id="
 ACTIVE_THREADS_PREFIX = "active_threads="
@@ -67,9 +67,19 @@ def _plot_identity_metadata(stat: sinter.TaskStats) -> dict[str, Any]:
     metadata = stat.json_metadata
     if not isinstance(metadata, dict):
         raise RuntimeError("plot aggregation requires dictionary JSON metadata")
+    schema_version = metadata.get("schema_version")
+    if schema_version != TASK_SCHEMA_VERSION:
+        raise RuntimeError(
+            "plot aggregation requires "
+            f"schema_version={TASK_SCHEMA_VERSION}, got {schema_version!r}"
+        )
     sampler = metadata.get("sampler")
     if not isinstance(sampler, dict):
         raise RuntimeError("plot aggregation requires sampler JSON metadata")
+    if "decoder_version" not in metadata:
+        raise RuntimeError(
+            "plot aggregation metadata is missing 'decoder_version'"
+        )
     try:
         return {
             "schema_version": metadata["schema_version"],
@@ -89,10 +99,9 @@ def aggregate_stats_for_plot(
 ) -> list[sinter.TaskStats]:
     """Pool raw CPU/CUDA counts into plotting-only physical data points.
 
-    This intentionally ignores experiment, simulator, SymFT version, and
-    sampler settings while retaining version and sampler details in
-    ``plot_provenance``. Its return value must never be used as a Sinter resume
-    file.
+    This intentionally ignores decoder version and sampler settings while
+    retaining them in ``plot_provenance``. Its return value must never be used
+    as a Sinter resume file.
 
     :param stats: Raw version- and backend-specific Sinter statistics.
     :return: Deterministically ordered plotting-only pooled statistics.
@@ -112,7 +121,7 @@ def aggregate_stats_for_plot(
         members = grouped[key]
         versions = sorted(
             {
-                str(member.json_metadata.get("symft_version", "<unspecified>"))
+                str(member.json_metadata["decoder_version"])
                 for member in members
             }
         )
@@ -130,7 +139,7 @@ def aggregate_stats_for_plot(
             **group_metadata[key],
             PLOT_ONLY_AGGREGATE_KEY: True,
             PLOT_PROVENANCE_KEY: {
-                "symft_versions": versions,
+                "decoder_versions": versions,
                 "sampler_configurations": [
                     json.loads(configuration)
                     for configuration in sampler_configurations
@@ -260,9 +269,7 @@ def task_metadata(
     """
     return {
         "schema_version": TASK_SCHEMA_VERSION,
-        "experiment": "d3_inject_cultivate",
-        "simulator": "symft",
-        "symft_version": symft.__version__,
+        "decoder_version": symft.__version__,
         "noise_level": noise_level,
         "variant": variant,
         "circuit_name": circuit_name,
@@ -327,7 +334,7 @@ def build_tasks(
     for noise_level in sorted(set(noise_levels), reverse=True):
         proxy_circuit = _make_proxy_circuit(reference_text, noise_level)
         proxy_dem = proxy_circuit.detector_error_model(
-            decompose_errors=True,
+            decompose_errors=False,
             approximate_disjoint_errors=True,
         )
         for variant in VARIANTS:
@@ -416,7 +423,7 @@ def validate_resume_stats(
     :param stats: Aggregated statistics loaded from the resume CSV.
     :param tasks: Current Sinter task matrix.
     :return: None.
-    :raises RuntimeError: If selected or pre-schema statistics are incompatible.
+    :raises RuntimeError: If selected statistics are incompatible or obsolete.
     """
     tasks_by_id = {task.strong_id(): task for task in tasks}
     selected_task = next(iter(tasks_by_id.values()))
@@ -429,17 +436,19 @@ def validate_resume_stats(
             raise RuntimeError(
                 "plot-only aggregated statistics cannot be used for resume"
             )
-        if "circuit_name" not in metadata:
-            if (
-                stat.decoder == DECODER_NAME
-                and metadata.get("experiment") == "d3_inject_cultivate"
-            ):
-                raise RuntimeError(
-                    "existing SymFT statistics predate circuit_name metadata; "
-                    "update the shared CSV before collecting"
-                )
+        stat_circuit_name = metadata.get("circuit_name")
+        if stat_circuit_name is not None and stat_circuit_name != circuit_name:
             continue
-        if metadata["circuit_name"] != circuit_name:
+        if metadata.get("schema_version") != TASK_SCHEMA_VERSION and (
+            stat_circuit_name == circuit_name
+            or (stat_circuit_name is None and stat.decoder == DECODER_NAME)
+        ):
+            raise RuntimeError(
+                "existing SymFT statistics use obsolete "
+                f"schema_version={metadata.get('schema_version')!r}; "
+                f"migrate to schema_version={TASK_SCHEMA_VERSION} before collecting"
+            )
+        if stat_circuit_name is None:
             continue
         task = tasks_by_id.get(stat.strong_id)
         if task is None:

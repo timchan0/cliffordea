@@ -13,6 +13,7 @@ from unittest.mock import Mock
 import pytest
 import sinter
 import stim
+import symft
 
 from cliffordep.symft_simulation.msc_framework import (
     ACTIVE_THREADS_PREFIX,
@@ -23,6 +24,7 @@ from cliffordep.symft_simulation.msc_framework import (
     REFERENCE_PATH,
     STATS_FILENAME,
     STREAM_COUNT_PREFIX,
+    TASK_SCHEMA_VERSION,
     CompiledSymftSinterSampler,
     _StreamSequence,
     _resume_noise_levels,
@@ -260,14 +262,50 @@ def test_tasks_use_s_proxies_and_identify_actual_variants() -> None:
         proxy_text = str(task.circuit)
         assert "T_DAG" not in proxy_text
         assert not re.search(r"(?m)^T ", proxy_text)
+        noise_level = float(task.json_metadata["noise_level"])
+        variant = str(task.json_metadata["variant"])
         actual_text = make_variant_text(
             source_text,
-            float(task.json_metadata["noise_level"]),
-            str(task.json_metadata["variant"]),
+            noise_level,
+            variant,
         )
+        assert task.json_metadata == {
+            "schema_version": TASK_SCHEMA_VERSION,
+            "decoder_version": symft.__version__,
+            "noise_level": noise_level,
+            "variant": variant,
+            "circuit_name": DEFAULT_CIRCUIT_NAME,
+            "circuit_sha256": sha256_text(actual_text),
+            "sampler": sampler_settings(),
+        }
         assert task.json_metadata["circuit_name"] == DEFAULT_CIRCUIT_NAME
         assert task.json_metadata["circuit_sha256"] == sha256_text(actual_text)
-        assert type(task.detector_error_model) is stim.DetectorErrorModel
+        circuit = task.circuit
+        assert type(circuit) is stim.Circuit
+        assert task.detector_error_model == circuit.detector_error_model(
+            decompose_errors=False,
+            approximate_disjoint_errors=True,
+        )
+
+
+def test_distance_five_tasks_allow_nongraphlike_detector_errors() -> None:
+    """D5 tasks retain undecomposed hyperedges instead of failing construction."""
+    reference_path = REFERENCE_PATH.with_name(
+        "d5a19_inject_cultivate_p1e-3.stim"
+    )
+
+    tasks = build_tasks(
+        reference_path.read_text(encoding="utf-8"),
+        reference_path.stem,
+        noise_levels=(0.002,),
+    )
+
+    assert len(tasks) == 2
+    for task in tasks:
+        dem = task.detector_error_model
+        assert type(dem) is stim.DetectorErrorModel
+        assert dem.num_detectors == 107
+        assert dem.num_observables == 1
 
 
 def test_custom_noise_levels_control_validation_and_task_order() -> None:
@@ -387,10 +425,8 @@ def test_plot_aggregation_ignores_nonidentity_metadata() -> None:
     cuda_metadata = json.loads(
         json.dumps(build_tasks(source_text, cuda=True)[0].json_metadata)
     )
-    cpu_metadata["symft_version"] = "0.1.1"
-    cuda_metadata["symft_version"] = "0.1.0"
-    cuda_metadata["experiment"] = "another-experiment"
-    cuda_metadata["simulator"] = "another-simulator"
+    cpu_metadata["decoder_version"] = "0.1.1"
+    cuda_metadata["decoder_version"] = "0.1.0"
     cuda_metadata["sampler"]["batch"] = not cpu_metadata["sampler"]["batch"]
     cuda_metadata["sampler"]["observable"] = 1
     cuda_metadata["sampler"]["postselect_detectors"] = False
@@ -409,7 +445,7 @@ def test_plot_aggregation_ignores_nonidentity_metadata() -> None:
     assert stat.custom_counts == collections.Counter()
     assert stat.json_metadata[PLOT_ONLY_AGGREGATE_KEY] is True
     provenance = stat.json_metadata[PLOT_PROVENANCE_KEY]
-    assert provenance["symft_versions"] == ["0.1.0", "0.1.1"]
+    assert provenance["decoder_versions"] == ["0.1.0", "0.1.1"]
     assert {
         json.dumps(configuration, sort_keys=True)
         for configuration in provenance["sampler_configurations"]
@@ -420,11 +456,10 @@ def test_plot_aggregation_ignores_nonidentity_metadata() -> None:
 
 
 def test_plot_aggregation_keeps_identity_or_decoder_differences_separate() -> None:
-    """Every declared metadata identity field and the decoder split points."""
+    """Every variable metadata identity field and the decoder split points."""
     source_text = REFERENCE_PATH.read_text(encoding="utf-8")
     baseline = json.loads(json.dumps(build_tasks(source_text)[0].json_metadata))
     cases = [
-        ("schema_version", 3, None),
         ("circuit_name", "different-name", None),
         ("circuit_sha256", "different-circuit", None),
         ("noise_level", 0.123, None),
@@ -463,8 +498,7 @@ def test_read_plot_stats_pools_csvs_without_changing_them_and_cannot_resume(
         metadata,
     )
     other_metadata = json.loads(json.dumps(metadata))
-    other_metadata["experiment"] = "another-experiment"
-    other_metadata["simulator"] = "another-simulator"
+    other_metadata["decoder_version"] = "another-version"
     other_stat = _plot_source_stat(
         "other",
         other_metadata,
@@ -493,6 +527,27 @@ def test_read_plot_stats_pools_csvs_without_changing_them_and_cannot_resume(
     assert pooled[0].errors == 12
     with pytest.raises(RuntimeError, match="plot-only aggregated"):
         validate_resume_stats(pooled, build_tasks(source_text))
+
+
+@pytest.mark.parametrize("schema_version", [1, 2])
+def test_plot_aggregation_rejects_obsolete_schemas(schema_version: int) -> None:
+    """Plot aggregation accepts schema three only, without legacy fallbacks."""
+    source_text = REFERENCE_PATH.read_text(encoding="utf-8")
+    metadata = dict(build_tasks(source_text)[0].json_metadata)
+    metadata["schema_version"] = schema_version
+
+    with pytest.raises(RuntimeError, match="requires schema_version=3"):
+        aggregate_stats_for_plot([_plot_source_stat("old", metadata)])
+
+
+def test_plot_aggregation_requires_decoder_version() -> None:
+    """Schema-three plotting rejects rows missing the renamed version field."""
+    source_text = REFERENCE_PATH.read_text(encoding="utf-8")
+    metadata = dict(build_tasks(source_text)[0].json_metadata)
+    del metadata["decoder_version"]
+
+    with pytest.raises(RuntimeError, match="missing 'decoder_version'"):
+        aggregate_stats_for_plot([_plot_source_stat("missing", metadata)])
 
 
 def test_circuit_names_separate_otherwise_identical_sinter_tasks() -> None:
@@ -678,7 +733,10 @@ def test_resume_allows_other_names_and_rejects_reused_names() -> None:
     conflicting_stat = sinter.TaskStats(
         strong_id="different-framework-id",
         decoder="different-decoder",
-        json_metadata={"circuit_name": "beta", "experiment": "other"},
+        json_metadata={
+            "schema_version": TASK_SCHEMA_VERSION,
+            "circuit_name": "beta",
+        },
         shots=10,
         errors=1,
         discards=0,
@@ -719,15 +777,15 @@ def test_resume_accepts_compatible_unselected_noise_levels() -> None:
         validate_resume_stats([historical_stat], changed_tasks)
 
 
-def test_resume_rejects_pre_circuit_name_statistics() -> None:
-    """Schema-one experiment rows must be converted before shared resume."""
+@pytest.mark.parametrize("schema_version", [1, 2])
+def test_resume_rejects_obsolete_schema(schema_version: int) -> None:
+    """Collection requires migrated schema-three statistics before resuming."""
     source_text = REFERENCE_PATH.read_text(encoding="utf-8")
     task = build_tasks(source_text)[0]
     metadata = dict(task.json_metadata)
-    del metadata["circuit_name"]
-    metadata["schema_version"] = 1
+    metadata["schema_version"] = schema_version
     old_stat = sinter.TaskStats(
-        strong_id="pre-schema-id",
+        strong_id="obsolete-schema-id",
         decoder=str(task.decoder),
         json_metadata=metadata,
         shots=10,
@@ -739,7 +797,7 @@ def test_resume_rejects_pre_circuit_name_statistics() -> None:
         ),
     )
 
-    with pytest.raises(RuntimeError, match="predate circuit_name"):
+    with pytest.raises(RuntimeError, match="migrate to schema_version=3"):
         validate_resume_stats([old_stat], build_tasks(source_text))
 
 

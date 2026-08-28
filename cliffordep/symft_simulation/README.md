@@ -127,6 +127,10 @@ resume them. Each row's custom counts record its SymFT stream ID and active
 thread count. The runner derives the next unused stream from these counts after
 a restart. Do not run two writers against the same resume file concurrently.
 
+Task metadata records `schema_version=3`, `decoder_version`, `noise_level`,
+`variant`, `circuit_name`, `circuit_sha256`, and `sampler`; older schemas must
+be migrated before collection or plotting.
+
 The production and smoke commands display Sinter's live progress. Detailed
 statistics remain available in the production resume CSV.
 
@@ -139,7 +143,7 @@ To pool equivalent CPU and CUDA samples for a figure while preserving raw
 Sinter resume data, use `read_plot_stats` instead. It creates plotting-only
 rows keyed only by the decoder and the `schema_version`, `circuit_name`,
 `circuit_sha256`, `noise_level`, and `variant` metadata. The returned rows
-retain SymFT-version and sampler details in `plot_provenance`, have synthetic
+retain decoder-version and sampler details in `plot_provenance`, have synthetic
 IDs, and must never be written back to the resume CSV or passed to a production
 collection:
 
