@@ -137,17 +137,21 @@ with `sinter.plot_error_rate`.
 
 To pool equivalent CPU and CUDA samples for a figure while preserving raw
 Sinter resume data, use `read_plot_stats` instead. It creates plotting-only
-rows keyed by the circuit and physical sampling semantics, intentionally
-ignoring SymFT version and performance/backend settings. The returned rows
-retain those values in `plot_provenance`, have synthetic IDs, and must never be
-written back to the resume CSV or passed to a production collection:
+rows keyed only by the decoder and the `schema_version`, `circuit_name`,
+`circuit_sha256`, `noise_level`, and `variant` metadata. The returned rows
+retain SymFT-version and sampler details in `plot_provenance`, have synthetic
+IDs, and must never be written back to the resume CSV or passed to a production
+collection:
 
 ```python
 from pathlib import Path
 
 from cliffordep.symft_simulation.msc_framework import read_plot_stats
 
-plot_stats = read_plot_stats(Path("/path/to/stats.csv"))
+plot_stats = read_plot_stats(
+    Path("/path/to/cpu-stats.csv"),
+    Path("/path/to/cuda-stats.csv"),
+)
 ```
 
 ## Tests

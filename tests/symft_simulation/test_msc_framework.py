@@ -380,8 +380,8 @@ def test_cuda_tasks_have_distinct_sampler_metadata() -> None:
     }
 
 
-def test_plot_aggregation_pools_cpu_and_cuda_preserving_provenance() -> None:
-    """Equivalent CPU and CUDA rows become one plotting point, not resume data."""
+def test_plot_aggregation_ignores_nonidentity_metadata() -> None:
+    """Only the declared identity fields split points; provenance stays available."""
     source_text = REFERENCE_PATH.read_text(encoding="utf-8")
     cpu_metadata = json.loads(json.dumps(build_tasks(source_text)[0].json_metadata))
     cuda_metadata = json.loads(
@@ -389,6 +389,11 @@ def test_plot_aggregation_pools_cpu_and_cuda_preserving_provenance() -> None:
     )
     cpu_metadata["symft_version"] = "0.1.1"
     cuda_metadata["symft_version"] = "0.1.0"
+    cuda_metadata["experiment"] = "another-experiment"
+    cuda_metadata["simulator"] = "another-simulator"
+    cuda_metadata["sampler"]["batch"] = not cpu_metadata["sampler"]["batch"]
+    cuda_metadata["sampler"]["observable"] = 1
+    cuda_metadata["sampler"]["postselect_detectors"] = False
     cpu_stat = _plot_source_stat("cpu", cpu_metadata, shots=100, errors=3)
     cuda_stat = _plot_source_stat("cuda", cuda_metadata, shots=250, errors=9)
 
@@ -414,16 +419,16 @@ def test_plot_aggregation_pools_cpu_and_cuda_preserving_provenance() -> None:
     }
 
 
-def test_plot_aggregation_keeps_physical_or_decoder_differences_separate() -> None:
-    """A changed physical field or decoder always produces a separate point."""
+def test_plot_aggregation_keeps_identity_or_decoder_differences_separate() -> None:
+    """Every declared metadata identity field and the decoder split points."""
     source_text = REFERENCE_PATH.read_text(encoding="utf-8")
     baseline = json.loads(json.dumps(build_tasks(source_text)[0].json_metadata))
     cases = [
+        ("schema_version", 3, None),
+        ("circuit_name", "different-name", None),
         ("circuit_sha256", "different-circuit", None),
         ("noise_level", 0.123, None),
         ("variant", "different-variant", None),
-        ("sampler.observable", 1, None),
-        ("sampler.postselect_detectors", False, None),
         (None, None, "another-decoder"),
     ]
     for index, (field, value, decoder) in enumerate(cases):
@@ -447,25 +452,45 @@ def test_plot_aggregation_keeps_physical_or_decoder_differences_separate() -> No
         assert len(pooled) == 2
 
 
-def test_read_plot_stats_leaves_raw_csv_unchanged_and_cannot_resume(
+def test_read_plot_stats_pools_csvs_without_changing_them_and_cannot_resume(
     tmp_path: Path,
 ) -> None:
-    """Derived plotting rows do not alter raw storage and resume is rejected."""
+    """Separate CSVs pool without altering storage, and cannot become resume data."""
     source_text = REFERENCE_PATH.read_text(encoding="utf-8")
+    metadata = json.loads(json.dumps(build_tasks(source_text)[0].json_metadata))
     raw_stat = _plot_source_stat(
         "raw",
-        json.loads(json.dumps(build_tasks(source_text)[0].json_metadata)),
+        metadata,
+    )
+    other_metadata = json.loads(json.dumps(metadata))
+    other_metadata["experiment"] = "another-experiment"
+    other_metadata["simulator"] = "another-simulator"
+    other_stat = _plot_source_stat(
+        "other",
+        other_metadata,
+        shots=250,
+        errors=9,
     )
     stats_path = tmp_path / STATS_FILENAME
+    other_stats_path = tmp_path / "other-stats.csv"
     stats_path.write_text(
         sinter.CSV_HEADER + "\n" + raw_stat.to_csv_line(),
         encoding="utf-8",
     )
+    other_stats_path.write_text(
+        sinter.CSV_HEADER + "\n" + other_stat.to_csv_line(),
+        encoding="utf-8",
+    )
     before = stats_path.read_text(encoding="utf-8")
+    other_before = other_stats_path.read_text(encoding="utf-8")
 
-    pooled = read_plot_stats(stats_path)
+    pooled = read_plot_stats(stats_path, other_stats_path)
 
     assert stats_path.read_text(encoding="utf-8") == before
+    assert other_stats_path.read_text(encoding="utf-8") == other_before
+    assert len(pooled) == 1
+    assert pooled[0].shots == 350
+    assert pooled[0].errors == 12
     with pytest.raises(RuntimeError, match="plot-only aggregated"):
         validate_resume_stats(pooled, build_tasks(source_text))
 

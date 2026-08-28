@@ -57,11 +57,11 @@ PLOT_ONLY_AGGREGATE_KEY = "plot_only_aggregate"
 PLOT_PROVENANCE_KEY = "plot_provenance"
 
 
-def _plot_physical_metadata(stat: sinter.TaskStats) -> dict[str, Any]:
-    """Extract metadata that defines a physical plotting data point.
+def _plot_identity_metadata(stat: sinter.TaskStats) -> dict[str, Any]:
+    """Extract metadata that defines an aggregated plotting data point.
 
     :param stat: Raw Sinter statistic to normalize for plotting.
-    :return: Canonical metadata excluding simulator-build and runtime settings.
+    :return: Canonical metadata used as the plotting aggregate identity.
     :raises RuntimeError: If the statistic lacks required cultivation metadata.
     """
     metadata = stat.json_metadata
@@ -73,17 +73,10 @@ def _plot_physical_metadata(stat: sinter.TaskStats) -> dict[str, Any]:
     try:
         return {
             "schema_version": metadata["schema_version"],
-            "experiment": metadata["experiment"],
-            "simulator": metadata["simulator"],
             "circuit_name": metadata["circuit_name"],
             "circuit_sha256": metadata["circuit_sha256"],
             "noise_level": metadata["noise_level"],
             "variant": metadata["variant"],
-            "sampler": {
-                "batch": sampler["batch"],
-                "observable": sampler["observable"],
-                "postselect_detectors": sampler["postselect_detectors"],
-            },
         }
     except KeyError as error:
         raise RuntimeError(
@@ -96,9 +89,10 @@ def aggregate_stats_for_plot(
 ) -> list[sinter.TaskStats]:
     """Pool raw CPU/CUDA counts into plotting-only physical data points.
 
-    This intentionally ignores SymFT version and runtime sampler settings while
-    retaining them in ``plot_provenance``. Its return value must never be used
-    as a Sinter resume file.
+    This intentionally ignores experiment, simulator, SymFT version, and
+    sampler settings while retaining version and sampler details in
+    ``plot_provenance``. Its return value must never be used as a Sinter resume
+    file.
 
     :param stats: Raw version- and backend-specific Sinter statistics.
     :return: Deterministically ordered plotting-only pooled statistics.
@@ -107,7 +101,7 @@ def aggregate_stats_for_plot(
     grouped: dict[str, list[sinter.TaskStats]] = collections.defaultdict(list)
     group_metadata: dict[str, dict[str, Any]] = {}
     for stat in stats:
-        metadata = _plot_physical_metadata(stat)
+        metadata = _plot_identity_metadata(stat)
         identity = {"decoder": stat.decoder, "metadata": metadata}
         key = json.dumps(identity, sort_keys=True, separators=(",", ":"))
         grouped[key].append(stat)
@@ -158,13 +152,17 @@ def aggregate_stats_for_plot(
     return aggregated
 
 
-def read_plot_stats(path: Path) -> list[sinter.TaskStats]:
+def read_plot_stats(*paths: Path) -> list[sinter.TaskStats]:
     """Read raw Sinter statistics and derive plotting-only pooled statistics.
 
-    :param path: Raw append-only Sinter CSV to read without modifying it.
+    :param paths: Raw append-only Sinter CSVs to read without modifying them.
     :return: Pooled statistics suitable only for plotting.
     """
-    return aggregate_stats_for_plot(read_sinter_stats(path))
+    return aggregate_stats_for_plot(
+        stat
+        for path in paths
+        for stat in read_sinter_stats(path)
+    )
 
 
 def sha256_text(text: str) -> str:
