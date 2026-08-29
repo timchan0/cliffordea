@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
 
+import numpy as np
 import pytest
 import sinter
 import stim
@@ -248,6 +249,37 @@ def test_s_reference_generates_exact_existing_t_and_s_circuits() -> None:
             r"(?m)^T(?:_DAG)? ",
             make_variant_text(source_text, noise_level, "S"),
         )
+
+
+@pytest.mark.parametrize(
+    "filename",
+    (
+        "d3a6_inject_cultivate.stim",
+        "d3a6f2_inject_cultivate.stim",
+        # "d5a19_inject_cultivate.stim",
+    ),
+)
+def test_noiseless_t_variant_detectors_are_deterministic(
+    filename: str,
+) -> None:
+    """All noiseless T-state shots must agree on every raw detector parity."""
+    reference_path = REFERENCE_PATH.with_name(filename)
+    t_circuit_text = make_variant_text(
+        reference_path.read_text(encoding="utf-8"),
+        0.0,
+        "T",
+    )
+
+    detector_samples = symft.Circuit(t_circuit_text).sample_detectors(
+        shots=256,
+        seed=123,
+    )
+    detection_events = detector_samples ^ detector_samples[0]
+    varying_detector_indices = np.flatnonzero(
+        np.any(detection_events, axis=0)
+    ).tolist()
+
+    assert varying_detector_indices == []
 
 
 def test_tasks_use_s_proxies_and_identify_actual_variants() -> None:
