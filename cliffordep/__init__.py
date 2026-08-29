@@ -7,3 +7,4 @@ from cliffordep.explained_error_tools import insert_circuit_error_locations, ins
 from cliffordep.pauli_string_tools import forget_sign, PauliSum
 from cliffordep import noise
 from cliffordep import circuits
+from cliffordep import symft_simulation

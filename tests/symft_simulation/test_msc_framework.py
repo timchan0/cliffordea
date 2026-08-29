@@ -254,9 +254,10 @@ def test_s_reference_generates_exact_existing_t_and_s_circuits() -> None:
 @pytest.mark.parametrize(
     "filename",
     (
-        "d3a6_inject_cultivate.stim",
-        "d3a6f2_inject_cultivate.stim",
-        # "d5a19_inject_cultivate.stim",
+        "d3a6_inject_cultivate_p1e-3.stim",
+        "d3a6f2_inject_cultivate_p1e-3.stim",
+        "d5a19_inject_cultivate_corrected_p1e-3.stim",
+        "d5a19f13_inject_cultivate_corrected_p1e-3.stim",
     ),
 )
 def test_noiseless_t_variant_detectors_are_deterministic(
