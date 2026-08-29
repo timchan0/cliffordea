@@ -281,16 +281,19 @@ def task_metadata(
 def validate_all_variants(
     reference_text: str,
     noise_levels: Sequence[float] = DEFAULT_NOISE_LEVELS,
+    variants: Sequence[str] = VARIANTS,
 ) -> list[dict[str, Any]]:
     """Validate every requested gate/noise configuration.
 
     :param reference_text: Authoritative S-state circuit at noise 0.001.
     :param noise_levels: Physical noise strengths to validate.
-    :return: Metadata rows in ascending-noise T-then-S order.
+    :param variants: State variants to validate.
+    :return: Metadata rows in ascending-noise canonical-variant order.
     """
+    selected_variants = _normalize_variants(variants)
     rows = []
     for noise_level in sorted(set(noise_levels)):
-        for variant in VARIANTS:
+        for variant in selected_variants:
             text = make_variant_text(reference_text, noise_level, variant)
             rows.append(
                 {
@@ -318,6 +321,7 @@ def build_tasks(
     circuit_name: str = DEFAULT_CIRCUIT_NAME,
     noise_levels: Sequence[float] = DEFAULT_NOISE_LEVELS,
     cuda: bool = DEFAULT_CUDA,
+    variants: Sequence[str] = VARIANTS,
 ) -> list[sinter.Task]:
     """Build Sinter tasks for every requested noise level and variant.
 
@@ -328,8 +332,10 @@ def build_tasks(
     :param circuit_name: Human-readable reference-circuit identifier.
     :param noise_levels: Physical noise strengths to sample.
     :param cuda: Whether tasks identify CUDA-backed SymFT sampling.
-    :return: Tasks ordered from high to low noise, T before S.
+    :param variants: State variants to sample.
+    :return: Tasks ordered by descending noise and canonical variant order.
     """
+    selected_variants = _normalize_variants(variants)
     tasks = []
     for noise_level in sorted(set(noise_levels), reverse=True):
         proxy_circuit = _make_proxy_circuit(reference_text, noise_level)
@@ -337,7 +343,7 @@ def build_tasks(
             decompose_errors=False,
             approximate_disjoint_errors=True,
         )
-        for variant in VARIANTS:
+        for variant in selected_variants:
             circuit_text = make_variant_text(
                 reference_text,
                 noise_level,
@@ -371,6 +377,30 @@ def read_sinter_stats(path: Path) -> list[sinter.TaskStats]:
     return sinter.read_stats_from_csv_files(path)
 
 
+def _metadata_values_for_circuit(
+    stats: Iterable[sinter.TaskStats],
+    circuit_name: str,
+    key: str,
+) -> list[Any]:
+    """Read one metadata field from persisted rows for a circuit name.
+
+    :param stats: Aggregated statistics loaded from the shared resume CSV.
+    :param circuit_name: Circuit dataset whose rows should be selected.
+    :param key: Metadata field to read from each selected row.
+    :return: Present field values from matching dictionary metadata.
+    """
+    values = []
+    for stat in stats:
+        metadata = stat.json_metadata
+        if (
+            isinstance(metadata, dict)
+            and metadata.get("circuit_name") == circuit_name
+            and key in metadata
+        ):
+            values.append(metadata[key])
+    return values
+
+
 def _resume_noise_levels(
     stats: Iterable[sinter.TaskStats],
     circuit_name: str,
@@ -384,15 +414,59 @@ def _resume_noise_levels(
     :return: Sorted union of requested and persisted physical noise strengths.
     """
     result = set(noise_levels)
-    for stat in stats:
-        metadata = stat.json_metadata
-        if (
-            isinstance(metadata, dict)
-            and metadata.get("circuit_name") == circuit_name
-            and "noise_level" in metadata
-        ):
-            result.add(float(metadata["noise_level"]))
+    result.update(
+        float(value)
+        for value in _metadata_values_for_circuit(
+            stats,
+            circuit_name,
+            "noise_level",
+        )
+    )
     return tuple(sorted(result))
+
+
+def _normalize_variants(variants: Sequence[str]) -> tuple[str, ...]:
+    """Deduplicate and canonically order a nonempty variant selection.
+
+    :param variants: Requested cultivation state variants.
+    :return: Selected variants in the order declared by ``VARIANTS``.
+    :raises ValueError: If no variant is selected or a variant is unknown.
+    """
+    selected = set(variants)
+    unknown = selected - set(VARIANTS)
+    if unknown:
+        raise ValueError(
+            f"unknown cultivation variants: {sorted(unknown)!r}; "
+            f"expected values from {VARIANTS!r}"
+        )
+    normalized = tuple(variant for variant in VARIANTS if variant in selected)
+    if not normalized:
+        raise ValueError("at least one cultivation variant must be selected")
+    return normalized
+
+
+def _resume_variants(
+    stats: Iterable[sinter.TaskStats],
+    circuit_name: str,
+    variants: Sequence[str],
+) -> tuple[str, ...]:
+    """Include persisted same-circuit variants during resume validation.
+
+    :param stats: Aggregated statistics loaded from the shared resume CSV.
+    :param circuit_name: Circuit dataset whose rows must remain compatible.
+    :param variants: State variants requested by this run.
+    :return: Canonically ordered union of requested and persisted variants.
+    """
+    result = list(variants)
+    result.extend(
+        str(value)
+        for value in _metadata_values_for_circuit(
+            stats,
+            circuit_name,
+            "variant",
+        )
+    )
+    return _normalize_variants(result)
 
 
 def _stream_ids_from_counts(
@@ -703,8 +777,9 @@ def collect_stats(
     print_progress: bool,
     noise_levels: Sequence[float] = DEFAULT_NOISE_LEVELS,
     cuda: bool = DEFAULT_CUDA,
+    variants: Sequence[str] = VARIANTS,
 ) -> list[sinter.TaskStats]:
-    """Collect or resume all S/T points through Sinter.
+    """Collect or resume selected S/T points through Sinter.
 
     :param reference_path: Authoritative S-state reference circuit.
     :param stats_path: Shared Sinter save-and-resume CSV.
@@ -715,11 +790,18 @@ def collect_stats(
     :param print_progress: Whether Sinter should print progress to stderr.
     :param noise_levels: Physical noise strengths to collect.
     :param cuda: Whether to run the CUDA counts backend.
+    :param variants: State variants to collect.
     :return: Aggregated statistics for the current requested tasks.
     """
     reference_text = reference_path.read_text(encoding="utf-8")
-    validate_all_variants(reference_text, noise_levels)
-    tasks = build_tasks(reference_text, circuit_name, noise_levels, cuda)
+    validate_all_variants(reference_text, noise_levels, variants)
+    tasks = build_tasks(
+        reference_text,
+        circuit_name,
+        noise_levels,
+        cuda,
+        variants,
+    )
     stats_path.parent.mkdir(parents=True, exist_ok=True)
     existing_stats = read_sinter_stats(stats_path)
     resume_tasks = build_tasks(
@@ -727,6 +809,7 @@ def collect_stats(
         circuit_name,
         _resume_noise_levels(existing_stats, circuit_name, noise_levels),
         cuda,
+        _resume_variants(existing_stats, circuit_name, variants),
     )
     validate_resume_stats(existing_stats, resume_tasks)
     initial_stream_ids = next_stream_ids(existing_stats, tasks)
@@ -754,6 +837,7 @@ def smoke_sample(
     shots: int,
     circuit_name: str = DEFAULT_CIRCUIT_NAME,
     cuda: bool = DEFAULT_CUDA,
+    variants: Sequence[str] = VARIANTS,
 ) -> None:
     """Run a small non-persisted Sinter collection at noise 0.001.
 
@@ -761,12 +845,18 @@ def smoke_sample(
     :param shots: Attempted shots for each state variant.
     :param circuit_name: Human-readable reference-circuit identifier.
     :param cuda: Whether to run the CUDA counts backend.
+    :param variants: State variants to sample.
     :return: None.
     """
     reference_text = reference_path.read_text(encoding="utf-8")
     tasks = [
         task
-        for task in build_tasks(reference_text, circuit_name, cuda=cuda)
+        for task in build_tasks(
+            reference_text,
+            circuit_name,
+            cuda=cuda,
+            variants=variants,
+        )
         if float(task.json_metadata["noise_level"]) == REFERENCE_NOISE_LEVEL
     ]
     sampler = SymftSinterSampler(

@@ -15,6 +15,7 @@ from cliffordep.symft_simulation.msc_framework import (
     DEFAULT_TARGET_ERRORS,
     DEFAULT_NOISE_LEVELS,
     REFERENCE_PATH,
+    VARIANTS,
     collect_stats,
     smoke_sample,
     validate_all_variants,
@@ -43,6 +44,21 @@ def add_noise_levels_argument(parser: argparse.ArgumentParser) -> None:
         nargs="+",
         default=DEFAULT_NOISE_LEVELS,
         metavar="P",
+    )
+
+
+def add_variants_argument(parser: argparse.ArgumentParser) -> None:
+    """Add cultivation state-variant selection to one subcommand.
+
+    :param parser: Subcommand parser receiving the variant option.
+    :return: None.
+    """
+    parser.add_argument(
+        "--variants",
+        choices=VARIANTS,
+        nargs="+",
+        default=VARIANTS,
+        metavar="VARIANT",
     )
 
 
@@ -83,12 +99,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_reference_arguments(validate)
     add_noise_levels_argument(validate)
+    add_variants_argument(validate)
 
     smoke = subparsers.add_parser(
         "smoke",
-        help="sample a tiny non-persisted T/S check at p=0.001 via Sinter",
+        help="sample a tiny non-persisted selected-variant check at p=0.001",
     )
     add_reference_arguments(smoke)
+    add_variants_argument(smoke)
     add_cuda_argument(smoke)
     smoke.add_argument("--shots", type=int, default=DEFAULT_SMOKE_SHOTS)
 
@@ -98,6 +116,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_reference_arguments(run)
     add_noise_levels_argument(run)
+    add_variants_argument(run)
     add_cuda_argument(run)
     run.add_argument("--stats", type=Path, required=True)
     run.add_argument("--target-errors", type=int, default=DEFAULT_TARGET_ERRORS)
@@ -116,7 +135,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     circuit_name = resolve_circuit_name(args.reference, args.circuit_name)
     if args.command == "validate":
         reference_text = args.reference.read_text(encoding="utf-8")
-        for row in validate_all_variants(reference_text, args.noise_levels):
+        for row in validate_all_variants(
+            reference_text,
+            args.noise_levels,
+            args.variants,
+        ):
             print(
                 json.dumps(
                     {"circuit_name": circuit_name, **row},
@@ -131,6 +154,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.shots,
             circuit_name,
             cuda=args.cuda,
+            variants=args.variants,
         )
         return 0
 
@@ -144,6 +168,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print_progress=True,
         noise_levels=args.noise_levels,
         cuda=args.cuda,
+        variants=args.variants,
     )
     return 0
 
