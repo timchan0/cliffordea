@@ -19,6 +19,7 @@ from cliffordep.symft_simulation.msc_framework import (
     collect_stats,
     smoke_sample,
     validate_all_variants,
+    validate_seed,
 )
 
 
@@ -75,6 +76,39 @@ def add_cuda_argument(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def parse_seed(value: str) -> int:
+    """Parse one unsigned 64-bit RNG seed from the command line.
+
+    :param value: Decimal integer supplied to ``--seed``.
+    :return: Parsed seed in ``range(2**64)``.
+    :raises argparse.ArgumentTypeError: If the value is outside the seed range.
+    """
+    seed = int(value)
+    try:
+        validate_seed(seed)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "seed must be in range(2**64)"
+        ) from error
+    return seed
+
+
+def add_seed_argument(parser: argparse.ArgumentParser) -> None:
+    """Add Stim-like optional RNG seeding to a sampling subcommand.
+
+    :param parser: Subcommand parser receiving the seed option.
+    :return: None.
+    """
+    parser.add_argument(
+        "--seed",
+        type=parse_seed,
+        help=(
+            "seed SymFT streams deterministically instead of using system "
+            "entropy"
+        ),
+    )
+
+
 def resolve_circuit_name(reference: Path, circuit_name: str | None) -> str:
     """Choose an explicit circuit name or derive it from the filename.
 
@@ -108,6 +142,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_reference_arguments(smoke)
     add_variants_argument(smoke)
     add_cuda_argument(smoke)
+    add_seed_argument(smoke)
     smoke.add_argument("--shots", type=int, default=DEFAULT_SMOKE_SHOTS)
 
     run = subparsers.add_parser(
@@ -118,6 +153,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_noise_levels_argument(run)
     add_variants_argument(run)
     add_cuda_argument(run)
+    add_seed_argument(run)
     run.add_argument("--stats", type=Path, required=True)
     run.add_argument("--target-errors", type=int, default=DEFAULT_TARGET_ERRORS)
     run.add_argument("--max-shots", type=int, default=DEFAULT_MAX_SHOTS)
@@ -155,6 +191,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             circuit_name,
             cuda=args.cuda,
             variants=args.variants,
+            seed=args.seed,
         )
         return 0
 
@@ -169,6 +206,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         noise_levels=args.noise_levels,
         cuda=args.cuda,
         variants=args.variants,
+        seed=args.seed,
     )
     return 0
 

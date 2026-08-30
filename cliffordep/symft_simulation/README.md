@@ -7,7 +7,7 @@ shots. The default reference is distance 3, and compatible distance-5
 references can be selected explicitly.
 
 The default authoritative **S-state** reference is
-`cliffordep/circuits/stim_files/full_circuits/d3a6_inject_cultivate_p1e-3.stim`.
+`cliffordep/circuits/stim_files/full_circuits/d3a6_inject+cultivate_p1e-3.stim`.
 Another compatible S reference can be selected on the command line. Reference
 circuits may have any number of qubits, measurements, detectors, and
 observables, but must define observable 0. T/T_DAG circuit text is made in
@@ -112,14 +112,13 @@ corrected proxy.
 
 The committed corrected references are:
 
-- `d5a19_inject_cultivate_corrected.stim`, generated from
-  `d5a19_inject_cultivate.stim`; and
-- `d5a19_inject_cultivate_corrected_p1e-3.stim`, generated from
-  `d5a19_inject_cultivate_p1e-3.stim`.
+- `d5a19_inject+cultivate.stim`, generated from
+  `d5a19_inject+cultivate_uncorrected.stim`; and
+- `d5a19_inject+cultivate_p1e-3.stim`, generated from
+  `d5a19_inject+cultivate_uncorrected_p1e-3.stim`.
 
 Their filename stems are their default `circuit_name` values. The corrected
-names and circuit hashes distinguish their schema-3 Sinter task identities from
-the uncorrected references; no schema-version change is required.
+and explicitly uncorrected filenames distinguish their Sinter task identities.
 
 ## Environment
 
@@ -174,6 +173,17 @@ conda run --no-capture-output -n cliffordep \
 ```
 
 Smoke sampling remains a fixed quick check of both variants at `p=0.001`.
+
+Like `stim.CompiledDetectorSampler`, sampling uses system entropy when `--seed`
+is omitted. Pass an unsigned 64-bit seed to make one invocation deterministic:
+
+```bash
+python -m cliffordep.symft_simulation.run_simulation smoke --seed 1234
+```
+
+The seed is a runtime option and is not saved in task metadata or results.
+Reusing the same explicit seed with the same call sequence can repeat samples,
+so omit it for independent production and top-up runs.
 
 The SymFT adapter checks that accepted plus discarded equals attempted shots.
 It also verifies eight active CPU workers for the CPU backend, or the one host
@@ -231,13 +241,14 @@ may select a different subset of noise levels for the same circuit name;
 compatible unselected points already present in the shared CSV are retained.
 
 `sinter.collect` appends checkpoints and uses strong task IDs to aggregate and
-resume them. Each row's custom counts record its SymFT stream ID and active
-thread count. The runner derives the next unused stream from these counts after
-a restart. Do not run two writers against the same resume file concurrently.
+resume counts. Every new invocation uses fresh entropy-derived SymFT streams by
+default, including a later top-up of an existing CSV. The `custom_counts` CSV
+column is deliberately empty. Do not run two writers against the same resume
+file concurrently.
 
-Task metadata records `schema_version=3`, `decoder_version`, `noise_level`,
-`variant`, `circuit_name`, `circuit_sha256`, and `sampler`; older schemas must
-be migrated before collection or plotting.
+Task metadata records `schema_version=4`, `decoder_version`, `noise_level`,
+`variant`, `circuit_name`, and `sampler`. Older schemas are rejected; start a
+new CSV instead of reusing an older result file.
 
 The production and smoke commands display Sinter's live progress. Detailed
 statistics remain available in the production resume CSV.
@@ -250,10 +261,9 @@ with `sinter.plot_error_rate`.
 To pool equivalent CPU and CUDA samples for a figure while preserving raw
 Sinter resume data, use `read_plot_stats` instead. It creates plotting-only
 rows keyed only by the decoder and the `schema_version`, `circuit_name`,
-`circuit_sha256`, `noise_level`, and `variant` metadata. The returned rows
-retain decoder-version and sampler details in `plot_provenance`, have synthetic
-IDs, and must never be written back to the resume CSV or passed to a production
-collection:
+`noise_level`, and `variant` metadata. The returned rows retain decoder-version
+and sampler details in `plot_provenance`, have synthetic IDs, and must never be
+written back to the resume CSV or passed to a production collection:
 
 ```python
 from pathlib import Path

@@ -6,6 +6,7 @@ import collections
 import hashlib
 import json
 import math
+import secrets
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -25,7 +26,7 @@ REFERENCE_PATH = (
     / "circuits"
     / "stim_files"
     / "full_circuits"
-    / "d3a6_inject_cultivate_p1e-3.stim"
+    / "d3a6_inject+cultivate_p1e-3.stim"
 )
 DEFAULT_CIRCUIT_NAME = REFERENCE_PATH.stem
 DEFAULT_RESULTS_DIR = BASE_DIR / "results"
@@ -49,10 +50,9 @@ DEFAULT_CALL_SHOTS = 10_000_000
 DEFAULT_SMOKE_SHOTS = 100_000
 
 DECODER_NAME = "symft_counts"
-TASK_SCHEMA_VERSION = 3
+TASK_SCHEMA_VERSION = 4
 STATS_FILENAME = "stats.csv"
-STREAM_COUNT_PREFIX = "stream_id="
-ACTIVE_THREADS_PREFIX = "active_threads="
+STREAM_ID_MODULUS = 1 << 64
 PLOT_ONLY_AGGREGATE_KEY = "plot_only_aggregate"
 PLOT_PROVENANCE_KEY = "plot_provenance"
 
@@ -84,7 +84,6 @@ def _plot_identity_metadata(stat: sinter.TaskStats) -> dict[str, Any]:
         return {
             "schema_version": metadata["schema_version"],
             "circuit_name": metadata["circuit_name"],
-            "circuit_sha256": metadata["circuit_sha256"],
             "noise_level": metadata["noise_level"],
             "variant": metadata["variant"],
         }
@@ -251,8 +250,19 @@ def sampler_settings(cuda: bool = DEFAULT_CUDA) -> dict[str, Any]:
     return settings
 
 
+def validate_seed(seed: int | None) -> int | None:
+    """Validate one optional unsigned 64-bit sampling seed.
+
+    :param seed: Explicit seed, or None to request system entropy.
+    :return: The unchanged valid seed.
+    :raises ValueError: If the seed is outside ``range(2**64)``.
+    """
+    if seed is not None and seed not in range(STREAM_ID_MODULUS):
+        raise ValueError("seed must be in range(2**64)")
+    return seed
+
+
 def task_metadata(
-    circuit_text: str,
     noise_level: float,
     variant: str,
     circuit_name: str,
@@ -260,7 +270,6 @@ def task_metadata(
 ) -> dict[str, Any]:
     """Build the metadata that identifies one sampled SymFT distribution.
 
-    :param circuit_text: Actual S or T circuit that SymFT will sample.
     :param noise_level: Physical noise strength of the circuit.
     :param variant: State variant, either ``"S"`` or ``"T"``.
     :param circuit_name: Human-readable reference-circuit identifier.
@@ -273,7 +282,6 @@ def task_metadata(
         "noise_level": noise_level,
         "variant": variant,
         "circuit_name": circuit_name,
-        "circuit_sha256": sha256_text(circuit_text),
         "sampler": sampler_settings(cuda),
     }
 
@@ -299,7 +307,6 @@ def validate_all_variants(
                 {
                     "noise_level": noise_level,
                     "variant": variant,
-                    "circuit_sha256": sha256_text(text),
                     **inspect_circuit(text),
                 }
             )
@@ -344,18 +351,12 @@ def build_tasks(
             approximate_disjoint_errors=True,
         )
         for variant in selected_variants:
-            circuit_text = make_variant_text(
-                reference_text,
-                noise_level,
-                variant,
-            )
             tasks.append(
                 sinter.Task(
                     circuit=proxy_circuit,
                     detector_error_model=proxy_dem,
                     decoder=DECODER_NAME,
                     json_metadata=task_metadata(
-                        circuit_text,
                         noise_level,
                         variant,
                         circuit_name,
@@ -469,25 +470,6 @@ def _resume_variants(
     return _normalize_variants(result)
 
 
-def _stream_ids_from_counts(
-    custom_counts: Mapping[str, int],
-) -> list[int]:
-    """Extract unique stream identifiers from additive custom counts.
-
-    :param custom_counts: Sinter custom counts containing stream keys.
-    :return: Sorted stream identifiers.
-    :raises RuntimeError: If a stream identifier was counted more than once.
-    """
-    stream_ids = []
-    for key, count in custom_counts.items():
-        if not key.startswith(STREAM_COUNT_PREFIX):
-            continue
-        if count != 1:
-            raise RuntimeError(f"duplicate persisted random stream: {key}")
-        stream_ids.append(int(key.removeprefix(STREAM_COUNT_PREFIX)))
-    return sorted(stream_ids)
-
-
 def validate_resume_stats(
     stats: Iterable[sinter.TaskStats],
     tasks: Iterable[sinter.Task],
@@ -520,7 +502,7 @@ def validate_resume_stats(
             raise RuntimeError(
                 "existing SymFT statistics use obsolete "
                 f"schema_version={metadata.get('schema_version')!r}; "
-                f"migrate to schema_version={TASK_SCHEMA_VERSION} before collecting"
+                "start a new CSV before collecting"
             )
         if stat_circuit_name is None:
             continue
@@ -537,36 +519,6 @@ def validate_resume_stats(
             raise RuntimeError(
                 "persisted task metadata disagrees with its strong ID"
             )
-        stream_ids = _stream_ids_from_counts(stat.custom_counts)
-        if stat.shots and not stream_ids:
-            raise RuntimeError(
-                "persisted shots do not record stream IDs and cannot be "
-                "resumed safely"
-            )
-
-
-def next_stream_ids(
-    stats: Iterable[sinter.TaskStats],
-    tasks: Iterable[sinter.Task],
-) -> dict[str, int]:
-    """Determine the next unused SymFT stream for every task.
-
-    :param stats: Aggregated persisted statistics.
-    :param tasks: Current Sinter task matrix.
-    :return: Mapping from strong task ID to its next stream identifier.
-    """
-    stats_by_id = {stat.strong_id: stat for stat in stats}
-    result = {}
-    for task in tasks:
-        strong_id = task.strong_id()
-        stat = stats_by_id.get(strong_id)
-        stream_ids = (
-            []
-            if stat is None
-            else _stream_ids_from_counts(stat.custom_counts)
-        )
-        result[strong_id] = max(stream_ids, default=-1) + 1
-    return result
 
 
 def compile_counts_sampler(
@@ -577,8 +529,7 @@ def compile_counts_sampler(
 
     :param circuit_text: Actual S or T circuit to sample.
     :param cuda: Whether to compile SymFT's CUDA counts backend.
-    :return: Compiled SymFT counts sampler.
-    :return: Normalized SymFT sampler information.
+    :return: Compiled SymFT counts sampler and normalized sampler information.
     :raises RuntimeError: If SymFT does not honor the locked configuration.
     """
     inspect_circuit(circuit_text)
@@ -602,16 +553,16 @@ def compile_counts_sampler(
 
 
 class _StreamSequence:
-    """Allocate monotonically increasing SymFT stream identifiers."""
+    """Allocate one entropy-seeded sequence of SymFT stream identifiers."""
 
-    def __init__(self, next_stream_id: int) -> None:
+    def __init__(self, seed: int | None) -> None:
         """Initialize a task-local stream sequence.
 
         :param self: Stream sequence being initialized.
-        :param next_stream_id: First stream identifier to allocate.
+        :param seed: First stream identifier, or None to use system entropy.
         :return: None.
         """
-        self.next_stream_id = next_stream_id
+        self.next_stream_id = secrets.randbits(64) if seed is None else seed
 
     def take(self) -> int:
         """Return the next stream identifier and advance the sequence.
@@ -620,7 +571,7 @@ class _StreamSequence:
         :return: Newly allocated stream identifier.
         """
         stream_id = self.next_stream_id
-        self.next_stream_id += 1
+        self.next_stream_id = (stream_id + 1) % STREAM_ID_MODULUS
         return stream_id
 
 
@@ -702,12 +653,6 @@ class CompiledSymftSinterSampler(sinter.CompiledSampler):
             errors=logical_errors,
             discards=discarded,
             seconds=sample_seconds,
-            custom_counts=collections.Counter(
-                {
-                    f"{STREAM_COUNT_PREFIX}{stream_id}": 1,
-                    f"{ACTIVE_THREADS_PREFIX}{active_threads}": 1,
-                }
-            ),
         )
 
 
@@ -718,7 +663,7 @@ class SymftSinterSampler(sinter.Sampler):
         self,
         reference_text: str,
         call_shots: int,
-        initial_stream_ids: Mapping[str, int],
+        seed: int | None = None,
         cuda: bool = DEFAULT_CUDA,
     ) -> None:
         """Initialize the factory shared with Sinter's worker process.
@@ -726,17 +671,15 @@ class SymftSinterSampler(sinter.Sampler):
         :param self: Sampler factory being initialized.
         :param reference_text: Authoritative S-state circuit text.
         :param call_shots: Maximum attempted shots per SymFT call.
-        :param initial_stream_ids: First unused stream for each strong task ID.
+        :param seed: Initial stream identifier, or None to use system entropy.
         :param cuda: Whether to compile SymFT's CUDA counts backend.
         :return: None.
         """
         self.reference_text = reference_text
         self.call_shots = call_shots
+        self.seed = validate_seed(seed)
         self.cuda = cuda
-        self.stream_sequences = {
-            strong_id: _StreamSequence(next_stream_id)
-            for strong_id, next_stream_id in initial_stream_ids.items()
-        }
+        self.stream_sequences: dict[str, _StreamSequence] = {}
 
     def compiled_sampler_for_task(
         self,
@@ -747,7 +690,6 @@ class SymftSinterSampler(sinter.Sampler):
         :param self: SymFT sampler factory.
         :param task: Sinter task whose metadata selects the actual circuit.
         :return: Compiled SymFT-to-Sinter adapter.
-        :raises RuntimeError: If the transformed circuit hash has changed.
         """
         metadata = task.json_metadata
         circuit_text = make_variant_text(
@@ -755,14 +697,17 @@ class SymftSinterSampler(sinter.Sampler):
             float(metadata["noise_level"]),
             str(metadata["variant"]),
         )
-        if sha256_text(circuit_text) != metadata["circuit_sha256"]:
-            raise RuntimeError("Sinter task circuit hash does not match SymFT input")
         sampler, info = compile_counts_sampler(circuit_text, cuda=self.cuda)
+        strong_id = task.strong_id()
+        stream_sequence = self.stream_sequences.get(strong_id)
+        if stream_sequence is None:
+            stream_sequence = _StreamSequence(self.seed)
+            self.stream_sequences[strong_id] = stream_sequence
         return CompiledSymftSinterSampler(
             sampler=sampler,
             sampler_info=info,
             call_shots=self.call_shots,
-            stream_sequence=self.stream_sequences[task.strong_id()],
+            stream_sequence=stream_sequence,
         )
 
 
@@ -778,6 +723,7 @@ def collect_stats(
     noise_levels: Sequence[float] = DEFAULT_NOISE_LEVELS,
     cuda: bool = DEFAULT_CUDA,
     variants: Sequence[str] = VARIANTS,
+    seed: int | None = None,
 ) -> list[sinter.TaskStats]:
     """Collect or resume selected S/T points through Sinter.
 
@@ -791,6 +737,7 @@ def collect_stats(
     :param noise_levels: Physical noise strengths to collect.
     :param cuda: Whether to run the CUDA counts backend.
     :param variants: State variants to collect.
+    :param seed: Initial stream identifier, or None to use system entropy.
     :return: Aggregated statistics for the current requested tasks.
     """
     reference_text = reference_path.read_text(encoding="utf-8")
@@ -812,11 +759,10 @@ def collect_stats(
         _resume_variants(existing_stats, circuit_name, variants),
     )
     validate_resume_stats(existing_stats, resume_tasks)
-    initial_stream_ids = next_stream_ids(existing_stats, tasks)
     sampler = SymftSinterSampler(
         reference_text=reference_text,
         call_shots=call_shots,
-        initial_stream_ids=initial_stream_ids,
+        seed=seed,
         cuda=cuda,
     )
     collected = sinter.collect(
@@ -838,6 +784,7 @@ def smoke_sample(
     circuit_name: str = DEFAULT_CIRCUIT_NAME,
     cuda: bool = DEFAULT_CUDA,
     variants: Sequence[str] = VARIANTS,
+    seed: int | None = None,
 ) -> None:
     """Run a small non-persisted Sinter collection at noise 0.001.
 
@@ -846,6 +793,7 @@ def smoke_sample(
     :param circuit_name: Human-readable reference-circuit identifier.
     :param cuda: Whether to run the CUDA counts backend.
     :param variants: State variants to sample.
+    :param seed: Initial stream identifier, or None to use system entropy.
     :return: None.
     """
     reference_text = reference_path.read_text(encoding="utf-8")
@@ -862,7 +810,7 @@ def smoke_sample(
     sampler = SymftSinterSampler(
         reference_text=reference_text,
         call_shots=shots,
-        initial_stream_ids={task.strong_id(): 0 for task in tasks},
+        seed=seed,
         cuda=cuda,
     )
     sinter.collect(

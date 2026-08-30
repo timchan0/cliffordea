@@ -21,12 +21,12 @@ from cliffordep.symft_simulation.msc_framework import (
 FULL_CIRCUITS_DIR = REFERENCE_PATH.parent
 REFERENCE_PAIRS = (
     (
-        "d5a19_inject_cultivate.stim",
-        "d5a19_inject_cultivate_corrected.stim",
+        "d5a19_inject+cultivate_uncorrected.stim",
+        "d5a19_inject+cultivate.stim",
     ),
     (
-        "d5a19_inject_cultivate_p1e-3.stim",
-        "d5a19_inject_cultivate_corrected_p1e-3.stim",
+        "d5a19_inject+cultivate_uncorrected_p1e-3.stim",
+        "d5a19_inject+cultivate_p1e-3.stim",
     ),
 )
 
@@ -258,10 +258,8 @@ def test_noisy_and_noiseless_corrections_have_identical_ideal_structure() -> Non
 
     :return: None.
     """
-    noiseless = _read_circuit("d5a19_inject_cultivate_corrected.stim")
-    noisy = _read_circuit(
-        "d5a19_inject_cultivate_corrected_p1e-3.stim"
-    )
+    noiseless = _read_circuit("d5a19_inject+cultivate.stim")
+    noisy = _read_circuit("d5a19_inject+cultivate_p1e-3.stim")
 
     assert noisy != noiseless
     assert noisy.without_noise() == noiseless
@@ -272,7 +270,7 @@ def test_correction_uses_coordinates_after_reindexing_with_spectators() -> None:
 
     :return: None.
     """
-    source = _read_circuit("d5a19_inject_cultivate.stim")
+    source = _read_circuit("d5a19_inject+cultivate_uncorrected.stim")
     baseline = correct_d5_cultivation_circuit(source)
     remapped = _reindex_with_spectators(source)
 
@@ -294,7 +292,7 @@ def test_correction_ignores_flags_and_detector_time_shifts() -> None:
 
     :return: None.
     """
-    source = _read_circuit("d5a19_inject_cultivate.stim")
+    source = _read_circuit("d5a19_inject+cultivate_uncorrected.stim")
     source_instructions = circuit_instructions(source)
     first_gate_index = next(
         index
@@ -347,7 +345,7 @@ def test_correction_rejects_sensitive_structural_drift() -> None:
 
     :return: None.
     """
-    source = _read_circuit("d5a19_inject_cultivate.stim")
+    source = _read_circuit("d5a19_inject+cultivate_uncorrected.stim")
     instructions = circuit_instructions(source)
     bell_measurement_index = next(
         index
@@ -409,7 +407,7 @@ def test_correction_rejects_repeated_application() -> None:
 
     :return: None.
     """
-    source = _read_circuit("d5a19_inject_cultivate.stim")
+    source = _read_circuit("d5a19_inject+cultivate_uncorrected.stim")
     corrected = correct_d5_cultivation_circuit(source)
 
     with pytest.raises(RuntimeError, match="already be corrected"):
@@ -433,16 +431,16 @@ def test_correction_rejects_repeat_blocks() -> None:
         correct_d5_cultivation_circuit(circuit)
 
 
-def test_corrected_t_only_task_has_distinct_schema_three_identity() -> None:
+def test_corrected_t_only_task_has_distinct_schema_four_identity() -> None:
     """The corrected noisy reference creates one distinct named T task.
 
     :return: None.
     """
     uncorrected_path = FULL_CIRCUITS_DIR / (
-        "d5a19_inject_cultivate_p1e-3.stim"
+        "d5a19_inject+cultivate_uncorrected_p1e-3.stim"
     )
     corrected_path = FULL_CIRCUITS_DIR / (
-        "d5a19_inject_cultivate_corrected_p1e-3.stim"
+        "d5a19_inject+cultivate_p1e-3.stim"
     )
     uncorrected_task = build_tasks(
         uncorrected_path.read_text(encoding="utf-8"),
@@ -460,9 +458,9 @@ def test_corrected_t_only_task_has_distinct_schema_three_identity() -> None:
     assert len(corrected_tasks) == 1
     corrected_task = corrected_tasks[0]
     assert corrected_task.json_metadata["schema_version"] == TASK_SCHEMA_VERSION
-    assert corrected_task.json_metadata["schema_version"] == 3
+    assert corrected_task.json_metadata["schema_version"] == 4
     assert corrected_task.json_metadata["variant"] == "T"
     assert corrected_task.json_metadata["circuit_name"] == (
-        "d5a19_inject_cultivate_corrected_p1e-3"
+        "d5a19_inject+cultivate_p1e-3"
     )
     assert corrected_task.strong_id() != uncorrected_task.strong_id()

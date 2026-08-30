@@ -95,7 +95,9 @@ def test_cli_defaults_and_accepts_variant_subsets(tmp_path: Path) -> None:
     parser = build_parser()
 
     validate_args = parser.parse_args(["validate"])
-    smoke_args = parser.parse_args(["smoke", "--variants", "S"])
+    smoke_args = parser.parse_args(
+        ["smoke", "--variants", "S", "--seed", "7"]
+    )
     run_args = parser.parse_args(
         [
             "run",
@@ -104,12 +106,16 @@ def test_cli_defaults_and_accepts_variant_subsets(tmp_path: Path) -> None:
             "--variants",
             "S",
             "T",
+            "--seed",
+            "8",
         ]
     )
 
     assert validate_args.variants == VARIANTS
     assert smoke_args.variants == ["S"]
+    assert smoke_args.seed == 7
     assert run_args.variants == ["S", "T"]
+    assert run_args.seed == 8
     with pytest.raises(SystemExit):
         parser.parse_args(["validate", "--variants", "unknown"])
 
@@ -136,7 +142,9 @@ def test_cli_forwards_variants_to_every_operation(
     assert run_simulation.main(
         ["validate", "--reference", str(reference_path), "--variants", "S"]
     ) == 0
-    assert run_simulation.main(["smoke", "--variants", "T"]) == 0
+    assert run_simulation.main(
+        ["smoke", "--variants", "T", "--seed", "7"]
+    ) == 0
     assert run_simulation.main(
         [
             "run",
@@ -145,12 +153,16 @@ def test_cli_forwards_variants_to_every_operation(
             "--variants",
             "T",
             "S",
+            "--seed",
+            "8",
         ]
     ) == 0
 
     assert validate.call_args.args[2] == ["S"]
     assert smoke.call_args.kwargs["variants"] == ["T"]
+    assert smoke.call_args.kwargs["seed"] == 7
     assert collect.call_args.kwargs["variants"] == ["T", "S"]
+    assert collect.call_args.kwargs["seed"] == 8
 
 
 def test_smoke_sampling_builds_only_the_selected_variant(

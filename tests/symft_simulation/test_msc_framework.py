@@ -16,16 +16,16 @@ import sinter
 import stim
 import symft
 
+from cliffordep.symft_simulation import msc_framework
 from cliffordep.symft_simulation.msc_framework import (
-    ACTIVE_THREADS_PREFIX,
     DEFAULT_CIRCUIT_NAME,
     DEFAULT_NOISE_LEVELS,
     PLOT_ONLY_AGGREGATE_KEY,
     PLOT_PROVENANCE_KEY,
     REFERENCE_PATH,
     STATS_FILENAME,
-    STREAM_COUNT_PREFIX,
     TASK_SCHEMA_VERSION,
+    SymftSinterSampler,
     CompiledSymftSinterSampler,
     _StreamSequence,
     _resume_noise_levels,
@@ -33,10 +33,8 @@ from cliffordep.symft_simulation.msc_framework import (
     build_tasks,
     inspect_circuit,
     make_variant_text,
-    next_stream_ids,
     read_plot_stats,
     sampler_settings,
-    sha256_text,
     smoke_sample,
     validate_all_variants,
     validate_resume_stats,
@@ -84,16 +82,7 @@ class FakeSymftCountsSampler:
 
 
 class FixedCompiledSampler(sinter.CompiledSampler):
-    """Produce fixed-size batches while exposing sequential stream IDs."""
-
-    def __init__(self, next_stream_id: int) -> None:
-        """Initialize a deterministic compiled sampler.
-
-        :param self: Compiled sampler being initialized.
-        :param next_stream_id: First stream identifier to report.
-        :return: None.
-        """
-        self.next_stream_id = next_stream_id
+    """Produce fixed-size batches with no custom result counts."""
 
     def handles_throttling(self) -> bool:
         """Disable Sinter's adaptive throttling for deterministic tests.
@@ -104,35 +93,18 @@ class FixedCompiledSampler(sinter.CompiledSampler):
         return True
 
     def sample(self, suggested_shots: int) -> sinter.AnonTaskStats:
-        """Return a fixed batch carrying the next fake stream identifier.
+        """Return one fixed-size batch for Sinter resume tests.
 
         :param self: Fixed compiled sampler.
         :param suggested_shots: Maximum shots requested by Sinter.
         :return: Deterministic anonymous task statistics.
         """
         shots = min(suggested_shots, 10)
-        stream_id = self.next_stream_id
-        self.next_stream_id += 1
-        return sinter.AnonTaskStats(
-            shots=shots,
-            errors=1,
-            custom_counts=collections.Counter(
-                {f"{STREAM_COUNT_PREFIX}{stream_id}": 1}
-            ),
-        )
+        return sinter.AnonTaskStats(shots=shots, errors=1)
 
 
 class FixedSampler(sinter.Sampler):
     """Compile deterministic samplers for Sinter resume tests."""
-
-    def __init__(self, next_stream_id: int) -> None:
-        """Initialize the deterministic sampler factory.
-
-        :param self: Sampler factory being initialized.
-        :param next_stream_id: First stream identifier to report.
-        :return: None.
-        """
-        self.next_stream_id = next_stream_id
 
     def compiled_sampler_for_task(
         self,
@@ -144,7 +116,7 @@ class FixedSampler(sinter.Sampler):
         :param task: Sinter task being compiled.
         :return: Deterministic compiled sampler.
         """
-        return FixedCompiledSampler(self.next_stream_id)
+        return FixedCompiledSampler()
 
 
 def _fixed_task(case: str = "resume") -> sinter.Task:
@@ -167,7 +139,6 @@ def _task_stat(
     shots: int,
     errors: int,
     discards: int,
-    stream_ids: tuple[int, ...],
 ) -> sinter.TaskStats:
     """Create one persisted statistic matching a task.
 
@@ -175,12 +146,8 @@ def _task_stat(
     :param shots: Attempted shot count.
     :param errors: Logical-error count.
     :param discards: Detector-rejected shot count.
-    :param stream_ids: Random streams represented by the statistic.
     :return: Sinter statistic compatible with resume validation.
     """
-    custom_counts = collections.Counter(
-        {f"{STREAM_COUNT_PREFIX}{stream_id}": 1 for stream_id in stream_ids}
-    )
     return sinter.TaskStats(
         strong_id=task.strong_id(),
         decoder=str(task.decoder),
@@ -189,7 +156,6 @@ def _task_stat(
         errors=errors,
         discards=discards,
         seconds=0.001,
-        custom_counts=custom_counts,
     )
 
 
@@ -210,7 +176,7 @@ def _plot_source_stat(
     :param shots: Attempted shots represented by the statistic.
     :param errors: Logical errors represented by the statistic.
     :param discards: Detector-rejected shots represented by the statistic.
-    :return: Raw Sinter statistic with one resume-only stream counter.
+    :return: Raw Sinter statistic with an empty custom-count field.
     """
     return sinter.TaskStats(
         strong_id=strong_id,
@@ -220,8 +186,16 @@ def _plot_source_stat(
         errors=errors,
         discards=discards,
         seconds=0.125,
-        custom_counts=collections.Counter({f"{STREAM_COUNT_PREFIX}0": 1}),
     )
+
+
+def _change_reference_circuit(reference_text: str) -> str:
+    """Change one physical error probability in a reference circuit.
+
+    :param reference_text: Original noisy cultivation circuit text.
+    :return: Circuit text representing a distinct sampling distribution.
+    """
+    return reference_text.replace("X_ERROR(0.001)", "X_ERROR(0.002)", 1)
 
 
 def test_s_reference_generates_exact_existing_t_and_s_circuits() -> None:
@@ -231,15 +205,9 @@ def test_s_reference_generates_exact_existing_t_and_s_circuits() -> None:
     rows = validate_all_variants(source_text)
 
     assert len(rows) == 12
-    assert sha256_text(source_text) == (
-        "5003995c48830329a84e50560c49c1433b9dd8d23c06266a74272b6fce2d5afa"
-    )
+    assert all("circuit_sha256" not in row for row in rows)
     assert not re.search(r"(?m)^T(?:_DAG)? ", source_text)
     assert re.search(r"(?m)^S(?:_DAG)? ", source_text)
-    t_text = make_variant_text(source_text, 0.001, "T")
-    assert sha256_text(t_text) == (
-        "47ba7bb81fb84a043d2ecf9de3598dca41faf67f2d54a078399dc8dff6416f0d"
-    )
     for noise_level in DEFAULT_NOISE_LEVELS:
         assert re.search(
             r"(?m)^T(?:_DAG)? ",
@@ -254,10 +222,10 @@ def test_s_reference_generates_exact_existing_t_and_s_circuits() -> None:
 @pytest.mark.parametrize(
     "filename",
     (
-        "d3a6_inject_cultivate_p1e-3.stim",
-        "d3a6f2_inject_cultivate_p1e-3.stim",
-        "d5a19_inject_cultivate_corrected_p1e-3.stim",
-        "d5a19f13_inject_cultivate_corrected_p1e-3.stim",
+        "d3a6_inject+cultivate_p1e-3.stim",
+        "d3a6f2_inject+cultivate_p1e-3.stim",
+        "d5a19_inject+cultivate_p1e-3.stim",
+        "d5a19f13_inject+cultivate_p1e-3.stim",
     ),
 )
 def test_noiseless_t_variant_detectors_are_deterministic(
@@ -297,22 +265,15 @@ def test_tasks_use_s_proxies_and_identify_actual_variants() -> None:
         assert not re.search(r"(?m)^T ", proxy_text)
         noise_level = float(task.json_metadata["noise_level"])
         variant = str(task.json_metadata["variant"])
-        actual_text = make_variant_text(
-            source_text,
-            noise_level,
-            variant,
-        )
         assert task.json_metadata == {
             "schema_version": TASK_SCHEMA_VERSION,
             "decoder_version": symft.__version__,
             "noise_level": noise_level,
             "variant": variant,
             "circuit_name": DEFAULT_CIRCUIT_NAME,
-            "circuit_sha256": sha256_text(actual_text),
             "sampler": sampler_settings(),
         }
         assert task.json_metadata["circuit_name"] == DEFAULT_CIRCUIT_NAME
-        assert task.json_metadata["circuit_sha256"] == sha256_text(actual_text)
         circuit = task.circuit
         assert type(circuit) is stim.Circuit
         assert task.detector_error_model == circuit.detector_error_model(
@@ -324,7 +285,7 @@ def test_tasks_use_s_proxies_and_identify_actual_variants() -> None:
 def test_distance_five_tasks_allow_nongraphlike_detector_errors() -> None:
     """D5 tasks retain undecomposed hyperedges instead of failing construction."""
     reference_path = REFERENCE_PATH.with_name(
-        "d5a19_inject_cultivate_p1e-3.stim"
+        "d5a19_inject+cultivate_p1e-3.stim"
     )
 
     tasks = build_tasks(
@@ -494,7 +455,6 @@ def test_plot_aggregation_keeps_identity_or_decoder_differences_separate() -> No
     baseline = json.loads(json.dumps(build_tasks(source_text)[0].json_metadata))
     cases = [
         ("circuit_name", "different-name", None),
-        ("circuit_sha256", "different-circuit", None),
         ("noise_level", 0.123, None),
         ("variant", "different-variant", None),
         (None, None, "another-decoder"),
@@ -562,19 +522,19 @@ def test_read_plot_stats_pools_csvs_without_changing_them_and_cannot_resume(
         validate_resume_stats(pooled, build_tasks(source_text))
 
 
-@pytest.mark.parametrize("schema_version", [1, 2])
+@pytest.mark.parametrize("schema_version", [1, 2, 3])
 def test_plot_aggregation_rejects_obsolete_schemas(schema_version: int) -> None:
-    """Plot aggregation accepts schema three only, without legacy fallbacks."""
+    """Plot aggregation accepts schema four only, without legacy fallbacks."""
     source_text = REFERENCE_PATH.read_text(encoding="utf-8")
     metadata = dict(build_tasks(source_text)[0].json_metadata)
     metadata["schema_version"] = schema_version
 
-    with pytest.raises(RuntimeError, match="requires schema_version=3"):
+    with pytest.raises(RuntimeError, match="requires schema_version=4"):
         aggregate_stats_for_plot([_plot_source_stat("old", metadata)])
 
 
 def test_plot_aggregation_requires_decoder_version() -> None:
-    """Schema-three plotting rejects rows missing the renamed version field."""
+    """Schema-four plotting rejects rows missing the decoder version field."""
     source_text = REFERENCE_PATH.read_text(encoding="utf-8")
     metadata = dict(build_tasks(source_text)[0].json_metadata)
     del metadata["decoder_version"]
@@ -602,7 +562,7 @@ def test_circuit_names_separate_otherwise_identical_sinter_tasks() -> None:
 
 
 def test_compiled_adapter_maps_counts_caps_calls_and_advances_streams() -> None:
-    """The adapter returns Sinter semantics and one new stream per capped call."""
+    """The adapter advances streams while emitting no custom result counts."""
     fake = FakeSymftCountsSampler()
     adapter = CompiledSymftSinterSampler(
         sampler=fake,
@@ -623,9 +583,9 @@ def test_compiled_adapter_maps_counts_caps_calls_and_advances_streams() -> None:
     assert first.errors == 1
     assert first.discards == 2
     assert first.seconds == 0.25
-    assert first.custom_counts[f"{STREAM_COUNT_PREFIX}7"] == 1
-    assert first.custom_counts[f"{ACTIVE_THREADS_PREFIX}5"] == 1
+    assert first.custom_counts == collections.Counter()
     assert second.shots == 4
+    assert second.custom_counts == collections.Counter()
 
 
 def test_compiled_adapter_rejects_a_thread_count_mismatch() -> None:
@@ -660,7 +620,7 @@ def test_compiled_adapter_accepts_cuda_single_host_worker() -> None:
 
     stat = adapter.sample(10)
 
-    assert stat.custom_counts[f"{ACTIVE_THREADS_PREFIX}1"] == 1
+    assert stat.custom_counts == collections.Counter()
 
 
 def test_compiled_adapter_rejects_cuda_host_worker_mismatch() -> None:
@@ -680,41 +640,76 @@ def test_compiled_adapter_rejects_cuda_host_worker_mismatch() -> None:
         adapter.sample(10)
 
 
-def test_recompiled_adapters_share_the_task_stream_sequence() -> None:
-    """Recompiling one Sinter task cannot repeat an in-process stream ID."""
-    sequence = _StreamSequence(12)
+def test_factory_seeds_each_task_and_shares_recompiled_sequence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each task gets entropy once and keeps its sequence across recompiles.
+
+    :param monkeypatch: Pytest fixture replacing entropy and SymFT compilation.
+    """
+    source_text = REFERENCE_PATH.read_text(encoding="utf-8")
+    tasks = build_tasks(source_text, noise_levels=(0.001,))
     first_fake = FakeSymftCountsSampler()
     second_fake = FakeSymftCountsSampler()
-    first = CompiledSymftSinterSampler(
-        sampler=first_fake,
-        sampler_info={
-            "backend": "batch",
-            "threads": 8,
-            "sample_chunk_shots": 2,
-        },
-        call_shots=10,
-        stream_sequence=sequence,
+    recompiled_fake = FakeSymftCountsSampler()
+    sampler_info = {
+        "backend": "batch",
+        "threads": 8,
+        "sample_chunk_shots": 2,
+    }
+    compile_sampler = Mock(
+        side_effect=[
+            (first_fake, sampler_info),
+            (second_fake, sampler_info),
+            (recompiled_fake, sampler_info),
+        ]
     )
-    second = CompiledSymftSinterSampler(
-        sampler=second_fake,
-        sampler_info={
-            "backend": "batch",
-            "threads": 8,
-            "sample_chunk_shots": 2,
-        },
-        call_shots=10,
-        stream_sequence=sequence,
-    )
+    randbits = Mock(side_effect=[12, 42])
+    monkeypatch.setattr(msc_framework, "compile_counts_sampler", compile_sampler)
+    monkeypatch.setattr(msc_framework.secrets, "randbits", randbits)
+    factory = SymftSinterSampler(source_text, call_shots=10)
 
-    first.sample(4)
-    second.sample(4)
+    factory.compiled_sampler_for_task(tasks[0]).sample(4)
+    factory.compiled_sampler_for_task(tasks[1]).sample(4)
+    factory.compiled_sampler_for_task(tasks[0]).sample(4)
 
     assert first_fake.calls == [(4, 12)]
-    assert second_fake.calls == [(4, 13)]
+    assert second_fake.calls == [(4, 42)]
+    assert recompiled_fake.calls == [(4, 13)]
+    assert [item.args for item in randbits.call_args_list] == [(64,), (64,)]
 
 
-def test_resume_validation_and_next_stream_use_custom_counts() -> None:
-    """Persisted stream keys select the next unused per-task stream."""
+def test_stream_sequence_uses_entropy_and_wraps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Default streams use 64-bit entropy and explicit maximum seeds wrap."""
+    randbits = Mock(return_value=123)
+    monkeypatch.setattr(msc_framework.secrets, "randbits", randbits)
+
+    entropy_sequence = _StreamSequence(None)
+    wrapping_sequence = _StreamSequence(2**64 - 1)
+
+    assert entropy_sequence.take() == 123
+    assert entropy_sequence.take() == 124
+    assert wrapping_sequence.take() == 2**64 - 1
+    assert wrapping_sequence.take() == 0
+    randbits.assert_called_once_with(64)
+
+
+@pytest.mark.parametrize("seed", [-1, 2**64])
+def test_programmatic_sampler_rejects_invalid_seed(seed: int) -> None:
+    """Direct Python callers cannot select a stream outside 64-bit range.
+
+    :param seed: Invalid boundary value supplied to the sampler factory.
+    """
+    source_text = REFERENCE_PATH.read_text(encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"range\(2\*\*64\)"):
+        SymftSinterSampler(source_text, call_shots=10, seed=seed)
+
+
+def test_resume_validation_accepts_empty_custom_counts() -> None:
+    """Schema-four resume rows need no persisted RNG or thread counters."""
     source_text = REFERENCE_PATH.read_text(encoding="utf-8")
     tasks = build_tasks(source_text)
     task = tasks[0]
@@ -723,18 +718,10 @@ def test_resume_validation_and_next_stream_use_custom_counts() -> None:
         shots=20,
         errors=2,
         discards=3,
-        stream_ids=(0, 1, 4),
     )
 
     validate_resume_stats([stat], tasks)
-    starts = next_stream_ids([stat], tasks)
-
-    assert starts[task.strong_id()] == 5
-    assert all(
-        value == 0
-        for strong_id, value in starts.items()
-        if strong_id != task.strong_id()
-    )
+    assert stat.custom_counts == collections.Counter()
 
 
 def test_resume_allows_other_names_and_rejects_reused_names() -> None:
@@ -747,19 +734,20 @@ def test_resume_allows_other_names_and_rejects_reused_names() -> None:
         shots=10,
         errors=1,
         discards=2,
-        stream_ids=(0,),
     )
     beta_stat = _task_stat(
         beta_tasks[0],
         shots=10,
         errors=1,
         discards=2,
-        stream_ids=(0,),
     )
 
     validate_resume_stats([alpha_stat, beta_stat], beta_tasks)
 
-    changed_alpha_tasks = build_tasks(source_text + "\n", "alpha")
+    changed_alpha_tasks = build_tasks(
+        _change_reference_circuit(source_text),
+        "alpha",
+    )
     with pytest.raises(RuntimeError, match="already identifies different"):
         validate_resume_stats([alpha_stat], changed_alpha_tasks)
 
@@ -792,7 +780,6 @@ def test_resume_accepts_compatible_unselected_noise_levels() -> None:
         shots=10,
         errors=1,
         discards=2,
-        stream_ids=(0,),
     )
 
     resume_levels = _resume_noise_levels(
@@ -805,14 +792,18 @@ def test_resume_accepts_compatible_unselected_noise_levels() -> None:
     assert resume_levels == (0.001, 0.004)
     validate_resume_stats([historical_stat], resume_tasks)
 
-    changed_tasks = build_tasks(source_text + "\n", "alpha", resume_levels)
+    changed_tasks = build_tasks(
+        _change_reference_circuit(source_text),
+        "alpha",
+        resume_levels,
+    )
     with pytest.raises(RuntimeError, match="already identifies different"):
         validate_resume_stats([historical_stat], changed_tasks)
 
 
-@pytest.mark.parametrize("schema_version", [1, 2])
+@pytest.mark.parametrize("schema_version", [1, 2, 3])
 def test_resume_rejects_obsolete_schema(schema_version: int) -> None:
-    """Collection requires migrated schema-three statistics before resuming."""
+    """Collection rejects pre-schema-four statistics instead of migrating."""
     source_text = REFERENCE_PATH.read_text(encoding="utf-8")
     task = build_tasks(source_text)[0]
     metadata = dict(task.json_metadata)
@@ -825,17 +816,14 @@ def test_resume_rejects_obsolete_schema(schema_version: int) -> None:
         errors=1,
         discards=2,
         seconds=0.001,
-        custom_counts=collections.Counter(
-            {f"{STREAM_COUNT_PREFIX}0": 1}
-        ),
     )
 
-    with pytest.raises(RuntimeError, match="migrate to schema_version=3"):
+    with pytest.raises(RuntimeError, match="start a new CSV"):
         validate_resume_stats([old_stat], build_tasks(source_text))
 
 
-def test_sinter_collect_resumes_without_repeating_streams(tmp_path: Path) -> None:
-    """A complete rerun adds nothing, while a raised cap starts at stream two.
+def test_sinter_collect_resumes_counts_without_custom_state(tmp_path: Path) -> None:
+    """A complete rerun adds nothing while a raised cap adds an empty-count row.
 
     :param tmp_path: Temporary directory supplied by pytest.
     """
@@ -847,7 +835,7 @@ def test_sinter_collect_resumes_without_repeating_streams(tmp_path: Path) -> Non
         tasks=[task],
         save_resume_filepath=stats_path,
         max_shots=20,
-        custom_decoders={"fixed": FixedSampler(0)},
+        custom_decoders={"fixed": FixedSampler()},
     )
     first_text = stats_path.read_text(encoding="utf-8")
     second = sinter.collect(
@@ -855,7 +843,7 @@ def test_sinter_collect_resumes_without_repeating_streams(tmp_path: Path) -> Non
         tasks=[task],
         save_resume_filepath=stats_path,
         max_shots=20,
-        custom_decoders={"fixed": FixedSampler(2)},
+        custom_decoders={"fixed": FixedSampler()},
     )
     second_text = stats_path.read_text(encoding="utf-8")
     third = sinter.collect(
@@ -863,7 +851,7 @@ def test_sinter_collect_resumes_without_repeating_streams(tmp_path: Path) -> Non
         tasks=[task],
         save_resume_filepath=stats_path,
         max_shots=30,
-        custom_decoders={"fixed": FixedSampler(2)},
+        custom_decoders={"fixed": FixedSampler()},
     )
 
     assert first[0].shots == 20
@@ -871,9 +859,11 @@ def test_sinter_collect_resumes_without_repeating_streams(tmp_path: Path) -> Non
     assert second_text == first_text
     assert stats_path.read_text(encoding="utf-8") != second_text
     assert third[0].shots == 30
-    assert third[0].custom_counts[f"{STREAM_COUNT_PREFIX}0"] == 1
-    assert third[0].custom_counts[f"{STREAM_COUNT_PREFIX}1"] == 1
-    assert third[0].custom_counts[f"{STREAM_COUNT_PREFIX}2"] == 1
+    assert third[0].custom_counts == collections.Counter()
+    assert all(
+        line.endswith(",")
+        for line in stats_path.read_text(encoding="utf-8").splitlines()[1:]
+    )
 
 
 def test_sinter_collect_keeps_shared_tasks_independent(tmp_path: Path) -> None:
@@ -890,21 +880,21 @@ def test_sinter_collect_keeps_shared_tasks_independent(tmp_path: Path) -> None:
         tasks=[alpha],
         save_resume_filepath=stats_path,
         max_shots=20,
-        custom_decoders={"fixed": FixedSampler(0)},
+        custom_decoders={"fixed": FixedSampler()},
     )
     sinter.collect(
         num_workers=1,
         tasks=[beta],
         save_resume_filepath=stats_path,
         max_shots=10,
-        custom_decoders={"fixed": FixedSampler(0)},
+        custom_decoders={"fixed": FixedSampler()},
     )
     sinter.collect(
         num_workers=1,
         tasks=[alpha],
         save_resume_filepath=stats_path,
         max_shots=30,
-        custom_decoders={"fixed": FixedSampler(2)},
+        custom_decoders={"fixed": FixedSampler()},
     )
     stats = {
         stat.json_metadata["case"]: stat
@@ -913,16 +903,8 @@ def test_sinter_collect_keeps_shared_tasks_independent(tmp_path: Path) -> None:
 
     assert stats["alpha"].shots == 30
     assert stats["beta"].shots == 10
-    assert stats["alpha"].custom_counts == collections.Counter(
-        {
-            f"{STREAM_COUNT_PREFIX}0": 1,
-            f"{STREAM_COUNT_PREFIX}1": 1,
-            f"{STREAM_COUNT_PREFIX}2": 1,
-        }
-    )
-    assert stats["beta"].custom_counts == collections.Counter(
-        {f"{STREAM_COUNT_PREFIX}0": 1}
-    )
+    assert stats["alpha"].custom_counts == collections.Counter()
+    assert stats["beta"].custom_counts == collections.Counter()
 
 
 def test_cli_defaults_and_overrides_reference_identity(tmp_path: Path) -> None:
@@ -944,6 +926,7 @@ def test_cli_defaults_and_overrides_reference_identity(tmp_path: Path) -> None:
             "published-label",
         ]
     )
+    seeded_smoke_args = parser.parse_args(["smoke", "--seed", "0"])
     run_args = parser.parse_args(
         [
             "run",
@@ -955,6 +938,8 @@ def test_cli_defaults_and_overrides_reference_identity(tmp_path: Path) -> None:
             "0.001",
             "0.004",
             "--cuda",
+            "--seed",
+            str(2**64 - 1),
         ]
     )
 
@@ -975,7 +960,14 @@ def test_cli_defaults_and_overrides_reference_identity(tmp_path: Path) -> None:
     assert run_args.stats == stats_path
     assert run_args.noise_levels == [0.001, 0.004]
     assert smoke_args.cuda is False
+    assert smoke_args.seed is None
+    assert seeded_smoke_args.seed == 0
     assert run_args.cuda is True
+    assert run_args.seed == 2**64 - 1
+
+    for invalid_seed in ("-1", str(2**64)):
+        with pytest.raises(SystemExit):
+            parser.parse_args(["smoke", "--seed", invalid_seed])
 
 
 def test_run_requires_a_stats_path() -> None:
@@ -992,9 +984,12 @@ def test_smoke_sample_uses_sinter_progress(monkeypatch: pytest.MonkeyPatch) -> N
     collect = Mock(return_value=[])
     monkeypatch.setattr(sinter, "collect", collect)
 
-    result = smoke_sample(REFERENCE_PATH, 100, "smoke")
+    result = smoke_sample(REFERENCE_PATH, 100, "smoke", seed=123)
 
     assert result is None
     assert collect.call_args.kwargs["print_progress"] is True
     assert collect.call_args.kwargs["max_shots"] == 100
     assert len(collect.call_args.kwargs["tasks"]) == 2
+    sampler = collect.call_args.kwargs["custom_decoders"]["symft_counts"]
+    assert isinstance(sampler, SymftSinterSampler)
+    assert sampler.seed == 123
