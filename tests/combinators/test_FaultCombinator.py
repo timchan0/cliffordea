@@ -6,12 +6,14 @@ from types import SimpleNamespace
 from typing import cast
 from unittest.mock import Mock
 
+import numpy as np
 import pytest
 import stim
 
 import cliffordep
 from cliffordep.combinators import FaultCombinator
 from cliffordep.combinators.fault_combinator import (
+    _compile_odds_terms,
     _make_logical_analysis_cache,
     _make_pauli_mask_restrictor,
     _iter_zero_syndrome_configurations,
@@ -928,12 +930,89 @@ def test_d3_order_four_frozen_regression(
             ))
         assert actual == expected
 
-    assert combinator.error_rate_per_kept_shot(
-        kept_effects['S'], 1e-3
-    ) == pytest.approx(1.2214229460983106e-08)
-    assert combinator.error_rate_per_kept_shot(
-        kept_effects['T'], 1e-3
-    ) == pytest.approx(2.817318122322684e-07)
+    noise_levels = (1e-4, 1e-3, 1e-2)
+    expected_error_rates = {
+        'S': (
+            1.1745627300415205e-11,
+            1.2214229460983108e-08,
+            1.6935408918281458e-05,
+        ),
+        'T': (
+            2.17031232425879e-09,
+            2.817318122322684e-07,
+            1.0696917642722221e-04,
+        ),
+    }
+    for state, expected in expected_error_rates.items():
+        actual = combinator.error_rates_per_kept_shot(
+            kept_effects[state],
+            noise_levels,
+        )
+        np.testing.assert_allclose(actual, expected, rtol=1e-14, atol=0)
+
+
+def test_compile_odds_terms_combines_equivalent_fault_bags():
+    """Equivalent probability signatures share one accumulated logical term.
+
+    :return: None.
+    """
+    kept_effects = [
+        {},
+        {
+            0: (1.0, 0.75, [(0,), (1,), (2,)]),
+        },
+    ]
+
+    compiled_terms = _compile_odds_terms(
+        all_kept_effects=kept_effects,
+        fault_index_to_bag_index=(0, 0, 1),
+    )
+
+    signatures, logical_weights = compiled_terms[1]
+    assert signatures.tolist() == [[0], [1]]
+    np.testing.assert_array_equal(
+        logical_weights,
+        [[1.5, 0.5], [0.75, 0.25]],
+    )
+
+
+def test_error_rate_sweep_accepts_generators_and_reports_progress(capsys):
+    """A generated sweep returns ordered rates and reports every noise level.
+
+    :param capsys: Pytest fixture used to capture progress output.
+    :return: None.
+    """
+    combinator = _make_small_fault_combinator()
+    kept_effects = [
+        {0: (1.0, 1.0, [()])},
+        {1: (1.0, 0.5, [(0,)])},
+    ]
+    noise_levels = (noise_level for noise_level in (1e-3, 2e-3))
+
+    error_rates = combinator.error_rates_per_kept_shot(
+        kept_effects,
+        noise_levels,
+        print_progress=True,
+    )
+
+    assert error_rates.shape == (2,)
+    output = capsys.readouterr().out
+    assert output.count('Noise level = ') == 2
+    assert output.count('O(p^0) events:') == 2
+    assert output.count('O(p^1) events:') == 2
+
+
+def test_error_rate_sweep_returns_empty_float_array_without_noise_levels():
+    """An empty sweep returns an empty floating-point result.
+
+    :return: None.
+    """
+    combinator = _make_small_fault_combinator()
+
+    error_rates = combinator.error_rates_per_kept_shot([], ())
+
+    assert error_rates.shape == (0,)
+    assert error_rates.dtype == np.float64
 
 
 def test_d5_order_four_documented_weights_and_enumeration_counts(monkeypatch):

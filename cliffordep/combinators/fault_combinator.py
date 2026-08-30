@@ -5,6 +5,8 @@ import itertools
 import math
 from typing import Literal
 
+import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import stim
 from tqdm.auto import tqdm
@@ -152,42 +154,76 @@ class FaultCombinator(Combinator):
         return f"{self.__class__.__name__} with {self.fault_count} faults distributed among {self.syndrome_count} syndromes."
 
 
-    def error_rate_per_kept_shot(
+    def error_rates_per_kept_shot(
             self,
             all_kept_effects: list[dict[PauliMask, LogicalTriple]],
-            noise_level: float,
+            noise_levels: Iterable[float],
             print_progress: bool = False,
-    ) -> float:
-        """Calculate the logical error rate per kept shot for a given noise level.
+    ) -> npt.NDArray[np.float64]:
+        """Calculate logical error rates per kept shot over a noise sweep.
 
+        :param self: The fault combinator whose fault probabilities are used.
         :param all_kept_effects: One state's output from `get_kept_effects`.
-        :param noise_level: The noise level to analyze.
-        :param print_progress: Whether to print progress.
+        :param noise_levels: Noise levels to analyze in output order.
+        :param print_progress: Whether to print per-order odds at each level.
+        :return: Logical error rates in the same order as `noise_levels`.
         """
-        index_to_odds = self.get_index_to_odds(noise_level)
-        identity_odds, error_odds = 0, 0
-        for degree, effects in enumerate(all_kept_effects):
-            i_odds, e_odds = _sum_odds(effects.values(), index_to_odds)
+        noise_level_array = np.asarray(tuple(noise_levels), dtype=np.float64)
+        if not noise_level_array.size:
+            return np.empty(0, dtype=np.float64)
+
+        bags = tuple(dict.fromkeys(self.index_to_bag.values()))
+        bag_to_index = {bag: index for index, bag in enumerate(bags)}
+        fault_index_to_bag_index = tuple(
+            bag_to_index[self.index_to_bag[fault_index]]
+            for fault_index in range(self.fault_count)
+        )
+        compiled_terms = _compile_odds_terms(
+            all_kept_effects=all_kept_effects,
+            fault_index_to_bag_index=fault_index_to_bag_index,
+        )
+
+        error_rates = np.empty(noise_level_array.size, dtype=np.float64)
+        for level_index, noise_level in enumerate(noise_level_array):
+            bag_odds = np.fromiter(
+                (
+                    self._bag_to_odds(bag, noise_level)
+                    for bag in bags
+                ),
+                dtype=np.float64,
+                count=len(bags),
+            )
+            identity_odds = 0.0
+            error_odds = 0.0
             if print_progress:
-                print(f'O(p^{degree}) events:')
-                print(f'Identity odds = {i_odds}')
-                print(f'Error odds = {e_odds}')
-            identity_odds += i_odds
-            error_odds += e_odds
-        return error_odds / (identity_odds + error_odds)
-    
+                print(f'Noise level = {noise_level}:')
+            for degree, (signatures, logical_weights) in enumerate(
+                    compiled_terms):
+                monomial_odds = np.prod(
+                    bag_odds[signatures],
+                    axis=1,
+                )
+                degree_identity_odds, degree_error_odds = (
+                    monomial_odds @ logical_weights
+                )
+                if print_progress:
+                    print(f'O(p^{degree}) events:')
+                    print(f'Identity odds = {degree_identity_odds}')
+                    print(f'Error odds = {degree_error_odds}')
+                identity_odds += degree_identity_odds
+                error_odds += degree_error_odds
+            error_rates[level_index] = error_odds / (
+                identity_odds + error_odds
+            )
+        return error_rates
+
 
     def get_index_to_odds(self, noise_level: float) -> dict[int, float]:
         """Get a map from fault index to the odds of it flipping."""
-        index_to_odds: dict[int, float] = {}
-        for index, bag in self.index_to_bag.items():
-            decay_factor = math.prod(
-                (1-2*self._decomposed_probability(process_class, noise_level))**count
-                for process_class, count in enumerate(bag)
-            )
-            prob = (1 - decay_factor) / 2
-            index_to_odds[index] = prob / (1 - prob)
-        return index_to_odds
+        return {
+            index: self._bag_to_odds(bag, noise_level)
+            for index, bag in self.index_to_bag.items()
+        }
 
 
     def get_kept_effects(
@@ -494,6 +530,31 @@ class FaultCombinator(Combinator):
         return a + b/3 + c/15
 
 
+    def _bag_to_odds(
+            self,
+            bag: FaultBag,
+            noise_level: float,
+    ) -> float:
+        """Convert one fault bag to its odd-parity probability odds.
+
+        :param self: The combinator defining decomposed process probabilities.
+        :param bag: Counts of the three independent-event process classes.
+        :param noise_level: The physical noise level to evaluate.
+        :return: The odds that an odd number of the bag's events occur.
+        """
+        decay_factor = math.prod(
+            (
+                1 - 2 * self._decomposed_probability(
+                    process_class,
+                    noise_level,
+                )
+            ) ** count
+            for process_class, count in enumerate(bag)
+        )
+        probability = (1 - decay_factor) / 2
+        return probability / (1 - probability)
+
+
     @staticmethod
     def _decomposed_probability(
             class_: int,
@@ -633,27 +694,52 @@ def _sum_logical_weights(
     return identity_weight, error_weight
 
 
-def _sum_odds(
-        logical_triples: Iterable[LogicalTriple],
-        index_to_odds: dict[int, float],
-    ) -> tuple[float, float]:
-    """Sum the odds of all configurations in `vector_combo_pairs`.
+def _compile_odds_terms(
+        all_kept_effects: list[dict[PauliMask, LogicalTriple]],
+        fault_index_to_bag_index: Sequence[int],
+) -> list[
+    tuple[npt.NDArray[np.uint32], npt.NDArray[np.float64]]
+]:
+    """Compile kept configurations into unique fault-bag monomials.
 
-    :param logical_triples:
-        An iterable of triples, each containing:
-
-            * an acceptance probability,
-            * a logical fidelity,
-            * a list of canonical fault-index tuples that defines the
-              configurations.
-    :param index_to_odds: A map from each fault index to the odds of it flipping.
+    :param all_kept_effects: One state's packed kept effects by fault degree.
+    :param fault_index_to_bag_index: Probability-equivalent bag index for each
+        fault index.
+    :return: Per-degree signature matrices paired with identity/error weights.
     """
-    i_odds, e_odds = 0, 0
-    for accept_probability, logical_fidelity, configurations in logical_triples:
-        prob = sum(
-            math.prod(index_to_odds[index] for index in configuration)
-            for configuration in configurations
-        )
-        i_odds += accept_probability * logical_fidelity * prob
-        e_odds += accept_probability * (1-logical_fidelity) * prob
-    return i_odds, e_odds
+    compiled_terms = []
+    for degree, effects in enumerate(all_kept_effects):
+        signature_to_weights: dict[tuple[int, ...], list[float]] = {}
+        for accept_probability, logical_fidelity, configurations in (
+                effects.values()):
+            identity_weight = accept_probability * logical_fidelity
+            error_weight = accept_probability * (1 - logical_fidelity)
+            for configuration in configurations:
+                signature = tuple(sorted(
+                    fault_index_to_bag_index[fault_index]
+                    for fault_index in configuration
+                ))
+                logical_weights = signature_to_weights.get(signature)
+                if logical_weights is None:
+                    signature_to_weights[signature] = [
+                        identity_weight,
+                        error_weight,
+                    ]
+                else:
+                    logical_weights[0] += identity_weight
+                    logical_weights[1] += error_weight
+
+        if signature_to_weights:
+            signatures = np.asarray(
+                tuple(signature_to_weights),
+                dtype=np.uint32,
+            ).reshape(len(signature_to_weights), degree)
+            logical_weights = np.asarray(
+                tuple(signature_to_weights.values()),
+                dtype=np.float64,
+            )
+        else:
+            signatures = np.empty((0, degree), dtype=np.uint32)
+            logical_weights = np.empty((0, 2), dtype=np.float64)
+        compiled_terms.append((signatures, logical_weights))
+    return compiled_terms
