@@ -10,22 +10,22 @@ import numpy as np
 import pytest
 import stim
 
-import cliffordep
-from cliffordep.combinators import FaultCombinator
-from cliffordep.combinators.fault_combinator import (
+import cliffordea
+from cliffordea.combinators import FaultCombinator
+from cliffordea.combinators.fault_combinator import (
     _compile_odds_terms,
     _make_logical_analysis_cache,
     _make_pauli_mask_restrictor,
     _iter_zero_syndrome_configurations,
     _sum_logical_weights,
 )
-from cliffordep.logical_analyzers import CliffordLogicalAnalyzer, LogicalAnalyzer
-from cliffordep.noisy_circuit_tools import (
+from cliffordea.logical_analyzers import CliffordLogicalAnalyzer, LogicalAnalyzer
+from cliffordea.noisy_circuit_tools import (
     CultivationCircuit,
     mask_to_unsigned_pauli,
 )
-from cliffordep.pauli_string_tools import forget_sign
-from cliffordep.pauli_string_tools import pauli_mask
+from cliffordea.pauli_string_tools import forget_sign
+from cliffordea.pauli_string_tools import pauli_mask
 
 
 def _make_small_fault_combinator() -> FaultCombinator:
@@ -644,7 +644,7 @@ def test_progress_bars_stream_without_precounting(monkeypatch):
         return iterable
 
     monkeypatch.setattr(
-        "cliffordep.combinators.fault_combinator.tqdm",
+        "cliffordea.combinators.fault_combinator.tqdm",
         recording_tqdm,
     )
 
@@ -731,8 +731,8 @@ def test_d3_cache_sizes_preserve_kept_effects_and_share_configuration_lists():
     distance-3 results. Effects accepted for both S and T should also refer to
     the same configuration-list object.
     """
-    circuit = cliffordep.circuits.DoubleCheck(ancilla_count=6)
-    noisy_circuit = cliffordep.noise.uniformly_depolarize(
+    circuit = cliffordea.circuits.DoubleCheck(ancilla_count=6)
+    noisy_circuit = cliffordea.noise.uniformly_depolarize(
         circuit.INNER_CIRCUIT,
         noise_level=1e-3,
     )
@@ -768,8 +768,8 @@ def test_clifford_linear_precheck_preserves_results_and_reduces_enumeration(
     :param monkeypatch: Pytest fixture used to count configurations yielded by
         the meet-in-the-middle enumerator.
     """
-    circuit = cliffordep.circuits.DoubleCheck(ancilla_count=6)
-    noisy_circuit = cliffordep.noise.uniformly_depolarize(
+    circuit = cliffordea.circuits.DoubleCheck(ancilla_count=6)
+    noisy_circuit = cliffordea.noise.uniformly_depolarize(
         circuit.INNER_CIRCUIT,
         noise_level=1e-3,
     )
@@ -796,7 +796,7 @@ def test_clifford_linear_precheck_preserves_results_and_reduces_enumeration(
         yielded_counts.append(count)
 
     monkeypatch.setattr(
-        'cliffordep.combinators.fault_combinator.'
+        'cliffordea.combinators.fault_combinator.'
         '_iter_zero_syndrome_configurations',
         recording_iterator,
     )
@@ -1043,12 +1043,12 @@ def test_d5_order_four_documented_weights_and_enumeration_counts(monkeypatch):
         enumeration_counts.append(count)
 
     monkeypatch.setattr(
-        'cliffordep.combinators.fault_combinator.'
+        'cliffordea.combinators.fault_combinator.'
         '_iter_zero_syndrome_configurations',
         recording_iterator,
     )
-    circuit = cliffordep.circuits.DoubleCheck(distance=5, ancilla_count=19)
-    noisy_circuit = cliffordep.noise.uniformly_depolarize(
+    circuit = cliffordea.circuits.DoubleCheck(distance=5, ancilla_count=19)
+    noisy_circuit = cliffordea.noise.uniformly_depolarize(
         circuit.INNER_CIRCUIT,
         noise_level=1e-3,
     )

@@ -2,9 +2,9 @@ import pytest
 import stim
 from stim import PauliString
 
-from cliffordep.logical_analyzers import _TransversalGate
-from cliffordep.pauli_string_tools import PauliSum, tensor_paulis, split_sign
-from cliffordep.pauli_string_tools import pauli_mask
+from cliffordea.logical_analyzers import _TransversalGate
+from cliffordea.pauli_string_tools import PauliSum, tensor_paulis, split_sign
+from cliffordea.pauli_string_tools import pauli_mask
 
 
 @pytest.mark.parametrize("gate", ["T", "S", "Z"])

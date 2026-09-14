@@ -1,6 +1,6 @@
 """Deprecated due to being able to do:
 ```python
-noise_model = cliffordep.NoiseModel.uniform_depolarizing(noise_strength)
+noise_model = cliffordea.NoiseModel.uniform_depolarizing(noise_strength)
 noisy_circuit = noise_model.noisy_circuit_skipping_mpp_boundaries(circuit)
 ```
 """
@@ -9,7 +9,7 @@ from collections.abc import Sequence
 
 import stim
 
-from cliffordep.noiseless_circuit_tools import split_by_ticks, compose_slices
+from cliffordea.noiseless_circuit_tools import split_by_ticks, compose_slices
 
 def depolarize_circuit_slice(
         circuit_slice: stim.Circuit,

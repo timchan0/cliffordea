@@ -11,16 +11,16 @@ import numpy as np
 import numpy.typing as npt
 import stim
 
-from cliffordep.constants import (
+from cliffordea.constants import (
     DEPOLARIZE2_ERROR_EVENTS,
     ONE_QUBIT_ERROR_EVENTS,
 )
-from cliffordep.noiseless_circuit_tools import (
+from cliffordea.noiseless_circuit_tools import (
     measurement_event_key,
     measurement_locations_by_event,
     split_by_ticks,
 )
-from cliffordep.type_aliases import (
+from cliffordea.type_aliases import (
     ErrorEvent,
     ErrorLocation,
     MeasurementEventKey,

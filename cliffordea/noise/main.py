@@ -2,8 +2,8 @@ from collections.abc import Container
 
 import stim
 
-from cliffordep.noise._noise import NoiseModel, NoiseRule
-from cliffordep.noiseless_circuit_tools import split_by_ticks, compose_slices
+from cliffordea.noise._noise import NoiseModel, NoiseRule
+from cliffordea.noiseless_circuit_tools import split_by_ticks, compose_slices
 
 
 def uniformly_depolarize(

@@ -1,7 +1,7 @@
 import pytest
 import stim
 
-from cliffordep.pauli_string_tools import split_sign
+from cliffordea.pauli_string_tools import split_sign
 
 @pytest.mark.parametrize("pauli", ('_', 'X', 'Y', 'Z'))
 @pytest.mark.parametrize("prefix, sign", [('', 1), ('-', -1), ('i', 1j), ('-i', -1j)])

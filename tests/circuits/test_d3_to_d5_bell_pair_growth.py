@@ -1,7 +1,7 @@
 from collections.abc import Iterable
 
-from cliffordep import circuits
-from cliffordep.circuits.main import DoubleCheck
+from cliffordea import circuits
+from cliffordea.circuits.main import DoubleCheck
 
 
 Qubit = tuple[float, float]

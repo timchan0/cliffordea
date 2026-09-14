@@ -1,6 +1,6 @@
 import pytest
 
-from cliffordep.pauli_string_tools import PauliSum
+from cliffordea.pauli_string_tools import PauliSum
 
 
 @pytest.fixture

@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Sequence
 
-from cliffordep.symft_simulation.msc_framework import (
+from cliffordea.symft_simulation.msc_framework import (
     DEFAULT_CALL_SHOTS,
     DEFAULT_MAX_SHOTS,
     DEFAULT_SMOKE_SHOTS,

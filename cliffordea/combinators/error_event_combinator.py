@@ -9,11 +9,11 @@ import numpy as np
 import numpy.typing as npt
 import stim
 
-from cliffordep.combinators._base import BaseExclusiveCombinator
-from cliffordep.type_aliases import ErrorLocation, ErrorEvent
-from cliffordep.noisy_circuit_tools import CultivationCircuit
-from cliffordep.pauli_string_tools import forget_sign
-from cliffordep.combinators._base import error_event_count
+from cliffordea.combinators._base import BaseExclusiveCombinator
+from cliffordea.type_aliases import ErrorLocation, ErrorEvent
+from cliffordea.noisy_circuit_tools import CultivationCircuit
+from cliffordea.pauli_string_tools import forget_sign
+from cliffordea.combinators._base import error_event_count
 
 
 class ErrorEventCombinator(BaseExclusiveCombinator):

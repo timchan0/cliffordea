@@ -6,12 +6,12 @@ from collections.abc import Sequence
 import pytest
 import stim
 
-from cliffordep.symft_simulation.d5_circuit_correction import (
+from cliffordea.symft_simulation.d5_circuit_correction import (
     circuit_instructions,
     coordinate_maps,
     correct_d5_cultivation_circuit,
 )
-from cliffordep.symft_simulation.msc_framework import (
+from cliffordea.symft_simulation.msc_framework import (
     REFERENCE_PATH,
     TASK_SCHEMA_VERSION,
     build_tasks,

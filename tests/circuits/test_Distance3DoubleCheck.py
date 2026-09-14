@@ -1,8 +1,8 @@
 import pytest
 import stim
 
-from cliffordep.circuits import DoubleCheck
-from cliffordep.pauli_string_tools import forget_sign
+from cliffordea.circuits import DoubleCheck
+from cliffordea.pauli_string_tools import forget_sign
 
 @pytest.fixture
 def distance3_ancilla6():

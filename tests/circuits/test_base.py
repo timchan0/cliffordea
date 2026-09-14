@@ -1,7 +1,7 @@
 import pytest
 import stim
 
-from cliffordep import circuits
+from cliffordea import circuits
 
 
 @pytest.mark.parametrize("ancilla_count, flag_count", [

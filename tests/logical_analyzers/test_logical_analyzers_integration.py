@@ -1,9 +1,9 @@
 import pytest
 
-from cliffordep import circuits, noise
-from cliffordep.combinators import FaultCombinator
-from cliffordep.logical_analyzers import CliffordLogicalAnalyzer
-from cliffordep.type_aliases import LogicalTriple, PauliMask
+from cliffordea import circuits, noise
+from cliffordea.combinators import FaultCombinator
+from cliffordea.logical_analyzers import CliffordLogicalAnalyzer
+from cliffordea.type_aliases import LogicalTriple, PauliMask
 
 
 @pytest.mark.parametrize("state", ['S', 'T'])

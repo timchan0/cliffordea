@@ -7,7 +7,7 @@ import numpy as np
 import numpy.typing as npt
 import stim
 
-from cliffordep.constants import ONE_QUBIT_ERROR_EVENTS
+from cliffordea.constants import ONE_QUBIT_ERROR_EVENTS
 
 
 class Combinator(abc.ABC):

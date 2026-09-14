@@ -1,8 +1,8 @@
 import pytest
 import stim
 
-from cliffordep.noisy_circuit_tools import CultivationCircuit
-from cliffordep.type_aliases import ErrorEvent, ErrorLocation
+from cliffordea.noisy_circuit_tools import CultivationCircuit
+from cliffordea.type_aliases import ErrorEvent, ErrorLocation
 
 
 def get_key(qubits_affected: list[int]):

@@ -1,4 +1,4 @@
-name: cliffordep
+name: cliffordea
 channels:
   - conda-forge
 dependencies:

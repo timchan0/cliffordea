@@ -2,7 +2,7 @@ from pathlib import Path
 
 import stim
 
-from cliffordep.circuits._base import find_data_indices, find_logical_s_gate, find_stabilizer_generators
+from cliffordea.circuits._base import find_data_indices, find_logical_s_gate, find_stabilizer_generators
 
 
 _STIM_FILES_DIR = Path(__file__).with_name("stim_files")

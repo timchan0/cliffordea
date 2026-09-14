@@ -1,13 +1,13 @@
 import numpy as np
 import stim
 
-from cliffordep.combinators import FaultCombinator
-from cliffordep.combinators.fault_combinator import (
+from cliffordea.combinators import FaultCombinator
+from cliffordea.combinators.fault_combinator import (
     _iter_zero_syndrome_configurations,
 )
-from cliffordep.constants import ONE_QUBIT_ERROR_EVENTS
-from cliffordep.noisy_circuit_tools import CultivationCircuit
-from cliffordep.type_aliases import ErrorEvent, ErrorLocation
+from cliffordea.constants import ONE_QUBIT_ERROR_EVENTS
+from cliffordea.noisy_circuit_tools import CultivationCircuit
+from cliffordea.type_aliases import ErrorEvent, ErrorLocation
 
 
 class TestD3DoubleCatCheck:

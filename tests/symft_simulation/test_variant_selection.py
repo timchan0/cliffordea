@@ -8,8 +8,8 @@ from unittest.mock import Mock
 import pytest
 import sinter
 
-from cliffordep.symft_simulation import msc_framework, run_simulation
-from cliffordep.symft_simulation.msc_framework import (
+from cliffordea.symft_simulation import msc_framework, run_simulation
+from cliffordea.symft_simulation.msc_framework import (
     REFERENCE_PATH,
     VARIANTS,
     build_tasks,
@@ -17,7 +17,7 @@ from cliffordep.symft_simulation.msc_framework import (
     smoke_sample,
     validate_all_variants,
 )
-from cliffordep.symft_simulation.run_simulation import build_parser
+from cliffordea.symft_simulation.run_simulation import build_parser
 
 
 def test_default_selection_preserves_t_then_s_tasks() -> None:

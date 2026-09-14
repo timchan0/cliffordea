@@ -2,7 +2,7 @@ from collections import defaultdict, Counter
 
 import stim
 
-from cliffordep.combinators._base import error_event_count
+from cliffordea.combinators._base import error_event_count
 
 def test_duplicate_source(dummy_error_event_count, update_undetected_configurations):
     original_error_event_count = error_event_count

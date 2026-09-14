@@ -3,9 +3,9 @@ import numpy as np
 import stim
 import pytest
 
-import cliffordep
-from cliffordep.type_aliases import ErrorEvent, ErrorLocation
-from cliffordep.noisy_circuit_tools import CultivationCircuit
+import cliffordea
+from cliffordea.type_aliases import ErrorEvent, ErrorLocation
+from cliffordea.noisy_circuit_tools import CultivationCircuit
 
 
 class TestD3DoubleCatCheck:
@@ -59,7 +59,7 @@ class TestD3DoubleCatCheck:
             sim_syndrome = tuple(sim_syndrome)
             sim_effect = circuit.noisy_circuit.num_qubits*'_'
         else:
-            faulty_circuit = cliffordep.insert_error_events(
+            faulty_circuit = cliffordea.insert_error_events(
                 circuit.noiseless_circuit,
                 weighted_error_events=((error_event, 1),),
             )
@@ -77,7 +77,7 @@ class TestD3DoubleCatCheck:
                                 instance_index=0,
                             )
             sim_syndrome = tuple(sim.get_detector_flips(instance_index=0))
-            sim_effect = cliffordep.forget_sign(sim.peek_pauli_flips(instance_index=0))
+            sim_effect = cliffordea.forget_sign(sim.peek_pauli_flips(instance_index=0))
         
         # assert the syndrome matches
         assert np.array_equal(sim_syndrome, syndrome)
@@ -114,7 +114,7 @@ def test_measure_reset_error_preserves_reset_gate():
     assert effect == "_"
 
     probability = 0.25
-    faulty_circuit = cliffordep.insert_error_events(
+    faulty_circuit = cliffordea.insert_error_events(
         circuit=circuit.noiseless_circuit,
         weighted_error_events=((event, probability),),
     )
@@ -200,7 +200,7 @@ def test_reverse_responses_match_stim_clifford_conjugation(
             syndrome, effect = circuit.get_syndrome_and_effect(event)
             generator = stim.PauliString(circuit.noisy_circuit.num_qubits)
             generator[qubit] = basis
-            expected = cliffordep.forget_sign(generator.after(instruction))
+            expected = cliffordea.forget_sign(generator.after(instruction))
 
             assert not syndrome.any()
             assert effect == expected

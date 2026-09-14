@@ -6,9 +6,9 @@ import numpy as np
 import pytest
 import stim
 
-from cliffordep.combinators import ErrorEventCombinator
-from cliffordep.combinators._base import error_event_count
-from cliffordep.pauli_string_tools import forget_sign
+from cliffordea.combinators import ErrorEventCombinator
+from cliffordea.combinators._base import error_event_count
+from cliffordea.pauli_string_tools import forget_sign
 
 
 class TestGetUndetectedConfigurationsForLength():

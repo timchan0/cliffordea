@@ -7,7 +7,7 @@ shots. The default reference is distance 3, and compatible distance-5
 references can be selected explicitly.
 
 The default authoritative **S-state** reference is
-`cliffordep/circuits/stim_files/full_circuits/d3a6_inject+cultivate_p1e-3.stim`.
+`cliffordea/circuits/stim_files/full_circuits/d3a6_inject+cultivate_p1e-3.stim`.
 Another compatible S reference can be selected on the command line. Reference
 circuits may have any number of qubits, measurements, detectors, and
 observables, but must define observable 0. T/T_DAG circuit text is made in
@@ -122,16 +122,16 @@ and explicitly uncorrected filenames distinguish their Sinter task identities.
 
 ## Environment
 
-Run every command through the existing `cliffordep` Conda environment:
+Run every command through the existing `cliffordea` Conda environment:
 
 ```bash
-cd /Users/timchan0/repositories/cliffordep
-conda run --no-capture-output -n cliffordep \
-    python -m cliffordep.symft_simulation.run_simulation validate
+cd /Users/timchan0/repositories/cliffordea
+conda run --no-capture-output -n cliffordea \
+    python -m cliffordea.symft_simulation.run_simulation validate
 ```
 
 No additional installation is required when `symft`, `stim`, `sinter`,
-`cliffordep`, Matplotlib, and pytest are already available. To use ARC H100
+`cliffordea`, Matplotlib, and pytest are already available. To use ARC H100
 jobs, install CUDA-enabled SymFT and pass `--cuda` to `smoke` or `run`.
 
 ## Validation and smoke sampling
@@ -141,16 +141,16 @@ proxy task without drawing shots. The defaults cover twelve combinations: two
 variants at each of six physical noise strengths.
 
 ```bash
-conda run --no-capture-output -n cliffordep \
-    python -m cliffordep.symft_simulation.run_simulation validate
+conda run --no-capture-output -n cliffordea \
+    python -m cliffordea.symft_simulation.run_simulation validate
 ```
 
 Exercise the full custom-Sampler and `sinter.collect` path with 100,000
 non-persisted attempts for each variant at `p=0.001`:
 
 ```bash
-conda run --no-capture-output -n cliffordep \
-    python -m cliffordep.symft_simulation.run_simulation smoke
+conda run --no-capture-output -n cliffordea \
+    python -m cliffordea.symft_simulation.run_simulation smoke
 ```
 
 All three commands accept `--reference PATH`. By default, `circuit_name` is the
@@ -158,17 +158,17 @@ reference filename without its `.stim` suffix; use `--circuit-name LABEL` when
 a stable or more descriptive dataset label is needed:
 
 ```bash
-conda run --no-capture-output -n cliffordep \
-    python -m cliffordep.symft_simulation.run_simulation validate \
-    --reference cliffordep/circuits/stim_files/full_circuits/another.stim \
+conda run --no-capture-output -n cliffordea \
+    python -m cliffordea.symft_simulation.run_simulation validate \
+    --reference cliffordea/circuits/stim_files/full_circuits/another.stim \
     --circuit-name another-cultivation-circuit
 ```
 
 The `validate` command accepts one or more custom physical noise strengths:
 
 ```bash
-conda run --no-capture-output -n cliffordep \
-    python -m cliffordep.symft_simulation.run_simulation validate \
+conda run --no-capture-output -n cliffordea \
+    python -m cliffordea.symft_simulation.run_simulation validate \
     --noise-levels 0.001 0.004 0.01
 ```
 
@@ -178,7 +178,7 @@ Like `stim.CompiledDetectorSampler`, sampling uses system entropy when `--seed`
 is omitted. Pass an unsigned 64-bit seed to make one invocation deterministic:
 
 ```bash
-python -m cliffordep.symft_simulation.run_simulation smoke --seed 1234
+python -m cliffordea.symft_simulation.run_simulation smoke --seed 1234
 ```
 
 The seed is a runtime option and is not saved in task metadata or results.
@@ -196,9 +196,9 @@ SymFT sampler. It stops each task after 100 logical errors or 1,000,000,000
 attempted shots and limits each persisted SymFT call to 10,000,000 shots:
 
 ```bash
-caffeinate -i conda run --no-capture-output -n cliffordep \
-    python -m cliffordep.symft_simulation.run_simulation run \
-    --stats /Users/timchan0/Documents/PhD/Code/Python/cliffordep/Chan2026/results/stats.csv
+caffeinate -i conda run --no-capture-output -n cliffordea \
+    python -m cliffordea.symft_simulation.run_simulation run \
+    --stats /Users/timchan0/Documents/PhD/Code/Python/cliffordea/Chan2026/results/stats.csv
 ```
 
 ## CUDA on ARC
@@ -207,13 +207,13 @@ After installing CUDA-enabled SymFT and requesting an NVIDIA GPU in an ARC HTC
 job, add `--cuda` to select the GPU backend. First run the GPU smoke check:
 
 ```bash
-python -m cliffordep.symft_simulation.run_simulation smoke --cuda
+python -m cliffordea.symft_simulation.run_simulation smoke --cuda
 ```
 
 Then run production sampling with a separate CUDA dataset identity:
 
 ```bash
-python -m cliffordep.symft_simulation.run_simulation run \
+python -m cliffordea.symft_simulation.run_simulation run \
     --cuda \
     --stats /path/to/cuda-stats.csv
 ```
@@ -221,11 +221,11 @@ python -m cliffordep.symft_simulation.run_simulation run \
 The limits remain configurable:
 
 ```bash
-caffeinate -i conda run --no-capture-output -n cliffordep \
-    python -m cliffordep.symft_simulation.run_simulation run \
-    --reference cliffordep/circuits/stim_files/full_circuits/another.stim \
+caffeinate -i conda run --no-capture-output -n cliffordea \
+    python -m cliffordea.symft_simulation.run_simulation run \
+    --reference cliffordea/circuits/stim_files/full_circuits/another.stim \
     --circuit-name another-cultivation-circuit \
-    --stats /Users/timchan0/Documents/PhD/Code/Python/cliffordep/Chan2026/results/stats.csv \
+    --stats /Users/timchan0/Documents/PhD/Code/Python/cliffordea/Chan2026/results/stats.csv \
     --noise-levels 0.001 0.004 0.01 \
     --target-errors 100 \
     --max-shots 1000000000 \
@@ -268,7 +268,7 @@ written back to the resume CSV or passed to a production collection:
 ```python
 from pathlib import Path
 
-from cliffordep.symft_simulation.msc_framework import read_plot_stats
+from cliffordea.symft_simulation.msc_framework import read_plot_stats
 
 plot_stats = read_plot_stats(
     Path("/path/to/cpu-stats.csv"),
@@ -281,6 +281,6 @@ plot_stats = read_plot_stats(
 Run the focused framework tests with:
 
 ```bash
-conda run --no-capture-output -n cliffordep \
+conda run --no-capture-output -n cliffordea \
     python -m pytest -q tests/symft_simulation
 ```

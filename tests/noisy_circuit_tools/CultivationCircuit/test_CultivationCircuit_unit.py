@@ -3,10 +3,10 @@ import itertools
 from collections import Counter, defaultdict
 import stim
 
-from cliffordep.combinators import FaultCombinatorExclusive
-from cliffordep.combinators._base import error_event_count
-from cliffordep.noisy_circuit_tools import CultivationCircuit
-from cliffordep.pauli_string_tools import forget_sign
+from cliffordea.combinators import FaultCombinatorExclusive
+from cliffordea.combinators._base import error_event_count
+from cliffordea.noisy_circuit_tools import CultivationCircuit
+from cliffordea.pauli_string_tools import forget_sign
 
 
 class TestMeasurementToDetectors:

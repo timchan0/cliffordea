@@ -1,7 +1,7 @@
 import stim
 
-from cliffordep import noiseless_circuit_tools
-from cliffordep.type_aliases import ErrorEvent
+from cliffordea import noiseless_circuit_tools
+from cliffordea.type_aliases import ErrorEvent
 
 
 def test_batched_error_event_insertion_matches_sequential_insertion():

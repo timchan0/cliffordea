@@ -5,10 +5,10 @@ import math
 
 import stim
 
-from cliffordep.noisy_circuit_tools import CultivationCircuit
-from cliffordep.pauli_string_tools import forget_sign
-from cliffordep.type_aliases import EffectMap, ErrorLocation
-from cliffordep.combinators._base import BaseExclusiveCombinator, error_event_count, get_trivial_syndrome_combinations
+from cliffordea.noisy_circuit_tools import CultivationCircuit
+from cliffordea.pauli_string_tools import forget_sign
+from cliffordea.type_aliases import EffectMap, ErrorLocation
+from cliffordea.combinators._base import BaseExclusiveCombinator, error_event_count, get_trivial_syndrome_combinations
 
 
 class FaultCombinatorExclusive(BaseExclusiveCombinator):

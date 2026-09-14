@@ -11,20 +11,20 @@ import pandas as pd
 import stim
 from tqdm.auto import tqdm
 
-from cliffordep.noisy_circuit_tools import (
+from cliffordea.noisy_circuit_tools import (
     CultivationCircuit,
     mask_to_unsigned_pauli,
 )
-from cliffordep.combinators._base import Combinator, classify
-from cliffordep.logical_analyzers import LogicalAnalyzer
-from cliffordep.type_aliases import (
+from cliffordea.combinators._base import Combinator, classify
+from cliffordea.logical_analyzers import LogicalAnalyzer
+from cliffordea.type_aliases import (
     ErrorEvent,
     FaultBag,
     LogicalTriple,
     PauliMask,
     SyndromeMask,
 )
-from cliffordep import noiseless_circuit_tools
+from cliffordea import noiseless_circuit_tools
 
 
 CultivatedState = Literal['T', 'S', 'Z']

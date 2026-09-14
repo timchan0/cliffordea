@@ -4,8 +4,8 @@ import math
 
 import pytest
 
-from cliffordep.combinators._base import error_event_count
-from cliffordep.type_aliases import ErrorLocation
+from cliffordea.combinators._base import error_event_count
+from cliffordea.type_aliases import ErrorLocation
 
 
 @pytest.fixture

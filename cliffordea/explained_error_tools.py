@@ -5,7 +5,7 @@ import itertools
 
 import stim
 
-from cliffordep.noiseless_circuit_tools import split_by_ticks, compose_slices
+from cliffordea.noiseless_circuit_tools import split_by_ticks, compose_slices
 
 def _nest_circuit_error_locations(explained_errors: list[stim.ExplainedError]):
     """Extract the circuit error locations from a list of explained errors.

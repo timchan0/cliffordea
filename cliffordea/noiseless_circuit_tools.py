@@ -5,7 +5,7 @@ from typing import cast
 
 import stim
 
-from cliffordep.type_aliases import (
+from cliffordea.type_aliases import (
     ErrorEvent,
     MeasurementEventKey,
     MeasurementLocation,

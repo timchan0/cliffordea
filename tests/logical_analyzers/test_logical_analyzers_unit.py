@@ -1,19 +1,19 @@
 import pytest
 import stim
 
-from cliffordep.logical_analyzers import (
+from cliffordea.logical_analyzers import (
     CliffordLogicalAnalyzer,
     LogicalAnalyzer,
     SuperpositionLogicalAnalyzer,
     _pauli_masks_and_j_power,
     LOGICAL_COEFFICIENTS,
 )
-from cliffordep import circuits
-from cliffordep.combinators.fault_combinator import (
+from cliffordea import circuits
+from cliffordea.combinators.fault_combinator import (
     _make_pauli_mask_restrictor,
 )
-from cliffordep.pauli_string_tools import forget_sign
-from cliffordep.pauli_string_tools import pauli_mask
+from cliffordea.pauli_string_tools import forget_sign
+from cliffordea.pauli_string_tools import pauli_mask
 
 
 class TestPauliMasksAndJPower:

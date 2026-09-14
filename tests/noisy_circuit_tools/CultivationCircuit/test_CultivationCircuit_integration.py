@@ -1,6 +1,6 @@
 import pytest
 
-from cliffordep.combinators import FaultCombinatorExclusive, ErrorEventCombinator
+from cliffordea.combinators import FaultCombinatorExclusive, ErrorEventCombinator
 
 
 class TestGroupFaultsByEffect():

@@ -7,8 +7,8 @@ from typing import Literal, override
 
 import stim
 
-from cliffordep.pauli_string_tools import PUSH_THROUGH_MAP, PauliSum, tensor_paulis, split_sign
-from cliffordep.type_aliases import PauliMask, SyndromeMask
+from cliffordea.pauli_string_tools import PUSH_THROUGH_MAP, PauliSum, tensor_paulis, split_sign
+from cliffordea.type_aliases import PauliMask, SyndromeMask
 
 
 LogicalCoefficients = Mapping[int, float]

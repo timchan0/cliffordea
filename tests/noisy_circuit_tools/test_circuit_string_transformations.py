@@ -1,4 +1,4 @@
-from cliffordep.noisy_circuit_tools import (
+from cliffordea.noisy_circuit_tools import (
     replace_noise_level,
     swap_t_and_s_gates,
 )

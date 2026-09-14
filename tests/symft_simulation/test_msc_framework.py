@@ -16,8 +16,8 @@ import sinter
 import stim
 import symft
 
-from cliffordep.symft_simulation import msc_framework
-from cliffordep.symft_simulation.msc_framework import (
+from cliffordea.symft_simulation import msc_framework
+from cliffordea.symft_simulation.msc_framework import (
     DEFAULT_CIRCUIT_NAME,
     DEFAULT_NOISE_LEVELS,
     PLOT_ONLY_AGGREGATE_KEY,
@@ -39,7 +39,7 @@ from cliffordep.symft_simulation.msc_framework import (
     validate_all_variants,
     validate_resume_stats,
 )
-from cliffordep.symft_simulation.run_simulation import (
+from cliffordea.symft_simulation.run_simulation import (
     build_parser,
     resolve_circuit_name,
 )

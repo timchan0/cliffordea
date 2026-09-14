@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from stim import PauliString
 
-from cliffordep.pauli_string_tools import PauliSum, SQRT2
+from cliffordea.pauli_string_tools import PauliSum, SQRT2
 
 _EPSILON = 1e-13
 
@@ -91,8 +91,8 @@ class TestMultiply:
 
 class TestMul:
 
-    _scaled = 'cliffordep.pauli_string_tools.PauliSum._scaled'
-    _multiply = 'cliffordep.pauli_string_tools.PauliSum._multiply'
+    _scaled = 'cliffordea.pauli_string_tools.PauliSum._scaled'
+    _multiply = 'cliffordea.pauli_string_tools.PauliSum._multiply'
 
     def test_int(self, string_1: PauliSum):
         with mock.patch(self._scaled) as mock_scaled:

@@ -1,11 +1,11 @@
-# cliffordep (Clifford Error Propagation)
+# cliffordea (Clifford Error Analysis)
 
-A Python package to analyze the propagation of Clifford errors.
+A Python package to analyze Clifford errors in quantum error correction circuits.
 
 ## Local Installation Instructions
 
 ### Using Conda
-Create environment called `cliffordep`:
+Create environment called `cliffordea`:
 
 ```bash
 conda env create -f environment.yml
@@ -14,10 +14,10 @@ conda env create -f environment.yml
 Activate the environment:
 
 ```bash
-conda activate cliffordep
+conda activate cliffordea
 ```
 
-Install the `cliffordep` package in editable mode (and its dependencies from pip):
+Install the `cliffordea` package in editable mode (and its dependencies from pip):
 
 ```bash
 python -m pip install -e . --no-build-isolation --no-deps

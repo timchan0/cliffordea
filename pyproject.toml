@@ -1,7 +1,7 @@
 [project]
-name = "cliffordep"
+name = "cliffordea"
 version = "0.18.11"
-description = "A Python package to analyze the propagation of Clifford errors."
+description = "A Python package to analyze Clifford errors in quantum error correction circuits."
 authors = [{name="Tim Chan", email="timwlc@icloud.com"}]
 dependencies = [
     "ipykernel",
