@@ -15,114 +15,17 @@ memory by replacing S/S_DAG gates; no non-Stim T circuit is saved. By default,
 the physical noise strengths are `0.001`, `0.002`, `0.003`, `0.005`, `0.007`,
 and `0.01`.
 
-## Distance-five corrected reference
+## Distance-five corrected references
 
-The distance-5 Bell-growth circuit needs active feedforward before its S/S_DAG
-proxy can be converted into a deterministic T/T_DAG circuit. Bell growth leaves
-seven first-round check results that control a Pauli frame. An S circuit can
-carry that frame without changing its later Clifford evolution, whereas the
-corresponding T circuit has branch-dependent evolution unless the frame is
-resolved before the next T/T_DAG layer.
+Distance-five Bell growth leaves a Pauli frame that must be resolved before an
+S/S_DAG proxy can be converted into a deterministic T/T_DAG circuit. The
+public `correct_d5_cultivation_circuit` function adds the required classical
+feedforward and heals detectors that cross the correction boundary.
 
-`correct_d5_cultivation_circuit` performs this correction while the circuit is
-still valid Stim text. It accepts either a noiseless or already-noisy S/S_DAG
-proxy and applies the following rules.
-
-### Rule 1: Resolve and validate the circuit by coordinates
-
-All source measurements, correction targets, and structural landmarks are
-resolved through `QUBIT_COORDS`, not integer qubit IDs. Reindexing the original
-qubits or adding spectator qubits at otherwise unused coordinates therefore
-does not change the correction.
-
-Before modifying the circuit, the converter verifies:
-
-- every required coordinate exists exactly once;
-- the coordinate-normalized Bell-growth window has the expected structure;
-- the first distance-5 Z- and X-syndrome measurements have the expected target
-  coordinates and order; and
-- detectors referencing the feedforward sources have the expected spatial and
-  measurement-dependency profile.
-
-Detector validation uses only the spatial `(x, y)` components of
-`DETECTOR(x, y, ...)`. Additional coordinate components such as a detector's
-time label are metadata and may change when flag interactions add ticks.
-Detectors that do not reference a feedforward source are outside this profile,
-so independent flag detectors are preserved without weakening validation of
-the affected detectors.
-
-The converter raises an error if these checks fail or if the detector profile
-indicates that the correction was already applied. `REPEAT` blocks are not
-supported and raise `NotImplementedError`; the committed cultivation references
-do not contain them.
-
-### Rule 2: Add Bell-growth feedforward
-
-Immediately after the closing `TICK` of the first distance-5 syndrome round,
-the converter emits these 17 classically controlled operations. `M` denotes a
-Z-basis measurement and `MX` an X-basis measurement. Coordinates identify the
-measured source and quantum target; each classical control is encoded as the
-corresponding `rec` target.
-
-| Measurement source | Correction | Target coordinates |
-| --- | --- | --- |
-| `MX(5, 0)` | `CZ` | `(7, 0)`, `(8, 0)` |
-| `MX(3, 3)` | `CZ` | `(3, 4)`, `(4, 6)` |
-| `M(6, 0)` | `CX` | `(7, 0)`, `(8, 0)`, `(7, 2)`, `(8, 0)` |
-| `M(6, 2)` | `CX` | `(7, 0)`, `(8, 0)` |
-| `M(4, 1)` | `CX` | `(3, 4)`, `(4, 6)` |
-| `M(4, 3)` | `CX` | `(0, 0)`, `(3, 0)`, `(4, 6)` |
-| `M(4, 5)` | `CX` | `(3, 4)`, `(4, 6)` |
-
-The repeated `(8, 0)` entry controlled by `M(6, 0)` is intentional: this table
-records the emitted instruction list exactly, including multiplicity.
-
-### Rule 3: Heal detectors crossing the correction boundary
-
-Active feedforward severs the old temporal correlation between a first-round
-source result and later syndrome measurements. The converter therefore edits
-only detectors that reference one of the seven feedforward sources:
-
-- For local detectors, references to all seven source measurements are removed
-  when the detector also contains other measurement records.
-- If removing those references would leave a local detector empty, its original
-  targets are retained. These source-only detectors remain useful
-  initialization checks.
-- For the long logical detector, only the Z-basis result `M(4, 3)` is removed.
-  Its correction has odd overlap with the logical parity. The other source
-  results are retained in that detector.
-
-No detectors are added or deleted; only the affected measurement-record targets
-are changed.
-
-### Rule 4: Preserve the S proxy and its noise
-
-These correction rules are based largely on `clifft-paper`'s
-[`convert_s_to_t.py`](https://github.com/unitaryfoundation/clifft-paper/blob/main/magic_state_cultivation/convert_s_to_t.py).
-This converter preserves all existing noise instructions, measurements,
-S/S_DAG layers, observables, and the final logical
-`S_DAG`–`MPP X_L`–`S` construction. Unlike the reference converter, its scope
-is limited to feedforward and detector healing; it deliberately does **not**
-perform:
-
-- conversion from S- to T-state cultivation i.e. S/S_DAG to T/T_DAG substitution;
-- distance-5 gate flips mentioned as an erratum in the original Gidney et al. paper; or
-- final logical-Y measurement wrapping.
-
-T/T_DAG substitution remains the responsibility of `make_variant_text`, after
-the requested physical noise level has been substituted into the Stim-compatible
-corrected proxy. The other transformations, where required, remain separate
-preprocessing steps.
-
-The committed corrected references are:
-
-- `d5a19_inject+cultivate.stim`, generated from
-  `d5a19_inject+cultivate_uncorrected.stim`; and
-- `d5a19_inject+cultivate_p1e-3.stim`, generated from
-  `d5a19_inject+cultivate_uncorrected_p1e-3.stim`.
-
-Their filename stems are their default `circuit_name` values. The corrected
-and explicitly uncorrected filenames distinguish their Sinter task identities.
+The coordinate-based validation rules, exact feedforward table, detector
+healing, deliberately excluded transformations, and committed corrected
+references are documented in the
+[distance-five correction specification](d5-correction.md).
 
 ## Environment
 
@@ -163,14 +66,18 @@ python -m cliffordea.sim.run_simulation validate \
     --circuit-name another-cultivation-circuit
 ```
 
-The `validate` command accepts one or more custom physical noise strengths:
+The `validate` and `run` commands accept one or more custom physical noise
+strengths:
 
 ```bash
 python -m cliffordea.sim.run_simulation validate \
     --noise-levels 0.001 0.004 0.01
 ```
 
-Smoke sampling remains a fixed quick check of both variants at `p=0.001`.
+Smoke sampling remains a fixed quick check at `p=0.001`.
+All commands accept `--variants T`, `--variants S`, or
+`--variants T S`; both variants are selected by default. The smoke shot count
+can be changed with `--shots`.
 
 Like `stim.CompiledDetectorSampler`, sampling uses system entropy when `--seed`
 is omitted. Pass an unsigned 64-bit seed to make one invocation deterministic:
@@ -184,8 +91,8 @@ Reusing the same explicit seed with the same call sequence can repeat samples,
 so omit it for independent production and top-up runs.
 
 The SymFT adapter checks that accepted plus discarded equals attempted shots.
-It also verifies eight active CPU workers for the CPU backend, or the one host
-worker reported by SymFT's CUDA backend.
+It also verifies the active CPU-worker count implied by the configured threads
+and sample size, or the one host worker reported by SymFT's CUDA backend.
 
 ## Production sampling and resume
 
@@ -279,3 +186,5 @@ Run the focused framework tests with:
 ```bash
 python -m pytest -q tests/sim
 ```
+
+Return to the [project README](../../README.md).
