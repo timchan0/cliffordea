@@ -22,7 +22,7 @@ def noisy_d3_double_cat_check(noisy_d3_double_cat_check_circuit: stim.Circuit):
 
 @pytest.fixture
 def d3_double_cat_check_brute(noisy_d3_double_cat_check_circuit: stim.Circuit) -> ErrorEventCombinator:
-    """Exclusive fault brute-force combinator for the distance-3 double-check circuit."""
+    """Disjoint-event brute-force combinator for the distance-3 double check."""
     return ErrorEventCombinator(noisy_d3_double_cat_check_circuit)
 
 
@@ -30,10 +30,10 @@ def d3_double_cat_check_brute(noisy_d3_double_cat_check_circuit: stim.Circuit) -
 def d3_combinator_and_kept_effects_by_analyzer():
     """Build shared distance-3 kept-effect regression results.
 
-    The superposition analyzer is evaluated through order three for comparison
+    The superposition analyzer is evaluated through three faults for comparison
     with the Clifford analyzer. The Clifford analyzer is evaluated through
-    order four so the same session-scoped result can support the frozen
-    higher-order regression.
+    four faults so the same session-scoped result can support the frozen
+    higher-fault-count regression.
 
     :return: The fault combinator, the superposition-analyzer results, and the
         Clifford-analyzer results.
@@ -57,12 +57,12 @@ def d3_combinator_and_kept_effects_by_analyzer():
     )
     superposition_kept_effects = combinator.get_kept_effects(
         logical_analyzer=superposition_analyzer,
-        max_order=3,
+        max_fault_count=3,
         cultivated_states=('S', 'T'),
     )
     clifford_kept_effects = combinator.get_kept_effects(
         logical_analyzer=clifford_analyzer,
-        max_order=4,
+        max_fault_count=4,
         cultivated_states=('S', 'T'),
     )
     return combinator, superposition_kept_effects, clifford_kept_effects

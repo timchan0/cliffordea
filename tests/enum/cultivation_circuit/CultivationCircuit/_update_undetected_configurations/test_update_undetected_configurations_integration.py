@@ -25,7 +25,7 @@ def test_1_effect(dummy_error_event_count, update_undetected_configurations):
         globals()['error_event_count'] = orig_error_event_count
 
 def test_multiple_effects(dummy_error_event_count, update_undetected_configurations):
-    orig_fault_count = error_event_count
+    original_error_event_count = error_event_count
     try:
         globals()['error_event_count'] = dummy_error_event_count
 
@@ -45,10 +45,10 @@ def test_multiple_effects(dummy_error_event_count, update_undetected_configurati
             effect_2: Counter({15: 2}),
         })
     finally:
-        globals()['error_event_count'] = orig_fault_count
+        globals()['error_event_count'] = original_error_event_count
 
-def test_length_2_candidates(dummy_error_event_count, update_undetected_configurations):
-    orig_fault_count = error_event_count
+def test_two_fault_candidates(dummy_error_event_count, update_undetected_configurations):
+    original_error_event_count = error_event_count
     effect = "XY"
     try:
         globals()['error_event_count'] = dummy_error_event_count
@@ -69,11 +69,14 @@ def test_length_2_candidates(dummy_error_event_count, update_undetected_configur
             update_undetected_configurations(undetected_configurations, effect, candidate)
 
             goal = defaultdict(Counter)
-            (source_1, count_1), (source_2, count_2) = candidate
-            if source_1 != source_2:
-                denominators = error_event_count(source_1[1]) * error_event_count(source_2[1])
-                goal[effect][denominators] += count_1 * count_2
+            (location_1, count_1), (location_2, count_2) = candidate
+            if location_1 != location_2:
+                probability_denominator = (
+                    error_event_count(location_1[1])
+                    * error_event_count(location_2[1])
+                )
+                goal[effect][probability_denominator] += count_1 * count_2
 
             assert undetected_configurations == goal
     finally:
-        globals()['error_event_count'] = orig_fault_count
+        globals()['error_event_count'] = original_error_event_count

@@ -3,7 +3,7 @@ import stim
 
 from cliffordea.enum.combinators import FaultCombinator
 from cliffordea.enum.combinators.fault_combinator import (
-    _iter_zero_syndrome_configurations,
+    _iter_undetected_configurations,
 )
 from cliffordea.enum.constants import ONE_QUBIT_ERROR_EVENTS
 from cliffordea.enum.cultivation_circuit import CultivationCircuit
@@ -52,9 +52,9 @@ class TestD3DoubleCatCheck:
         assert sum(map(len, d3_double_cat_check_grouped_by_location.values())) == 620
         assert d3_double_cat_check_grouped_by_location[event] == [event]
 
-        syndrome, effect = noisy_d3_double_cat_check.get_syndrome_and_effect(event)
+        signature, effect = noisy_d3_double_cat_check.get_signature_and_effect(event)
         assert np.array_equal(
-            syndrome,
+            signature,
             np.array([True, False, False, True, False, False, False]),
         )
         assert effect == '_' * noisy_d3_double_cat_check_circuit.num_qubits
@@ -69,23 +69,23 @@ class TestD3DoubleCatCheck:
             self,
             d3_combinator_and_kept_effects_by_analyzer,
     ):
-        """Count the undetected distance-3 configurations and their final errors by order.
+        """Count undetected configurations and resultant effects by fault count.
 
         The first reference list counts the fault sets that jointly flip no
-        detectors. The second counts the distinct final Pauli errors produced
+        detectors. The second counts the distinct resultant Pauli effects
         by those sets. Together they catch unintended changes to enumeration.
         """
         combinator, *_ = d3_combinator_and_kept_effects_by_analyzer
-        syndromes, fault_effects = zip(*combinator._indexed_faults, strict=True)
+        signatures, fault_effects = zip(*combinator._indexed_faults, strict=True)
         configuration_counts = []
         effect_counts = []
-        for order in range(5):
+        for fault_count in range(5):
             configuration_count = 0
             resultant_effects = set()
-            for effect, _ in _iter_zero_syndrome_configurations(
-                    syndromes=syndromes,
+            for effect, _ in _iter_undetected_configurations(
+                    signatures=signatures,
                     effects=fault_effects,
-                    order=order,
+                    fault_count=fault_count,
             ):
                 configuration_count += 1
                 resultant_effects.add(effect)

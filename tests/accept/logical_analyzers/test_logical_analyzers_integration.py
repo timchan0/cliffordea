@@ -16,7 +16,7 @@ def test_superposition_vs_clifford(
             dict[str, list[dict[PauliMask, LogicalTriple]]],
         ],
 ):
-    """Compare both analyzers' distance-3 results through order three.
+    """Compare both analyzers' distance-3 results through three faults.
 
     :param state: The cultivated S or T state whose results are compared.
     :param d3_combinator_and_kept_effects_by_analyzer: Session-scoped
@@ -27,36 +27,36 @@ def test_superposition_vs_clifford(
     )
     superposition_kept_effects = superposition_results[state]
     clifford_kept_effects = clifford_results[state]
-    for degree, superposition_effects in enumerate(superposition_kept_effects):
+    for fault_count, superposition_effects in enumerate(superposition_kept_effects):
         for kept_effect, superposition_triple in superposition_effects.items():
-            assert kept_effect in clifford_kept_effects[degree], (
-                f"{kept_effect} missing in clifford_kept_effects[{degree}]"
+            assert kept_effect in clifford_kept_effects[fault_count], (
+                f"{kept_effect} missing in clifford_kept_effects[{fault_count}]"
             )
-            clifford_triple = clifford_kept_effects[degree][kept_effect]
+            clifford_triple = clifford_kept_effects[fault_count][kept_effect]
             assert superposition_triple == clifford_triple, (
                 f"Mismatch for {kept_effect}: "
                 f"{superposition_triple} vs {clifford_triple}"
             )
-        for kept_effect in clifford_kept_effects[degree]:
+        for kept_effect in clifford_kept_effects[fault_count]:
             assert kept_effect in superposition_effects, (
-                f"{kept_effect} missing in superposition_kept_effects[{degree}]"
+                f"{kept_effect} missing in superposition_kept_effects[{fault_count}]"
             )
 
     # Correct result:
-    # S state cultivation: for order...
-    #     0, 1.0 (0.0) errors are kept and lead to identity (error).
-    #     1, 2.0 (0.0) errors are kept and lead to identity (error).
-    #     2, 6.0 (0.0) errors are kept and lead to identity (error).
-    #     3, 16.0 (24.0) errors are kept and lead to identity (error).
-    # T state cultivation: for order...
-    #     0, 1.0 (0.0) errors are kept and lead to identity (error).
-    #     1, 2.0 (0.0) errors are kept and lead to identity (error).
-    #     2, 2.75 (1.0) errors are kept and lead to identity (error).
-    #     3, 18.5 (23.75) errors are kept and lead to identity (error).
+    # S-state cultivation: for fault count...
+    #     0, 1.0 benign weight and 0.0 malignant weight.
+    #     1, 2.0 benign weight and 0.0 malignant weight.
+    #     2, 6.0 benign weight and 0.0 malignant weight.
+    #     3, 16.0 benign weight and 24.0 malignant weight.
+    # T-state cultivation: for fault count...
+    #     0, 1.0 benign weight and 0.0 malignant weight.
+    #     1, 2.0 benign weight and 0.0 malignant weight.
+    #     2, 2.75 benign weight and 1.0 malignant weight.
+    #     3, 18.5 benign weight and 23.75 malignant weight.
 
 
 def test_d5_factored_transversal_matches_general_workflow():
-    """Factoring preserves every D5 kept effect through order four.
+    """Factoring preserves every D5 kept effect through four faults.
 
     :return: None.
     """
@@ -76,7 +76,7 @@ def test_d5_factored_transversal_matches_general_workflow():
             **analyzer_arguments,
             factor_transversal_errors=True,
         ),
-        max_order=4,
+        max_fault_count=4,
         cultivated_states=('S', 'T'),
     )
     general_results = combinator.get_kept_effects(
@@ -84,7 +84,7 @@ def test_d5_factored_transversal_matches_general_workflow():
             **analyzer_arguments,
             factor_transversal_errors=False,
         ),
-        max_order=4,
+        max_fault_count=4,
         cultivated_states=('S', 'T'),
     )
 

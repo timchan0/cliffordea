@@ -15,10 +15,10 @@ def update_undetected_configurations():
     Input:
     * `undetected_configurations` maps each effect to a counter of denominators.
     * `effect` the resultant (unsigned) Pauli string of the candidate combination.
-    * `candidate` a sequence (whose length equals that of the candidate combination)
+    * `candidate` a sequence containing the candidate segment's faults
     of pairs each containing:
         - an error location
-        - count the number of its faults that can be used as part of the undetected combination.
+        - the number of disjoint error events realizing that fault.
 
     Side effect:
     * Update `undetected_configurations` with the undetected combination of faults if it is valid
@@ -29,17 +29,18 @@ def update_undetected_configurations():
         effect: str,
         candidate: Iterable[tuple[ErrorLocation, int]],
 ):
-        # check for duplicate sources
-        sources: set[ErrorLocation] = set()
-        unsorted_denominators: list[int] = []
-        tot = 1
-        for source, count in candidate:
-            if source in sources:
+        error_locations: set[ErrorLocation] = set()
+        denominator_factors: list[int] = []
+        realization_count = 1
+        for error_location, count in candidate:
+            if error_location in error_locations:
                 return
-            _, name, _ = source
-            unsorted_denominators.append(error_event_count(name))
-            tot *= count
-            sources.add(source)
-        denominators = math.prod(unsorted_denominators)
-        undetected_configurations[effect][denominators] += tot
+            _, name, _ = error_location
+            denominator_factors.append(error_event_count(name))
+            realization_count *= count
+            error_locations.add(error_location)
+        probability_denominator = math.prod(denominator_factors)
+        undetected_configurations[effect][probability_denominator] += (
+            realization_count
+        )
     return f

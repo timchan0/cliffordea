@@ -2,7 +2,7 @@ from collections import Counter
 
 import stim
 
-from cliffordea.accept.types import PauliMask, SyndromeMask
+from cliffordea.accept.types import PauliMask
 
 
 ErrorLocation = tuple[int, str, tuple[stim.GateTarget, ...]]
@@ -32,6 +32,9 @@ sorted by their qubit values.
 It is a pair only for `name` 'E'; else, a 1-tuple.
 """
 
+DetectorSignatureMask = int
+"""Packed detector signature ordered from least- to most-significant bit."""
+
 MeasurementEventKey = tuple[int, tuple[int, ...]]
 """A measurement result keyed by timeslice and canonical target qubits."""
 
@@ -41,7 +44,8 @@ MeasurementLocation = tuple[int, int]
 EffectMap = dict[str, Counter[ErrorLocation]]
 """A map from each effect (the resultant Pauli string of the fault
 when propagated to the end of the circuit as an unsigned Pauli string)
-to a map from each error location to the number of its faults that cause that effect.
+to a counter mapping error locations to the number of disjoint error events
+at that location that realize the fault.
 """
 
 FaultBag = tuple[int, int, int]

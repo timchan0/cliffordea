@@ -8,19 +8,23 @@ import stim
 from cliffordea.enum.cultivation_circuit import CultivationCircuit
 from cliffordea.accept.pauli import forget_sign
 from cliffordea.enum.types import EffectMap, ErrorLocation
-from cliffordea.enum.combinators._base import BaseExclusiveCombinator, error_event_count, get_trivial_syndrome_combinations
+from cliffordea.enum.combinators._base import (
+    BaseDisjointCombinator,
+    error_event_count,
+    get_zero_signature_combinations,
+)
 
 
-class FaultCombinatorExclusive(BaseExclusiveCombinator):
-    """Group all possible faults in a noisy circuit by their syndrome then effect then error location.
+class DisjointFaultCombinator(BaseDisjointCombinator):
+    """Group disjoint error events by signature, effect, and location.
 
-    Extends `BaseExclusiveCombinator`.
+    Extends `BaseDisjointCombinator`.
     Finds undetected fault combinations first by iterating through all
-    syndrome combinations and recording which ones are trivial.
-    Each syndrome corresponds to a set of error locations,
-    so for each trivial syndrome combination,
+    detector-signature combinations and recording which ones XOR to zero.
+    Each signature corresponds to a set of error locations,
+    so for each zero-signature combination,
     this combinator finds all error location combinations
-    that correspond to this syndrome combination.
+    that correspond to this signature combination.
     """
 
     def __init__(self, noisy_circuit, print_progress=False):
@@ -30,15 +34,14 @@ class FaultCombinatorExclusive(BaseExclusiveCombinator):
         ] = defaultdict(lambda: defaultdict(Counter))
         for error_location, group in _circuit.group_error_events_by_location().items():
             for error_event in group:
-                syndrome, effect = _circuit.get_syndrome_and_effect(error_event)
-                tuple_syndrome = tuple(syndrome)
-                _basis[tuple_syndrome][effect][error_location] += 1
-        self.basis = {syndrome: dict(effect_map) for syndrome, effect_map in _basis.items()}
-        """A map from each syndrome to an `EffectMap` containing at its lowest level
-        faults that cause that syndrome.
+                signature, effect = _circuit.get_signature_and_effect(error_event)
+                tuple_signature = tuple(signature)
+                _basis[tuple_signature][effect][error_location] += 1
+        self.basis = {signature: dict(effect_map) for signature, effect_map in _basis.items()}
+        """Map signatures and effects to their error-event realizations.
         """
         if print_progress:
-            print(f"Finished enumerating all faults. Found {self.syndrome_count} distinct syndromes.")
+            print(f"Finished enumerating all faults. Found {self.signature_count} distinct signatures.")
         self.circuit = _circuit
         """The noisy circuit to analyze."""
 
@@ -46,7 +49,7 @@ class FaultCombinatorExclusive(BaseExclusiveCombinator):
         return f"{self.__class__.__name__}({self.circuit})"
 
     @property
-    def syndrome_count(self) -> int:
+    def signature_count(self) -> int:
         return len(self.basis)
 
     def keys(self): return self.basis.keys()
@@ -56,21 +59,21 @@ class FaultCombinatorExclusive(BaseExclusiveCombinator):
     def items(self): return self.basis.items()
 
 
-    def _get_undetected_configurations_for_length(
+    def _get_undetected_configurations_for_fault_count(
             self,
-            length: int,
+            fault_count: int,
             print_progress: bool = False,
     ) -> dict[str, Counter[int]]:
         result: defaultdict[str, Counter[int]] = defaultdict(Counter)
         if print_progress:
-            print(f"Finding undetected configurations of length {length}...")
-        if length == 0:
+            print(f"Finding undetected {fault_count}-fault configurations...")
+        if fault_count == 0:
             result['_'*self.circuit.noisy_circuit.num_qubits][1] += 1
         else:
-            trivial_syndrome_combos = get_trivial_syndrome_combinations(
-                self.keys(), length)
-            for syndrome_counter in trivial_syndrome_combos:
-                options = self._syndrome_counter_to_options(syndrome_counter)
+            zero_signature_combinations = get_zero_signature_combinations(
+                self.keys(), fault_count)
+            for signature_counter in zero_signature_combinations:
+                options = self._signature_counter_to_options(signature_counter)
                 for segment_product in itertools.product(*(option.items() for option in options)):
                     # note: this is just as fast as iterating through `segment_product` once
                     # segment_product never empty
@@ -81,40 +84,40 @@ class FaultCombinatorExclusive(BaseExclusiveCombinator):
                     for candidate in candidates:
                         self._process_candidate(result, product_effect, candidate)
         if print_progress:
-            print(f"Done. They lead to {len(result)} distinct errors.")
+            print(f"Done. They have {len(result)} distinct resultant effects.")
         return dict(result)
 
 
-    def _syndrome_counter_to_options(self, syndrome_counter: Counter[tuple[bool, ...]]):
-        """Get valid fault combination segments for each syndrome based on the counts in `syndrome_counter`.
+    def _signature_counter_to_options(self, signature_counter: Counter[tuple[bool, ...]]):
+        """Get valid fault segments for each detector signature.
 
-        :param syndrome_counter: A counter dictating for each syndrome
-            how many error locations in `self.basis[syndrome]` should appear in the fault combination.
-            E.g. `{syndrome1: 2, syndrome2: 1}`.
+        :param signature_counter: A counter dictating for each signature
+            how many error locations in `self.basis[signature]` should appear
+            in the fault configuration. E.g. `{signature1: 2, signature2: 1}`.
 
         :return options:
-            A list of options, one for each item in `syndrome_counter`
+            A list of options, one for each item in `signature_counter`
             e.g. `[option1, option2]`.
             Each option is a map from effect to a counter of valid segments with that effect.
             e.g. `{effect1: {segment1: 3, segment2: 1}, effect2: {segment3: 5}}`
             where e.g. `segment1 = {location1, location2}`.
         """
         options: list[dict[str, Counter[frozenset[ErrorLocation]]]] = []
-        for syndrome, count in syndrome_counter.items():
-            effects_to_valid_segments = self._get_effect_to_valid_segments(syndrome, count)
+        for signature, count in signature_counter.items():
+            effects_to_valid_segments = self._get_effect_to_valid_segments(signature, count)
             options.append(effects_to_valid_segments)
         return options
 
 
     def _get_effect_to_valid_segments(
         self,
-        syndrome: tuple[bool, ...],
-        length: int,
+        signature: tuple[bool, ...],
+        fault_count: int,
     ):
         """Get a map from effect to the number of valid fault combinations with that resultant effect.
 
-        :param syndrome: Defines the set of faults to take combinations from.
-        :param length: The length of valid fault combinations to consider.
+        :param signature: Defines the set of faults to take combinations from.
+        :param fault_count: The number of faults in each combination.
 
         :return:
             A map from effect to a counter of error location combinations.
@@ -123,8 +126,11 @@ class FaultCombinatorExclusive(BaseExclusiveCombinator):
             with that resultant effect.
         """
         result: defaultdict[str, Counter[frozenset[ErrorLocation]]] = defaultdict(Counter)
-        effect_map = self.basis[syndrome]
-        effect_combos = itertools.combinations_with_replacement(effect_map.keys(), length)
+        effect_map = self.basis[signature]
+        effect_combos = itertools.combinations_with_replacement(
+            effect_map.keys(),
+            fault_count,
+        )
         for effect_combo in effect_combos:
             # e.g. effect_combo = ('effect1', 'effect1', 'effect2') and is never empty
             counter = Counter(effect_combo)
@@ -148,28 +154,30 @@ class FaultCombinatorExclusive(BaseExclusiveCombinator):
         """Get error location combinations for each effect based on the counts in `counter`.
 
         :param effect_map: A map from each effect to a map from each error location
-            to the number of its faults that cause that syndrome and effect.
-            E.g. `{effect1: {location1: 1, location2: 1, source3: 2}, effect2: {source4: 1}}`.
-        :param counter: A counter dictating for each effect and source map in `effect_map`,
-            how many sources in source map should appear in the fault combination.
+            to the number of disjoint error events that realize the fault.
+            E.g. `{effect1: {location1: 1, location2: 1, location3: 2},
+            effect2: {location4: 1}}`.
+        :param counter: A counter dictating for each effect and location map in
+            `effect_map`,
+            how many error locations in the location map should appear in the
+            fault configuration.
             E.g. `{effect1: 2, effect2: 1}`.
 
         :return options:
             A list of options, one for each item in `counter`
             e.g. `[option1, option2]`.
-            Each option is an iterable of source combinations
-            e.g. `[((location1, 1), (location2, 1)), ((location1, 1), (source3, 2)), ((location2, 1), (source3, 2))]`.
-            Each source combination is a combination of `count` distinct error locations in `effect_map[effect]`.
+            Each option is an iterable of error-location combinations, where
+            each integer is an error-event realization count.
         """
         options: list[itertools.combinations[tuple[tuple[ErrorLocation, int], ...]]] = []
         for effect, count in counter.items():
             option = itertools.combinations(effect_map[effect].items(), count)
             # without replacement because each item in effect_map[effect]
-            # is a (error location, fault count) pair and each option must have distinct error locations
-            # e.g. effect_map[effect] = {'location1': 1, 'location2': 1, 'source3': 2}
+            # is an (error location, realization count) pair and each option
+            # must have distinct error locations.
 
             # TODO: see if making `option` the following form is faster:
-            # `[({location1, location2}, 1), ({location1, source3}, 2), ({location2, source3}, 2)]`
+            # `[({location1, location2}, 1), ({location1, location3}, 2)]`
             options.append(option)
         return options
 
@@ -186,19 +194,19 @@ class FaultCombinatorExclusive(BaseExclusiveCombinator):
             Each count is the number of fault combinations from that error location combination
             that can be used as part of the undetected combination.
         :param candidate: The segment to consider
-            e.g. `[(location1, 1), (location2, 1), (source3, 2)]`.
+            e.g. `[(location1, 1), (location2, 1), (location3, 2)]`.
 
         Side effect:
         * Update `valid_segments` with `candidate` if it is valid i.e. comprises distinct error locations.
         """
-        sources: set[ErrorLocation] = set()
-        counts: int = 1
-        for source, count in candidate:
-            if source in sources:  # check for duplicate sources
+        error_locations: set[ErrorLocation] = set()
+        realization_count = 1
+        for error_location, count in candidate:
+            if error_location in error_locations:
                 return
-            sources.add(source)
-            counts *= count
-        valid_segments[frozenset(sources)] += counts
+            error_locations.add(error_location)
+            realization_count *= count
+        valid_segments[frozenset(error_locations)] += realization_count
 
 
     @staticmethod
@@ -209,15 +217,17 @@ class FaultCombinatorExclusive(BaseExclusiveCombinator):
     ):
         """Update `undetected_configurations` with a candidate undetected combination of faults.
 
-        :param undetected_configurations: The output of `self._get_undetected_configurations_for_length`.
+        :param undetected_configurations: The output of
+            `self._get_undetected_configurations_for_fault_count`.
         :param effect: The resultant (unsigned) Pauli string of the candidate combination.
-        :param candidate: An iterable of segments (whose total length equals that of the candidate combination).
+        :param candidate: Segments whose total fault count equals that of the
+            candidate configuration.
             Each segment is a pair containing:
 
                 * a frozenset of error locations,
                 * the number of fault combinations that can be used as part of the undetected combination.
 
-            E.g. `((frozenset({location1, location2}), 1), (frozenset({source3}), 2))`
+            E.g. `((frozenset({location1, location2}), 1), (frozenset({location3}), 2))`
             represents a candidate combination
             of faults that has the resultant effect `effect` and is made up of two segments
             where the first segment is made up of two distinct error locations and the second segment is made
@@ -227,13 +237,18 @@ class FaultCombinatorExclusive(BaseExclusiveCombinator):
         * Update `undetected_configurations` with the undetected combination of faults if it is valid
         i.e. comprises distinct error locations.
         """
-        current_sources: set[ErrorLocation] = set()
-        current_count: int = 1
-        denominators: int = 1
-        for sources, count in candidate:
-            if not current_sources.isdisjoint(sources):  # check for duplicate sources
+        current_locations: set[ErrorLocation] = set()
+        realization_count = 1
+        probability_denominator = 1
+        for error_locations, count in candidate:
+            if not current_locations.isdisjoint(error_locations):
                 return
-            current_sources.update(sources)
-            current_count *= count
-            denominators *= math.prod(error_event_count(name) for _, name, _ in sources)
-        undetected_configurations[effect][denominators] += current_count
+            current_locations.update(error_locations)
+            realization_count *= count
+            probability_denominator *= math.prod(
+                error_event_count(name)
+                for _, name, _ in error_locations
+            )
+        undetected_configurations[effect][probability_denominator] += (
+            realization_count
+        )

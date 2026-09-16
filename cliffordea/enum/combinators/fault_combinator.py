@@ -18,11 +18,11 @@ from cliffordea.enum.cultivation_circuit import (
 from cliffordea.enum.combinators._base import Combinator, classify
 from cliffordea.accept.logical_analyzers import LogicalAnalyzer
 from cliffordea.enum.types import (
+    DetectorSignatureMask,
     ErrorEvent,
     FaultBag,
     LogicalTriple,
     PauliMask,
-    SyndromeMask,
 )
 from cliffordea.enum import circuit_tools
 
@@ -55,51 +55,51 @@ DiagramType = Literal[
 """Stim diagram type."""
 
 
-def _iter_zero_syndrome_configurations(
+def _iter_undetected_configurations(
         *,
-        syndromes: Sequence[SyndromeMask],
+        signatures: Sequence[DetectorSignatureMask],
         effects: Sequence[PauliMask],
-        order: int,
+        fault_count: int,
 ) -> Iterator[tuple[PauliMask, tuple[int, ...]]]:
-    """Join canonical fault-subset halves with equal XOR syndromes.
+    """Join canonical fault-subset halves with equal XOR signatures.
 
-    :param syndromes: Packed syndrome masks in fault-index order.
+    :param signatures: Packed detector signatures in fault-index order.
     :param effects: Packed data-effect masks in fault-index order.
-    :param order: The number of distinct fault indices in each configuration.
+    :param fault_count: The number of distinct faults in each configuration.
     :return: An iterator over combined effects and sorted fault-index tuples.
     """
-    if order == 0:
+    if fault_count == 0:
         yield 0, ()
         return
 
-    left_order = order // 2
-    right_order = order - left_order
-    fault_indices = range(len(syndromes))
+    left_fault_count = fault_count // 2
+    right_fault_count = fault_count - left_fault_count
+    fault_indices = range(len(signatures))
     left_halves: defaultdict[
-        SyndromeMask,
+        DetectorSignatureMask,
         list[tuple[tuple[int, ...], PauliMask]],
     ] = defaultdict(list)
-    for indices in itertools.combinations(fault_indices, left_order):
-        syndrome = 0
+    for indices in itertools.combinations(fault_indices, left_fault_count):
+        signature = 0
         effect = 0
         for index in indices:
-            syndrome ^= syndromes[index]
+            signature ^= signatures[index]
             effect ^= effects[index]
-        left_halves[syndrome].append((indices, effect))
+        left_halves[signature].append((indices, effect))
 
-    for right_indices in itertools.combinations(fault_indices, right_order):
-        right_syndrome = 0
+    for right_indices in itertools.combinations(fault_indices, right_fault_count):
+        right_signature = 0
         right_effect = 0
         for index in right_indices:
-            right_syndrome ^= syndromes[index]
+            right_signature ^= signatures[index]
             right_effect ^= effects[index]
-        for left_indices, left_effect in left_halves.get(right_syndrome, ()):
+        for left_indices, left_effect in left_halves.get(right_signature, ()):
             if not left_indices or left_indices[-1] < right_indices[0]:
                 yield left_effect ^ right_effect, left_indices + right_indices
 
 
 class FaultCombinator(Combinator):
-    """Group faults by their syndrome then effect,
+    """Group faults by detector signature then resultant effect,
     where all faults are independent and effects are pure Pauli sums.
 
     Extends `Combinator`.
@@ -107,33 +107,39 @@ class FaultCombinator(Combinator):
     
     def __init__(self, noisy_circuit, print_progress=False):
         _circuit = CultivationCircuit(noisy_circuit=noisy_circuit)
-        _basis: defaultdict[SyndromeMask, dict[PauliMask, int]] = defaultdict(dict)
+        _basis: defaultdict[
+            DetectorSignatureMask,
+            dict[PauliMask, int],
+        ] = defaultdict(dict)
         _index_to_bag: defaultdict[int, list[int]] = defaultdict(lambda: [0, 0, 0])
         event_fault_indices: list[int] = []
 
         for (_, process_name, _), group in _circuit.group_error_events_by_location().items():
             process_class = classify(process_name)
             for error_event in group:
-                syndrome_mask, effect_mask = _circuit._get_syndrome_and_effect_masks(error_event)
-                index = _basis[syndrome_mask].setdefault(
+                signature_mask, effect_mask = _circuit._get_signature_and_effect_masks(error_event)
+                index = _basis[signature_mask].setdefault(
                     effect_mask,
                     len(_index_to_bag),
                 )
                 _index_to_bag[index][process_class] += 1
                 event_fault_indices.append(index)
-        self.basis: dict[SyndromeMask, dict[PauliMask, int]] = dict(_basis)
-        """Packed syndrome and Pauli masks mapped to dense fault indices."""
+        self.basis: dict[
+            DetectorSignatureMask,
+            dict[PauliMask, int],
+        ] = dict(_basis)
+        """Packed detector-signature and effect masks mapped to fault indices."""
         self.index_to_bag: dict[int, FaultBag] = { # type: ignore
             index: tuple(bag) for index, bag in _index_to_bag.items()}
         """A map from each fault index to its fault bag."""
-        indexed_faults: list[tuple[SyndromeMask, PauliMask]] = [
+        indexed_faults: list[tuple[DetectorSignatureMask, PauliMask]] = [
             (0, 0) for _ in self.index_to_bag
         ]
-        for syndrome_mask, effect_to_index in self.basis.items():
+        for signature_mask, effect_to_index in self.basis.items():
             for effect_mask, index in effect_to_index.items():
-                indexed_faults[index] = syndrome_mask, effect_mask
+                indexed_faults[index] = signature_mask, effect_mask
         self._indexed_faults = tuple(indexed_faults)
-        """Syndrome and full Pauli effect masks in fault-index order."""
+        """Detector-signature and full-effect masks in fault-index order."""
         self._event_fault_indices = tuple(event_fault_indices)
         """The fault index of each deterministically enumerated error event."""
         if print_progress:
@@ -151,7 +157,10 @@ class FaultCombinator(Combinator):
         return f"{self.__class__.__name__}({self.circuit})"
 
     def __str__(self) -> str:
-        return f"{self.__class__.__name__} with {self.fault_count} faults distributed among {self.syndrome_count} syndromes."
+        return (
+            f"{self.__class__.__name__} with {self.fault_count} faults "
+            f"distributed among {self.signature_count} detector signatures."
+        )
 
 
     def error_rates_per_kept_shot(
@@ -165,7 +174,7 @@ class FaultCombinator(Combinator):
         :param self: The fault combinator whose fault probabilities are used.
         :param all_kept_effects: One state's output from `get_kept_effects`.
         :param noise_levels: Noise levels to analyze in output order.
-        :param print_progress: Whether to print per-order odds at each level.
+        :param print_progress: Whether to print per-fault-count odds at each level.
         :return: Logical error rates in the same order as `noise_levels`.
         """
         noise_level_array = np.asarray(tuple(noise_levels), dtype=np.float64)
@@ -193,27 +202,27 @@ class FaultCombinator(Combinator):
                 dtype=np.float64,
                 count=len(bags),
             )
-            identity_odds = 0.0
-            error_odds = 0.0
+            benign_odds = 0.0
+            malignant_odds = 0.0
             if print_progress:
                 print(f'Noise level = {noise_level}:')
-            for degree, (signatures, logical_weights) in enumerate(
+            for fault_count, (bag_index_rows, classification_weights) in enumerate(
                     compiled_terms):
                 monomial_odds = np.prod(
-                    bag_odds[signatures],
+                    bag_odds[bag_index_rows],
                     axis=1,
                 )
-                degree_identity_odds, degree_error_odds = (
-                    monomial_odds @ logical_weights
+                fault_count_benign_odds, fault_count_malignant_odds = (
+                    monomial_odds @ classification_weights
                 )
                 if print_progress:
-                    print(f'O(p^{degree}) events:')
-                    print(f'Identity odds = {degree_identity_odds}')
-                    print(f'Error odds = {degree_error_odds}')
-                identity_odds += degree_identity_odds
-                error_odds += degree_error_odds
-            error_rates[level_index] = error_odds / (
-                identity_odds + error_odds
+                    print(f'{fault_count}-fault configurations:')
+                    print(f'Benign odds = {fault_count_benign_odds}')
+                    print(f'Malignant odds = {fault_count_malignant_odds}')
+                benign_odds += fault_count_benign_odds
+                malignant_odds += fault_count_malignant_odds
+            error_rates[level_index] = malignant_odds / (
+                benign_odds + malignant_odds
             )
         return error_rates
 
@@ -230,7 +239,7 @@ class FaultCombinator(Combinator):
             self,
             *,
             logical_analyzer: LogicalAnalyzer,
-            max_order: int,
+            max_fault_count: int,
             cultivated_states: tuple[CultivatedState, ...] = ('T',),
             logical_analysis_cache_maxsize: int | None = 262_144,
             print_progress: bool = False,
@@ -238,7 +247,7 @@ class FaultCombinator(Combinator):
         """Enumerate circuit-undetected, postselected packed Pauli effects.
 
         :param self: The fault combinator whose indexed faults are enumerated.
-        :param max_order: The maximum order of probability to consider.
+        :param max_fault_count: The largest fault count to enumerate.
         :param logical_analyzer: The analyzer used for stabilizer postselection
             and logical-fidelity calculations.
         :param cultivated_states: The logical states to analyze together.
@@ -264,15 +273,15 @@ class FaultCombinator(Combinator):
             maxsize=logical_analysis_cache_maxsize,
         )
         detector_count = self.circuit.noisy_circuit.num_detectors
-        extended_syndromes: list[SyndromeMask] = []
+        rejection_signatures: list[DetectorSignatureMask] = []
         data_effects: list[PauliMask] = []
-        for circuit_syndrome, full_effect in self._indexed_faults:
+        for circuit_signature, full_effect in self._indexed_faults:
             data_effect = restrict_effect_mask(full_effect)
             precheck_syndrome = logical_analyzer.linear_precheck_syndrome(
                 data_effect,
             )
-            extended_syndromes.append(
-                circuit_syndrome | (precheck_syndrome << detector_count)
+            rejection_signatures.append(
+                circuit_signature | (precheck_syndrome << detector_count)
             )
             data_effects.append(data_effect)
 
@@ -280,7 +289,7 @@ class FaultCombinator(Combinator):
             state: [] for state in cultivated_states
         }
 
-        for order in range(max_order + 1):
+        for fault_count in range(max_fault_count + 1):
             configurations_by_mask: dict[
                 PauliMask, list[tuple[int, ...]]
             ] = {}
@@ -291,15 +300,15 @@ class FaultCombinator(Combinator):
 
             configuration_iterator: Iterable[
                 tuple[PauliMask, tuple[int, ...]]
-            ] = _iter_zero_syndrome_configurations(
-                syndromes=extended_syndromes,
+            ] = _iter_undetected_configurations(
+                signatures=rejection_signatures,
                 effects=data_effects,
-                order=order,
+                fault_count=fault_count,
             )
             if print_progress:
                 configuration_iterator = tqdm(
                     configuration_iterator,
-                    desc=f"Order {order}",
+                    desc=f"{fault_count}-fault configurations",
                     unit="configuration",
                     dynamic_ncols=True,
                     leave=True,
@@ -331,17 +340,21 @@ class FaultCombinator(Combinator):
                     for configurations in configurations_by_mask.values()
                 )
                 print(
-                    f"    {order}: visited {visited_configuration_count} configurations; "
+                    f"    {fault_count} faults: visited "
+                    f"{visited_configuration_count} configurations; "
                     f"kept {retained_configuration_count} configurations "
                     f"across {len(configurations_by_mask)} data effects."
                 )
                 for state in cultivated_states:
-                    identity_weight, error_weight = _sum_logical_weights(
-                        result[state][order].values()
+                    benign_weight, malignant_weight = (
+                        _sum_benign_malignant_weights(
+                            result[state][fault_count].values()
+                        )
                     )
                     print(
-                        f"        {state}: accepted effect logical weight: "
-                        f"{identity_weight} identity, {error_weight} error."
+                        f"        {state}: accepted-effect weight: "
+                        f"{benign_weight} benign, "
+                        f"{malignant_weight} malignant."
                     )
 
         if print_progress:
@@ -377,7 +390,7 @@ class FaultCombinator(Combinator):
 
     
     def print_basis(self):
-        """Print readable syndromes, effects, indices, and fault bags.
+        """Print readable signatures, resultant effects, indices, and bags.
 
         :param self: The fault combinator whose basis is displayed.
         :return: None.
@@ -385,9 +398,9 @@ class FaultCombinator(Combinator):
         lines = []
         detector_count = self.circuit.noisy_circuit.num_detectors
         qubit_count = self.circuit.noisy_circuit.num_qubits
-        for syndrome_mask, effect_dict in self.basis.items():
+        for signature_mask, effect_dict in self.basis.items():
             lines.append(''.join(
-                '1' if syndrome_mask >> detector_index & 1 else '0'
+                '1' if signature_mask >> detector_index & 1 else '0'
                 for detector_index in range(detector_count)
             ))
             for effect_mask, index in effect_dict.items():
@@ -405,36 +418,50 @@ class FaultCombinator(Combinator):
                 list[dict[PauliMask, LogicalTriple]],
             ],
     ):
-        """Summarize contribution of each degree to overall probability.
+        """Summarize contributions at each fault count.
         
         :param all_kept_effects: Results returned by `get_kept_effects`.
 
         :return summary:
-            A DataFrame whose rows are of the form (cultivated_state, degree)
+            A DataFrame whose rows are of the form
+            (cultivated_state, fault_count)
             whose columns are [('configuration_count', 'benign'), ('configuration_count', 'malignant'),
-            ('weight', 'benign'), ('weight', 'malignant'), ('weight', 'error_probability')].
+            ('weight', 'benign'), ('weight', 'malignant'),
+            ('weight', 'malignant_probability')].
         """
         dict_: dict[tuple[str, int], tuple[int, int, float, float]] = {}
         for state, effects_for_state in all_kept_effects.items():
-            for degree, effects in enumerate(effects_for_state):
-                i_entropy, e_entropy = 0, 0
-                i_count, e_count = 0, 0
+            for fault_count, effects in enumerate(effects_for_state):
+                benign_weight, malignant_weight = 0, 0
+                benign_count, malignant_count = 0, 0
                 for accept_probability, logical_fidelity, configurations in effects.values():
-                    entropy = sum(math.prod(self._bag_to_entropy(self.index_to_bag[index])
+                    asymptotic_weight = sum(math.prod(
+                        self._bag_to_asymptotic_weight(self.index_to_bag[index])
                         for index in config) for config in configurations)
-                    i_entropy += accept_probability * logical_fidelity * entropy
-                    e_entropy += accept_probability * (1-logical_fidelity) * entropy
+                    benign_weight += (
+                        accept_probability * logical_fidelity * asymptotic_weight
+                    )
+                    malignant_weight += (
+                        accept_probability
+                        * (1-logical_fidelity)
+                        * asymptotic_weight
+                    )
                     if accept_probability > 0:
                         if logical_fidelity == 1:
-                            i_count += len(configurations)
+                            benign_count += len(configurations)
                         else:
-                            e_count += len(configurations)
-                dict_[state, degree] = (i_count, e_count, i_entropy, e_entropy)
+                            malignant_count += len(configurations)
+                dict_[state, fault_count] = (
+                    benign_count,
+                    malignant_count,
+                    benign_weight,
+                    malignant_weight,
+                )
         data = pd.DataFrame(dict_).T
-        data.index.set_names(['cultivated_state', 'degree'], inplace=True)
+        data.index.set_names(['cultivated_state', 'fault_count'], inplace=True)
         data.columns = pd.MultiIndex.from_product([
             ['configuration_count', 'weight'], ['benign', 'malignant']])
-        data['weight', 'error_probability'] = data['weight', 'malignant'] / \
+        data['weight', 'malignant_probability'] = data['weight', 'malignant'] / \
             (data['weight', 'benign'] + data['weight', 'malignant'])
         return data.astype({
             ('configuration_count', 'benign'): int,
@@ -443,7 +470,7 @@ class FaultCombinator(Combinator):
 
     
     @property
-    def syndrome_count(self) -> int:
+    def signature_count(self) -> int:
         return len(self.basis)
     
 
@@ -517,14 +544,13 @@ class FaultCombinator(Combinator):
     
     
     @staticmethod
-    def _bag_to_entropy(bag: FaultBag) -> float:
-        """Convert a fault bag to its entropy contribution.
+    def _bag_to_asymptotic_weight(bag: FaultBag) -> float:
+        """Convert a fault bag to its leading low-noise weight.
         
         :param bag: A `FaultBag`.
 
-        :return entropy:
-            The probability of the fault bag in terms of the noise level,
-            as the noise level tends to zero.
+        :return asymptotic_weight: The coefficient of the fault probability
+            to leading order in the noise level.
         """
         a, b, c = bag
         return a + b/3 + c/15
@@ -673,25 +699,25 @@ def _make_logical_analysis_cache(
     return analyze_mask
 
 
-def _sum_logical_weights(
+def _sum_benign_malignant_weights(
         logical_triples: Iterable[LogicalTriple],
 ) -> tuple[float, float]:
-    """Sum acceptance-weighted logical identity and error contributions.
+    """Sum acceptance-weighted benign and malignant contributions.
 
     :param logical_triples: Logical-analysis results containing an acceptance
         probability, logical fidelity, and list of fault configurations for
         each retained effect. Configuration multiplicity is not included in
         this diagnostic sum.
 
-    :return: The total identity contribution followed by the total logical
-        error contribution.
+    :return: The total benign contribution followed by the total malignant
+        contribution.
     """
-    identity_weight = 0.0
-    error_weight = 0.0
+    benign_weight = 0.0
+    malignant_weight = 0.0
     for accept_probability, logical_fidelity, _ in logical_triples:
-        identity_weight += accept_probability * logical_fidelity
-        error_weight += accept_probability * (1 - logical_fidelity)
-    return identity_weight, error_weight
+        benign_weight += accept_probability * logical_fidelity
+        malignant_weight += accept_probability * (1 - logical_fidelity)
+    return benign_weight, malignant_weight
 
 
 def _compile_odds_terms(
@@ -702,44 +728,47 @@ def _compile_odds_terms(
 ]:
     """Compile kept configurations into unique fault-bag monomials.
 
-    :param all_kept_effects: One state's packed kept effects by fault degree.
+    :param all_kept_effects: One state's packed kept effects by fault count.
     :param fault_index_to_bag_index: Probability-equivalent bag index for each
         fault index.
-    :return: Per-degree signature matrices paired with identity/error weights.
+    :return: Per-fault-count bag-index matrices paired with benign/malignant
+        weights.
     """
     compiled_terms = []
-    for degree, effects in enumerate(all_kept_effects):
-        signature_to_weights: dict[tuple[int, ...], list[float]] = {}
+    for fault_count, effects in enumerate(all_kept_effects):
+        bag_indices_to_weights: dict[tuple[int, ...], list[float]] = {}
         for accept_probability, logical_fidelity, configurations in (
                 effects.values()):
-            identity_weight = accept_probability * logical_fidelity
-            error_weight = accept_probability * (1 - logical_fidelity)
+            benign_weight = accept_probability * logical_fidelity
+            malignant_weight = accept_probability * (1 - logical_fidelity)
             for configuration in configurations:
-                signature = tuple(sorted(
+                bag_indices = tuple(sorted(
                     fault_index_to_bag_index[fault_index]
                     for fault_index in configuration
                 ))
-                logical_weights = signature_to_weights.get(signature)
-                if logical_weights is None:
-                    signature_to_weights[signature] = [
-                        identity_weight,
-                        error_weight,
+                classification_weights = bag_indices_to_weights.get(
+                    bag_indices,
+                )
+                if classification_weights is None:
+                    bag_indices_to_weights[bag_indices] = [
+                        benign_weight,
+                        malignant_weight,
                     ]
                 else:
-                    logical_weights[0] += identity_weight
-                    logical_weights[1] += error_weight
+                    classification_weights[0] += benign_weight
+                    classification_weights[1] += malignant_weight
 
-        if signature_to_weights:
-            signatures = np.asarray(
-                tuple(signature_to_weights),
+        if bag_indices_to_weights:
+            bag_index_rows = np.asarray(
+                tuple(bag_indices_to_weights),
                 dtype=np.uint32,
-            ).reshape(len(signature_to_weights), degree)
-            logical_weights = np.asarray(
-                tuple(signature_to_weights.values()),
+            ).reshape(len(bag_indices_to_weights), fault_count)
+            classification_weights = np.asarray(
+                tuple(bag_indices_to_weights.values()),
                 dtype=np.float64,
             )
         else:
-            signatures = np.empty((0, degree), dtype=np.uint32)
-            logical_weights = np.empty((0, 2), dtype=np.float64)
-        compiled_terms.append((signatures, logical_weights))
+            bag_index_rows = np.empty((0, fault_count), dtype=np.uint32)
+            classification_weights = np.empty((0, 2), dtype=np.float64)
+        compiled_terms.append((bag_index_rows, classification_weights))
     return compiled_terms

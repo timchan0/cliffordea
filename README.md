@@ -66,6 +66,10 @@ noisy_circuit = enum.noise.uniformly_depolarize(
 faults = enum.FaultCombinator(noisy_circuit)
 ```
 
+The enumerator groups equivalent error events into faults by detector signature
+and resultant effect. Enumeration limits are expressed as a maximum fault count,
+matching the terminology used in the paper.
+
 A worked fault-enumeration example is available in
 [`demo_notebooks/enum.ipynb`](demo_notebooks/enum.ipynb). The simulation
 workflow, including validation, smoke sampling, production runs, and

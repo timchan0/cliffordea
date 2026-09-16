@@ -16,8 +16,8 @@ from cliffordea.enum.combinators.fault_combinator import (
     _compile_odds_terms,
     _make_logical_analysis_cache,
     _make_pauli_mask_restrictor,
-    _iter_zero_syndrome_configurations,
-    _sum_logical_weights,
+    _iter_undetected_configurations,
+    _sum_benign_malignant_weights,
 )
 from cliffordea.accept.logical_analyzers import CliffordLogicalAnalyzer, LogicalAnalyzer
 from cliffordea.enum.cultivation_circuit import (
@@ -59,7 +59,7 @@ def test_index_to_events_reuses_indices_recorded_during_construction(
 
     monkeypatch.setattr(
         combinator.circuit,
-        'get_syndrome_and_effect',
+        'get_signature_and_effect',
         fail_if_called,
     )
     index_to_events = combinator.index_to_events
@@ -130,7 +130,7 @@ def test_construction_avoids_legacy_event_analysis(monkeypatch):
     ))
     monkeypatch.setattr(
         CultivationCircuit,
-        'get_syndrome_and_effect',
+        'get_signature_and_effect',
         legacy_method,
     )
     combinator = FaultCombinator(stim.Circuit("""
@@ -196,7 +196,7 @@ def test_basis_and_indexed_faults_remain_mask_native_and_readable(capsys):
     :param capsys: Pytest fixture used to capture readable basis output.
     """
     combinator = _make_small_fault_combinator()
-    assert all(isinstance(syndrome, int) for syndrome in combinator.basis)
+    assert all(isinstance(signature, int) for signature in combinator.basis)
     assert all(
         isinstance(effect, int)
         for effects in combinator.basis.values()
@@ -204,8 +204,8 @@ def test_basis_and_indexed_faults_remain_mask_native_and_readable(capsys):
     )
 
     expected_by_index = {
-        index: (syndrome, effect)
-        for syndrome, effects in combinator.basis.items()
+        index: (signature, effect)
+        for signature, effects in combinator.basis.items()
         for effect, index in effects.items()
     }
     assert combinator._indexed_faults == tuple(
@@ -213,18 +213,18 @@ def test_basis_and_indexed_faults_remain_mask_native_and_readable(capsys):
     )
 
     sample_index = 0
-    sample_syndrome, sample_effect = expected_by_index[sample_index]
+    sample_signature, sample_effect = expected_by_index[sample_index]
     combinator.print_basis()
     output = capsys.readouterr().out
-    syndrome_text = ''.join(
-        '1' if sample_syndrome >> detector & 1 else '0'
+    signature_text = ''.join(
+        '1' if sample_signature >> detector & 1 else '0'
         for detector in range(combinator.circuit.noisy_circuit.num_detectors)
     )
     effect_text = mask_to_unsigned_pauli(
         sample_effect,
         combinator.circuit.noisy_circuit.num_qubits,
     )
-    assert syndrome_text in output
+    assert signature_text in output
     assert f"  {effect_text}: {sample_index}" in output
 
 
@@ -244,15 +244,15 @@ def test_mask_analyzer_matches_direct_event_propagation():
 
     for group in circuit.group_error_events_by_location().values():
         for error_event in group:
-            syndrome, effect = circuit.get_syndrome_and_effect(error_event)
+            signature, effect = circuit.get_signature_and_effect(error_event)
             expected = (
                 sum(
                     bool(value) << index
-                    for index, value in enumerate(syndrome)
+                    for index, value in enumerate(signature)
                 ),
                 pauli_mask(effect),
             )
-            assert circuit._get_syndrome_and_effect_masks(error_event) == expected
+            assert circuit._get_signature_and_effect_masks(error_event) == expected
 
 
 @pytest.mark.parametrize("qubit_count", range(4))
@@ -387,28 +387,28 @@ def test_pauli_mask_restriction_preserves_requested_order():
     assert fast_restrict(pauli_mask(source)) == restricted_mask
 
 
-@pytest.mark.parametrize("order", range(5))
-def test_meet_in_the_middle_matches_exhaustive_subsets(order: int):
-    """Canonical half joins return every trivial-syndrome subset exactly once.
+@pytest.mark.parametrize("fault_count", range(5))
+def test_meet_in_the_middle_matches_exhaustive_subsets(fault_count: int):
+    """Canonical half joins return every zero-signature subset exactly once.
 
-    :param order: The distinct-fault subset size compared with brute force.
+    :param fault_count: The distinct-fault subset size compared with brute force.
     """
-    syndromes = (0b00, 0b01, 0b01, 0b10, 0b11, 0b00)
+    signatures = (0b00, 0b01, 0b01, 0b10, 0b11, 0b00)
     effects = (0b0001, 0b0010, 0b0100, 0b1000, 0b0011, 0b1100)
     expected = []
-    for indices in itertools.combinations(range(len(syndromes)), order):
-        syndrome = 0
+    for indices in itertools.combinations(range(len(signatures)), fault_count):
+        signature = 0
         effect = 0
         for index in indices:
-            syndrome ^= syndromes[index]
+            signature ^= signatures[index]
             effect ^= effects[index]
-        if syndrome == 0:
+        if signature == 0:
             expected.append((effect, indices))
 
-    actual = list(_iter_zero_syndrome_configurations(
-        syndromes=syndromes,
+    actual = list(_iter_undetected_configurations(
+        signatures=signatures,
         effects=effects,
-        order=order,
+        fault_count=fault_count,
     ))
 
     assert sorted(actual) == sorted(expected)
@@ -491,7 +491,7 @@ def test_fault_combinator_exposes_only_mask_native_kept_effect_enumeration():
 def _exhaustive_kept_effects_oracle(
         combinator: FaultCombinator,
         logical_analyzer,
-        max_order: int,
+        max_fault_count: int,
         cultivated_states: tuple[str, ...],
 ):
     """Compute kept effects with an independent exhaustive subset search.
@@ -501,7 +501,7 @@ def _exhaustive_kept_effects_oracle(
 
     :param combinator: The fault combinator whose indexed basis is enumerated.
     :param logical_analyzer: The analyzer used to postselect each data effect.
-    :param max_order: The largest fault-subset size to enumerate.
+    :param max_fault_count: The largest fault-subset size to enumerate.
     :param cultivated_states: The logical states to analyze.
 
     :return: Kept-effect results in the same structure as
@@ -513,18 +513,18 @@ def _exhaustive_kept_effects_oracle(
         source_qubit_count=combinator.circuit.noisy_circuit.num_qubits,
     )
     result = {state: [] for state in cultivated_states}
-    for order in range(max_order + 1):
+    for fault_count in range(max_fault_count + 1):
         configurations_by_state = {
             state: defaultdict(list) for state in cultivated_states
         }
         analyses_by_state = {state: {} for state in cultivated_states}
-        for combination in itertools.combinations(faults, order):
-            resultant_syndrome = 0
+        for combination in itertools.combinations(faults, fault_count):
+            resultant_signature = 0
             full_effect = 0
-            for _, (syndrome, effect) in combination:
-                resultant_syndrome ^= syndrome
+            for _, (signature, effect) in combination:
+                resultant_signature ^= signature
                 full_effect ^= effect
-            if resultant_syndrome:
+            if resultant_signature:
                 continue
             data_effect = restrict_effect(full_effect)
             fault_indices = tuple(fault[0] for fault in combination)
@@ -586,9 +586,9 @@ class _SyntheticAnalyzer(LogicalAnalyzer):
 
 
 def _make_synthetic_combinator() -> FaultCombinator:
-    """Build a small combinator with three cancelling nonzero syndromes.
+    """Build a small combinator with three cancelling nonzero signatures.
 
-    The synthetic A, B, and C syndrome groups satisfy ``A XOR B XOR C = 0``
+    The synthetic A, B, and C signature groups satisfy ``A XOR B XOR C = 0``
     and contain enough effects to exercise repeated and three-way selection.
 
     :return combinator: A minimally initialized combinator suitable for the
@@ -604,8 +604,8 @@ def _make_synthetic_combinator() -> FaultCombinator:
         (0b11, pauli_mask("ZZ_")),
     )
     basis: defaultdict[int, dict[int, int]] = defaultdict(dict)
-    for index, (syndrome, effect) in enumerate(indexed_faults):
-        basis[syndrome][effect] = index
+    for index, (signature, effect) in enumerate(indexed_faults):
+        basis[signature][effect] = index
     combinator = FaultCombinator.__new__(FaultCombinator)
     combinator.basis = dict(basis)
     combinator._indexed_faults = indexed_faults
@@ -629,7 +629,7 @@ def test_progress_bars_stream_without_precounting(monkeypatch):
     """
     combinator = _make_synthetic_combinator()
     logical_analyzer = _SyntheticAnalyzer()
-    max_order = 3
+    max_fault_count = 3
     progress_calls: list[dict[str, object]] = []
 
     def recording_tqdm(iterable, **kwargs):
@@ -650,7 +650,7 @@ def test_progress_bars_stream_without_precounting(monkeypatch):
 
     without_progress = combinator.get_kept_effects(
         logical_analyzer=logical_analyzer,
-        max_order=max_order,
+        max_fault_count=max_fault_count,
         cultivated_states=('S', 'T'),
         print_progress=False,
     )
@@ -658,26 +658,26 @@ def test_progress_bars_stream_without_precounting(monkeypatch):
 
     with_progress = combinator.get_kept_effects(
         logical_analyzer=logical_analyzer,
-        max_order=max_order,
+        max_fault_count=max_fault_count,
         cultivated_states=('S', 'T'),
         print_progress=True,
     )
     assert with_progress == without_progress
-    assert len(progress_calls) == max_order + 1
-    for order, progress_options in enumerate(progress_calls):
+    assert len(progress_calls) == max_fault_count + 1
+    for fault_count, progress_options in enumerate(progress_calls):
         assert progress_options == {
-            'desc': f"Order {order}",
+            'desc': f"{fault_count}-fault configurations",
             'unit': "configuration",
             'dynamic_ncols': True,
             'leave': True,
         }
 
 
-def test_synthetic_order_three_matches_exhaustive_subset_oracle():
+def test_synthetic_three_fault_result_matches_exhaustive_subset_oracle():
     """Compare lazy enumeration with exhaustive three-way cancellation.
 
-    The synthetic basis ensures that an undetected order-three configuration
-    can arise from three different nonzero syndrome groups.
+    The synthetic basis ensures that an undetected 3-fault configuration
+    can arise from three different nonzero signature groups.
     """
     combinator = _make_synthetic_combinator()
     logical_analyzer = _SyntheticAnalyzer()
@@ -688,13 +688,13 @@ def test_synthetic_order_three_matches_exhaustive_subset_oracle():
     )
     actual = combinator.get_kept_effects(
         logical_analyzer=logical_analyzer,
-        max_order=3,
+        max_fault_count=3,
         cultivated_states=cultivated_states,
     )
     expected = _exhaustive_kept_effects_oracle(
         combinator,
         logical_analyzer,
-        max_order=3,
+        max_fault_count=3,
         cultivated_states=cultivated_states,
     )
     assert actual.keys() == expected.keys()
@@ -745,7 +745,7 @@ def test_d3_cache_sizes_preserve_kept_effects_and_share_configuration_lists():
     results_by_cache_size = {
         maxsize: combinator.get_kept_effects(
             logical_analyzer=logical_analyzer,
-            max_order=2,
+            max_fault_count=2,
             cultivated_states=('S', 'T'),
             logical_analysis_cache_maxsize=maxsize,
         )
@@ -754,8 +754,8 @@ def test_d3_cache_sizes_preserve_kept_effects_and_share_configuration_lists():
     expected = results_by_cache_size[262_144]
     assert all(result == expected for result in results_by_cache_size.values())
 
-    for order, effects_for_s in enumerate(expected['S']):
-        effects_for_t = expected['T'][order]
+    for fault_count, effects_for_s in enumerate(expected['S']):
+        effects_for_t = expected['T'][fault_count]
         for effect in effects_for_s.keys() & effects_for_t.keys():
             assert effects_for_s[effect][2] is effects_for_t[effect][2]
 
@@ -775,21 +775,21 @@ def test_clifford_linear_precheck_preserves_results_and_reduces_enumeration(
     )
     combinator = FaultCombinator(noisy_circuit)
     yielded_counts = []
-    original_iterator = _iter_zero_syndrome_configurations
+    original_iterator = _iter_undetected_configurations
 
-    def recording_iterator(*, syndromes, effects, order):
-        """Record one fixed-order configuration-stream length.
+    def recording_iterator(*, signatures, effects, fault_count):
+        """Record one fixed-fault-count configuration stream.
 
-        :param syndromes: Packed extended syndromes in fault-index order.
+        :param signatures: Packed rejection signatures in fault-index order.
         :param effects: Packed data effects in fault-index order.
-        :param order: The fixed fault-subset size being enumerated.
+        :param fault_count: The number of faults being enumerated.
         :return: An iterator over the original configuration stream.
         """
         count = 0
         for configuration in original_iterator(
-                syndromes=syndromes,
+                signatures=signatures,
                 effects=effects,
-                order=order,
+                fault_count=fault_count,
         ):
             count += 1
             yield configuration
@@ -797,7 +797,7 @@ def test_clifford_linear_precheck_preserves_results_and_reduces_enumeration(
 
     monkeypatch.setattr(
         'cliffordea.enum.combinators.fault_combinator.'
-        '_iter_zero_syndrome_configurations',
+        '_iter_undetected_configurations',
         recording_iterator,
     )
     analyzer_arguments = {
@@ -810,7 +810,7 @@ def test_clifford_linear_precheck_preserves_results_and_reduces_enumeration(
             **analyzer_arguments,
             precheck_z_stabilizers=True,
         ),
-        max_order=3,
+        max_fault_count=3,
         cultivated_states=('S', 'T'),
     )
     enabled_counts = tuple(yielded_counts)
@@ -820,7 +820,7 @@ def test_clifford_linear_precheck_preserves_results_and_reduces_enumeration(
             **analyzer_arguments,
             precheck_z_stabilizers=False,
         ),
-        max_order=3,
+        max_fault_count=3,
         cultivated_states=('S', 'T'),
     )
 
@@ -870,7 +870,7 @@ def test_full_effects_merge_canonical_configuration_lists():
 
     kept_effects = combinator.get_kept_effects(
         logical_analyzer=analyzer,
-        max_order=1,
+        max_fault_count=1,
         cultivated_states=('S', 'T'),
     )
 
@@ -890,10 +890,10 @@ def test_full_effects_merge_canonical_configuration_lists():
     assert configurations_for_s is configurations_for_t
 
 
-def test_d3_order_four_frozen_regression(
+def test_d3_four_fault_frozen_regression(
         d3_combinator_and_kept_effects_by_analyzer,
 ):
-    """Check frozen distance-3 summaries and logical error rates through order four.
+    """Check frozen distance-3 results through four faults.
 
     :param d3_combinator_and_kept_effects_by_analyzer: Session-scoped
         combinator and kept-effect results shared with the analyzer-comparison
@@ -919,16 +919,24 @@ def test_d3_order_four_frozen_regression(
     for state, expected in expected_summaries.items():
         actual = []
         for effects in kept_effects[state]:
-            identity_weight, error_weight = _sum_logical_weights(
+            benign_weight, malignant_weight = _sum_benign_malignant_weights(
                 effects.values()
             )
             actual.append((
                 len(effects),
                 sum(len(triple[2]) for triple in effects.values()),
-                identity_weight,
-                error_weight,
+                benign_weight,
+                malignant_weight,
             ))
         assert actual == expected
+
+    contribution_summary = combinator.summarize_contributions(kept_effects)
+    assert contribution_summary.index.names == [
+        'cultivated_state',
+        'fault_count',
+    ]
+    assert ('weight', 'malignant_probability') in contribution_summary
+    assert ('weight', 'error_probability') not in contribution_summary
 
     noise_levels = (1e-4, 1e-3, 1e-2)
     expected_error_rates = {
@@ -952,7 +960,7 @@ def test_d3_order_four_frozen_regression(
 
 
 def test_compile_odds_terms_combines_equivalent_fault_bags():
-    """Equivalent probability signatures share one accumulated logical term.
+    """Equivalent fault bags share one accumulated classification term.
 
     :return: None.
     """
@@ -968,10 +976,10 @@ def test_compile_odds_terms_combines_equivalent_fault_bags():
         fault_index_to_bag_index=(0, 0, 1),
     )
 
-    signatures, logical_weights = compiled_terms[1]
-    assert signatures.tolist() == [[0], [1]]
+    bag_index_rows, classification_weights = compiled_terms[1]
+    assert bag_index_rows.tolist() == [[0], [1]]
     np.testing.assert_array_equal(
-        logical_weights,
+        classification_weights,
         [[1.5, 0.5], [0.75, 0.25]],
     )
 
@@ -998,8 +1006,10 @@ def test_error_rate_sweep_accepts_generators_and_reports_progress(capsys):
     assert error_rates.shape == (2,)
     output = capsys.readouterr().out
     assert output.count('Noise level = ') == 2
-    assert output.count('O(p^0) events:') == 2
-    assert output.count('O(p^1) events:') == 2
+    assert output.count('0-fault configurations:') == 2
+    assert output.count('1-fault configurations:') == 2
+    assert output.count('Benign odds = ') == 4
+    assert output.count('Malignant odds = ') == 4
 
 
 def test_error_rate_sweep_returns_empty_float_array_without_noise_levels():
@@ -1015,28 +1025,28 @@ def test_error_rate_sweep_returns_empty_float_array_without_noise_levels():
     assert error_rates.dtype == np.float64
 
 
-def test_d5_order_four_documented_weights_and_enumeration_counts(monkeypatch):
-    """Check distance-5 weights and prechecked enumeration through order four.
+def test_d5_four_fault_documented_weights_and_enumeration_counts(monkeypatch):
+    """Check distance-5 weights and prechecked enumeration through four faults.
 
     :param monkeypatch: Pytest fixture used to record configurations yielded by
         the production meet-in-the-middle enumerator.
     """
     enumeration_counts = []
-    original_iterator = _iter_zero_syndrome_configurations
+    original_iterator = _iter_undetected_configurations
 
-    def recording_iterator(*, syndromes, effects, order):
-        """Record the number of configurations yielded at one order.
+    def recording_iterator(*, signatures, effects, fault_count):
+        """Record configurations yielded at one fault count.
 
-        :param syndromes: Packed extended syndromes in fault-index order.
+        :param signatures: Packed rejection signatures in fault-index order.
         :param effects: Packed data effects in fault-index order.
-        :param order: The fixed fault-subset size being enumerated.
+        :param fault_count: The number of faults being enumerated.
         :return: An iterator over the original configuration stream.
         """
         count = 0
         for configuration in original_iterator(
-                syndromes=syndromes,
+                signatures=signatures,
                 effects=effects,
-                order=order,
+                fault_count=fault_count,
         ):
             count += 1
             yield configuration
@@ -1044,7 +1054,7 @@ def test_d5_order_four_documented_weights_and_enumeration_counts(monkeypatch):
 
     monkeypatch.setattr(
         'cliffordea.enum.combinators.fault_combinator.'
-        '_iter_zero_syndrome_configurations',
+        '_iter_undetected_configurations',
         recording_iterator,
     )
     circuit = cliffordea.enum.circuits.DoubleCheck(distance=5, ancilla_count=19)
@@ -1060,7 +1070,7 @@ def test_d5_order_four_documented_weights_and_enumeration_counts(monkeypatch):
     )
     kept_effects = combinator.get_kept_effects(
         logical_analyzer=logical_analyzer,
-        max_order=4,
+        max_fault_count=4,
         cultivated_states=('S', 'T'),
     )
     expected_weights = {
@@ -1081,7 +1091,7 @@ def test_d5_order_four_documented_weights_and_enumeration_counts(monkeypatch):
     }
     for state, expected in expected_weights.items():
         assert [
-            _sum_logical_weights(effects.values())
+            _sum_benign_malignant_weights(effects.values())
             for effects in kept_effects[state]
         ] == expected
     assert enumeration_counts == [1, 21, 493, 14259, 351145]

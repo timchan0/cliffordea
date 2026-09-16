@@ -3,7 +3,7 @@ import itertools
 import stim
 
 import cliffordea
-from cliffordea.enum.combinators import FaultCombinatorExclusive
+from cliffordea.enum.combinators import DisjointFaultCombinator
 
 
 def _get_anticommuting_paulis(name: str):
@@ -22,18 +22,18 @@ class TestD3DoubleCatCheck():
     """Tests on the `d3_double_cat_check` circuit."""
     
 
-    def test_correct_length(self, d3_double_cat_check_fault_source_combinator: FaultCombinatorExclusive):
+    def test_signature_count(self, d3_double_cat_check_disjoint_fault_combinator: DisjointFaultCombinator):
         """Test returns a dictionary with the correct key count."""
-        assert type(d3_double_cat_check_fault_source_combinator) is FaultCombinatorExclusive
-        assert type(d3_double_cat_check_fault_source_combinator.basis) is dict
-        assert d3_double_cat_check_fault_source_combinator.syndrome_count == 19
+        assert type(d3_double_cat_check_disjoint_fault_combinator) is DisjointFaultCombinator
+        assert type(d3_double_cat_check_disjoint_fault_combinator.basis) is dict
+        assert d3_double_cat_check_disjoint_fault_combinator.signature_count == 19
 
 
-    def test_undetected_pairs(self, d3_double_cat_check_fault_source_combinator: FaultCombinatorExclusive):
+    def test_undetected_pairs(self, d3_double_cat_check_disjoint_fault_combinator: DisjointFaultCombinator):
         """Test that undetected pairs commute with the flag measurements at the end of `d3_double_cat_check`."""
         d3a6 = cliffordea.enum.circuits.DoubleCheck(ancilla_count=6)
         d3a6_ancilla_indices = {q for q in range(d3a6.INNER_CIRCUIT.num_qubits) if q not in d3a6.DATA_INDICES}
-        for _, resultant_paulis in d3_double_cat_check_fault_source_combinator.items():
+        for _, resultant_paulis in d3_double_cat_check_disjoint_fault_combinator.items():
             pairs = itertools.combinations(resultant_paulis.items(), 2)
             for (resultant_pauli_1, faults_1), (resultant_pauli_2, faults_2) in pairs:
                 string_1 = stim.PauliString(resultant_pauli_1)

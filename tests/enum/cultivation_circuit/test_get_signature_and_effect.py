@@ -40,11 +40,11 @@ class TestD3DoubleCatCheck:
             error_event: ErrorEvent,
     ):
 
-        syndrome, effect = circuit.get_syndrome_and_effect(error_event)
+        signature, effect = circuit.get_signature_and_effect(error_event)
         
         timeslice, name, targets = error_event
         if name.startswith('M'):
-            sim_syndrome = np.zeros(circuit.noisy_circuit.num_detectors, dtype=bool)
+            sim_signature = np.zeros(circuit.noisy_circuit.num_detectors, dtype=bool)
             for instruction in circuit._noiseless_layers[timeslice]:
                 if isinstance(instruction, stim.CircuitRepeatBlock):
                     raise ValueError
@@ -55,9 +55,9 @@ class TestD3DoubleCatCheck:
                     ):
                         if set(target_group) == set(targets):
                             for detector in circuit._measurement_to_detectors[measurement_index]:
-                                sim_syndrome[detector] ^= True
+                                sim_signature[detector] ^= True
                             break
-            sim_syndrome = tuple(sim_syndrome)
+            sim_signature = tuple(sim_signature)
             sim_effect = circuit.noisy_circuit.num_qubits*'_'
         else:
             faulty_circuit = insert_error_events(
@@ -77,24 +77,24 @@ class TestD3DoubleCatCheck:
                                 qubit_index=target.value,
                                 instance_index=0,
                             )
-            sim_syndrome = tuple(sim.get_detector_flips(instance_index=0))
+            sim_signature = tuple(sim.get_detector_flips(instance_index=0))
             sim_effect = forget_sign(sim.peek_pauli_flips(instance_index=0))
         
-        # assert the syndrome matches
-        assert np.array_equal(sim_syndrome, syndrome)
+        # assert the signature matches
+        assert np.array_equal(sim_signature, signature)
         # assert the resultant Pauli string matches (up to a global phase)
         assert sim_effect == effect
 
 
-def test_measurement_error_gives_syndrome():
+def test_measurement_error_gives_signature():
     # Error event: measurement error at timeslice 0, qubit 0
     circuit = CultivationCircuit(noisy_circuit=stim.Circuit("""MZ 0
                                    DETECTOR rec[-1]"""))
     circuit._measurement_to_detectors = defaultdict(set, {0: {0}})
     fault = (0, "MZ", (stim.GateTarget(0),))
     # For a 1-qubit, 1-detector circuit, measurement 0 flips detector 0
-    syndrome, effect = circuit.get_syndrome_and_effect(fault)
-    assert np.array_equal(syndrome, np.array([True]))
+    signature, effect = circuit.get_signature_and_effect(fault)
+    assert np.array_equal(signature, np.array([True]))
     assert effect == "_"
 
 
@@ -110,8 +110,8 @@ def test_measure_reset_error_preserves_reset_gate():
     """))
     event = (0, "MRX", (stim.GateTarget(0),))
 
-    syndrome, effect = circuit.get_syndrome_and_effect(event)
-    assert np.array_equal(syndrome, np.array([True]))
+    signature, effect = circuit.get_signature_and_effect(event)
+    assert np.array_equal(signature, np.array([True]))
     assert effect == "_"
 
     probability = 0.25
@@ -126,7 +126,7 @@ def test_measure_reset_error_preserves_reset_gate():
     assert stim.gate_data(measurement.name).is_reset
 
 
-def test_pauli_error_gives_effect_and_syndrome():
+def test_pauli_error_gives_effect_and_signature():
     circuit = CultivationCircuit(noisy_circuit=stim.Circuit("""
             H 0
             TICK
@@ -135,19 +135,19 @@ def test_pauli_error_gives_effect_and_syndrome():
         """))
     # Error event: X_ERROR at timeslice 0, qubit 0 (after H)
     fault = (0, "X_ERROR", (stim.GateTarget(0),))
-    syndrome, effect = circuit.get_syndrome_and_effect(fault)
-    # X anticommutes with MZ, so syndrome flips
-    assert np.array_equal(syndrome, np.array([True]))
+    signature, effect = circuit.get_signature_and_effect(fault)
+    # X anticommutes with MZ, so signature flips
+    assert np.array_equal(signature, np.array([True]))
     assert effect == "X"
 
-def test_no_syndrome_for_commuting_pauli():
+def test_no_signature_for_commuting_pauli():
     circuit = CultivationCircuit(noisy_circuit=stim.Circuit("""H 0
         MZ 0
         DETECTOR rec[-1]"""))
     # Error event: Z_ERROR at timeslice 0, qubit 0 (commutes with MZ)
     fault = (0, "Z_ERROR", (stim.GateTarget(0),))
-    syndrome, effect = circuit.get_syndrome_and_effect(fault)
-    assert np.array_equal(syndrome, np.array([False]))
+    signature, effect = circuit.get_signature_and_effect(fault)
+    assert np.array_equal(signature, np.array([False]))
     assert effect == "Z"
 
 def test_reset_removes_pauli():
@@ -155,17 +155,17 @@ def test_reset_removes_pauli():
     circuit = CultivationCircuit(noisy_circuit=stim.Circuit("""TICK
                                    R 0"""))
     fault = (0, "X_ERROR", (stim.GateTarget(0),))
-    _, effect = circuit.get_syndrome_and_effect(fault)
+    _, effect = circuit.get_signature_and_effect(fault)
     # After reset, effect should be identity
     assert effect == "_"
 
 def test_multiple_qubits_and_detectors(multi_qubit_detector_circuit: CultivationCircuit):
     fault = (0, "X_ERROR", (stim.GateTarget(1),))
-    syndrome, effect = multi_qubit_detector_circuit.get_syndrome_and_effect(fault)
+    signature, effect = multi_qubit_detector_circuit.get_signature_and_effect(fault)
     # X on qubit 1 after CX is X1
     assert effect == "_X"
     # Should only flip detector 1 if X on 1 anticommutes with MZ 1
-    assert np.array_equal(syndrome, np.array([False, True]))
+    assert np.array_equal(signature, np.array([False, True]))
 
 
 @pytest.mark.parametrize(
@@ -198,12 +198,12 @@ def test_reverse_responses_match_stim_clifford_conjugation(
                 f'{basis}_ERROR',
                 (stim.GateTarget(qubit),),
             )
-            syndrome, effect = circuit.get_syndrome_and_effect(event)
+            signature, effect = circuit.get_signature_and_effect(event)
             generator = stim.PauliString(circuit.noisy_circuit.num_qubits)
             generator[qubit] = basis
             expected = forget_sign(generator.after(instruction))
 
-            assert not syndrome.any()
+            assert not signature.any()
             assert effect == expected
 
 
@@ -227,22 +227,22 @@ def test_reverse_responses_respect_measurement_basis(
         DETECTOR rec[-1]
     """))
 
-    commuting_syndrome, commuting_effect = circuit.get_syndrome_and_effect((
+    commuting_signature, commuting_effect = circuit.get_signature_and_effect((
         0,
         f'{commuting_basis}_ERROR',
         (stim.GateTarget(0),),
     ))
-    anticommuting_syndrome, anticommuting_effect = (
-        circuit.get_syndrome_and_effect((
+    anticommuting_signature, anticommuting_effect = (
+        circuit.get_signature_and_effect((
             0,
             f'{anticommuting_basis}_ERROR',
             (stim.GateTarget(0),),
         ))
     )
 
-    assert np.array_equal(commuting_syndrome, np.array([False]))
+    assert np.array_equal(commuting_signature, np.array([False]))
     assert commuting_effect == commuting_basis
-    assert np.array_equal(anticommuting_syndrome, np.array([True]))
+    assert np.array_equal(anticommuting_signature, np.array([True]))
     assert anticommuting_effect == anticommuting_basis
 
 
@@ -266,12 +266,12 @@ def test_measurement_resets_erase_final_effects(
         DETECTOR rec[-1]
     """))
 
-    commuting_analysis = circuit.get_syndrome_and_effect((
+    commuting_analysis = circuit.get_signature_and_effect((
         0,
         f'{commuting_basis}_ERROR',
         (stim.GateTarget(0),),
     ))
-    anticommuting_analysis = circuit.get_syndrome_and_effect((
+    anticommuting_analysis = circuit.get_signature_and_effect((
         0,
         f'{anticommuting_basis}_ERROR',
         (stim.GateTarget(0),),
@@ -289,12 +289,12 @@ def test_pure_resets_erase_both_generator_responses(reset_name: str):
     circuit = CultivationCircuit(stim.Circuit(f'TICK\n{reset_name} 0'))
 
     for basis in 'XYZ':
-        syndrome, effect = circuit.get_syndrome_and_effect((
+        signature, effect = circuit.get_signature_and_effect((
             0,
             f'{basis}_ERROR',
             (stim.GateTarget(0),),
         ))
-        assert not syndrome.any()
+        assert not signature.any()
         assert effect == '_'
 
 
@@ -311,9 +311,9 @@ def test_detector_parity_xors_generator_responses():
         (stim.target_x(0), stim.target_x(1)),
     )
 
-    syndrome, effect = circuit.get_syndrome_and_effect(event)
+    signature, effect = circuit.get_signature_and_effect(event)
 
-    assert np.array_equal(syndrome, np.array([False]))
+    assert np.array_equal(signature, np.array([False]))
     assert effect == 'XX'
 
 
@@ -325,13 +325,13 @@ def test_mpp_response_uses_each_target_pauli_basis():
         DETECTOR rec[-1]
     """))
 
-    syndrome, effect = circuit.get_syndrome_and_effect((
+    signature, effect = circuit.get_signature_and_effect((
         0,
         'Z_ERROR',
         (stim.GateTarget(0),),
     ))
 
-    assert np.array_equal(syndrome, np.array([True]))
+    assert np.array_equal(signature, np.array([True]))
     assert effect == 'Z_'
 
 
@@ -352,14 +352,14 @@ def test_measurement_events_use_precomputed_global_indices():
     assert reverse_data.measurement_index_by_event == expected_indices
     circuit.__dict__['_noiseless_layers'] = None
 
-    events_and_syndrome_masks = [
+    events_and_signature_masks = [
         ((0, 'M', (stim.GateTarget(2),)), 0b01),
         ((0, 'M', (stim.GateTarget(0),)), 0b10),
         ((0, 'MX', (stim.GateTarget(1),)), 0b11),
     ]
-    for event, expected_syndrome_mask in events_and_syndrome_masks:
-        syndrome_mask, effect_mask = circuit._get_syndrome_and_effect_masks(
+    for event, expected_signature_mask in events_and_signature_masks:
+        signature_mask, effect_mask = circuit._get_signature_and_effect_masks(
             event,
         )
-        assert syndrome_mask == expected_syndrome_mask
+        assert signature_mask == expected_signature_mask
         assert effect_mask == 0

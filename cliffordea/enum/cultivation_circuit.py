@@ -22,15 +22,15 @@ from cliffordea.enum.circuit_tools import (
 from cliffordea.enum.types import (
     ErrorEvent,
     ErrorLocation,
+    DetectorSignatureMask,
     MeasurementEventKey,
     MeasurementLocation,
     PauliMask,
-    SyndromeMask,
 )
 
 
 ResponseMask = int
-"""Packed syndrome mask followed by a packed final Pauli effect."""
+"""Packed detector-signature mask followed by a packed final Pauli effect."""
 
 GeneratorResponses = tuple[
     tuple[ResponseMask, ...],
@@ -54,7 +54,7 @@ class _ReversePropagationData:
     """Generator responses immediately after every timeslice."""
     measurement_index_by_event: dict[MeasurementEventKey, int]
     """Global measurement indices keyed without storing Stim targets."""
-    measurement_detector_masks: tuple[SyndromeMask, ...]
+    measurement_detector_masks: tuple[DetectorSignatureMask, ...]
     """Packed detector masks in global measurement order."""
 def _response_for_pauli(
         pauli: stim.PauliString,
@@ -222,11 +222,11 @@ class CultivationCircuit:
         return f"""{self.__class__.__name__}(noisy_circuit={self.noisy_circuit})"""
 
 
-    def get_syndrome_and_effect(
+    def get_signature_and_effect(
             self,
             error_event: ErrorEvent,
     ) -> tuple[npt.NDArray[np.bool_], str]:
-        """Get the syndrome and the resultant Pauli string after inserting an error event.
+        """Get the detector signature and resultant effect of an error event.
 
         :param self: The circuit in which the event occurs.
         :param error_event: The error event to analyze.
@@ -234,17 +234,17 @@ class CultivationCircuit:
         Require:
         * No qubit is noisily measured more than once per tick in `self.noisy_circuit`.
 
-        :return syndrome: A tuple of booleans representing the syndrome, where each boolean
+        :return signature: A tuple of booleans representing the detector signature, where each boolean
             indicates whether the corresponding detector has been flipped.
         :return effect: The effect of the error event when propagated to the end of the circuit,
             as an unsigned Pauli string.
         """
-        syndrome_mask, effect_mask = self._get_syndrome_and_effect_masks(
+        signature_mask, effect_mask = self._get_signature_and_effect_masks(
             error_event,
         )
         return (
             _mask_to_bool_array(
-                syndrome_mask,
+                signature_mask,
                 self.noisy_circuit.num_detectors,
             ),
             mask_to_unsigned_pauli(
@@ -254,15 +254,15 @@ class CultivationCircuit:
         )
 
 
-    def _get_syndrome_and_effect_masks(
+    def _get_signature_and_effect_masks(
             self,
             error_event: ErrorEvent,
-    ) -> tuple[SyndromeMask, PauliMask]:
+    ) -> tuple[DetectorSignatureMask, PauliMask]:
         """Analyze one error event directly in the packed response domain.
 
         :param self: The circuit in which the event occurs.
         :param error_event: The measurement or Pauli error event to analyze.
-        :return syndrome_mask: The packed detector syndrome.
+        :return signature_mask: The packed detector signature.
         :return effect_mask: The packed unsigned final Pauli effect.
         """
         timeslice, name, targets = error_event
@@ -288,9 +288,9 @@ class CultivationCircuit:
                 response ^= z_responses[qubit]
 
         detector_count = self.noisy_circuit.num_detectors
-        syndrome_mask = response & (1 << detector_count) - 1
+        signature_mask = response & (1 << detector_count) - 1
         effect_mask = response >> detector_count
-        return syndrome_mask, effect_mask
+        return signature_mask, effect_mask
 
 
     def group_error_events_by_location(self):

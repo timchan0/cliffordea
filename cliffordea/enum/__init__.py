@@ -7,9 +7,9 @@ from cliffordea.enum.circuit_tools import (
     split_by_ticks,
 )
 from cliffordea.enum.combinators import (
+    DisjointFaultCombinator,
     ErrorEventCombinator,
     FaultCombinator,
-    FaultCombinatorExclusive,
 )
 from cliffordea.enum.constants import DEPOLARIZE2_ERROR_EVENTS
 from cliffordea.enum.cultivation_circuit import CultivationCircuit
@@ -23,9 +23,9 @@ from cliffordea.enum.probability import parity_probability
 __all__ = [
     "CultivationCircuit",
     "DEPOLARIZE2_ERROR_EVENTS",
+    "DisjointFaultCombinator",
     "ErrorEventCombinator",
     "FaultCombinator",
-    "FaultCombinatorExclusive",
     "circuits",
     "compose_slices",
     "insert_circuit_error_locations",

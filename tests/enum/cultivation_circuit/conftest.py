@@ -1,7 +1,7 @@
 import pytest
 import stim
 
-from cliffordea.enum.combinators import FaultCombinatorExclusive
+from cliffordea.enum.combinators import DisjointFaultCombinator
 from cliffordea.enum.cultivation_circuit import CultivationCircuit
 
 
@@ -12,9 +12,9 @@ def d3_double_cat_check_grouped_by_location(noisy_d3_double_cat_check: Cultivati
 
 
 @pytest.fixture
-def d3_double_cat_check_fault_source_combinator(noisy_d3_double_cat_check_circuit: stim.Circuit):
-    """Exclusive fault combinator for the distance-3 double-check circuit."""
-    combinator = FaultCombinatorExclusive(noisy_d3_double_cat_check_circuit)
+def d3_double_cat_check_disjoint_fault_combinator(noisy_d3_double_cat_check_circuit: stim.Circuit):
+    """Disjoint fault combinator for the distance-3 double-check circuit."""
+    combinator = DisjointFaultCombinator(noisy_d3_double_cat_check_circuit)
     return combinator
 
 

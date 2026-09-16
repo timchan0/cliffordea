@@ -44,7 +44,7 @@ class DoubleCheck:
         (15, 19, 3):
             This circuit has fault distance 4.
             The way this was designed was as follows:
-            the unflagged version has 3 malignant fault configurations of weight 3.
+            the unflagged version has 3 malignant 3-fault configurations.
             Each flag in this circuit detects exactly one of these configurations.
         (15, 19, 13):
             This circuit has fault distance 5.
