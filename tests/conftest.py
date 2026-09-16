@@ -47,12 +47,12 @@ def d3_combinator_and_kept_effects_by_analyzer():
     combinator = FaultCombinator(noisy_circuit=noisy_circuit)
     superposition_analyzer = SuperpositionLogicalAnalyzer(
         data_indices=circuit.DATA_INDICES,
-        stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+        stabilizer_generators=circuit.STABILIZER_GENERATORS,
         logical_s=circuit.LOGICAL_S,
     )
     clifford_analyzer = CliffordLogicalAnalyzer(
         data_indices=circuit.DATA_INDICES,
-        stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+        stabilizer_generators=circuit.STABILIZER_GENERATORS,
         logical_s=circuit.LOGICAL_S,
     )
     superposition_kept_effects = combinator.get_kept_effects(

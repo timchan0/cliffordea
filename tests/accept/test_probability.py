@@ -34,7 +34,7 @@ def test_distance_three_example_has_quarter_acceptance():
     circuit = circuits.DoubleCheck(ancilla_count=6)
     analyzer = CliffordLogicalAnalyzer(
         data_indices=circuit.DATA_INDICES,
-        stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+        stabilizer_generators=circuit.STABILIZER_GENERATORS,
         logical_s=circuit.LOGICAL_S,
     )
     error = analyzer.LOGICAL["T"](pauli_mask("YX_X___"))

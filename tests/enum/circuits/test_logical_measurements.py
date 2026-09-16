@@ -4,6 +4,7 @@ import pytest
 import stim
 
 from cliffordea.enum import circuits
+from cliffordea.enum.circuits.main import LongSingleCheck, ShortSingleCheck
 
 
 _STIM_FILES_DIR = Path(circuits.__file__).with_name("stim_files")
@@ -19,7 +20,7 @@ _STIM_FILES_DIR = Path(circuits.__file__).with_name("stim_files")
     ],
 )
 def test_loads_single_check_circuit_family(
-        circuit_type,
+        circuit_type: type[ShortSingleCheck] | type[LongSingleCheck],
         circuit_parent,
         ancilla_count,
         flag_count,
@@ -47,18 +48,13 @@ def test_loads_single_check_circuit_family(
     assert circuit.INNER_CIRCUIT == stim.Circuit.from_file(
         circuit_directory / "inner.stim"
     )
-    assert circuit.CIRCUIT == stim.Circuit.from_file(
+    assert circuit.FULL_CIRCUIT == stim.Circuit.from_file(
         circuit_directory / "full.stim"
     )
     assert len(circuit.DATA_INDICES) == 7
     assert all(
-        len(generator) == circuit.CIRCUIT.num_qubits
-        for generators in circuit.STABILIZER_GENERATORS.values()
-        for generator in generators
-    )
-    assert all(
         len(generator) == len(circuit.DATA_INDICES)
-        for generators in circuit.STABILIZER_GENERATORS_RESTRICTED.values()
+        for generators in circuit.STABILIZER_GENERATORS.values()
         for generator in generators
     )
     assert len(circuit.LOGICAL_X) == circuit.INNER_CIRCUIT.num_qubits
@@ -101,6 +97,6 @@ def test_logical_measurement_defaults(
     assert circuit.INNER_CIRCUIT == stim.Circuit.from_file(
         expected_directory / "inner.stim"
     )
-    assert circuit.CIRCUIT == stim.Circuit.from_file(
+    assert circuit.FULL_CIRCUIT == stim.Circuit.from_file(
         expected_directory / "full.stim"
     )

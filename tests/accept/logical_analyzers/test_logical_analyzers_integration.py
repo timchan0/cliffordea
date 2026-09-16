@@ -68,7 +68,7 @@ def test_d5_factored_transversal_matches_general_workflow():
     combinator = FaultCombinator(noisy_circuit)
     analyzer_arguments = {
         'data_indices': circuit.DATA_INDICES,
-        'stabilizer_generators': circuit.STABILIZER_GENERATORS_RESTRICTED,
+        'stabilizer_generators': circuit.STABILIZER_GENERATORS,
         'logical_s': circuit.LOGICAL_S,
     }
     factored_results = combinator.get_kept_effects(

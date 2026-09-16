@@ -739,7 +739,7 @@ def test_d3_cache_sizes_preserve_kept_effects_and_share_configuration_lists():
     combinator = FaultCombinator(noisy_circuit)
     logical_analyzer = CliffordLogicalAnalyzer(
         data_indices=circuit.DATA_INDICES,
-        stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+        stabilizer_generators=circuit.STABILIZER_GENERATORS,
         logical_s=circuit.LOGICAL_S,
     )
     results_by_cache_size = {
@@ -802,7 +802,7 @@ def test_clifford_linear_precheck_preserves_results_and_reduces_enumeration(
     )
     analyzer_arguments = {
         'data_indices': circuit.DATA_INDICES,
-        'stabilizer_generators': circuit.STABILIZER_GENERATORS_RESTRICTED,
+        'stabilizer_generators': circuit.STABILIZER_GENERATORS,
         'logical_s': circuit.LOGICAL_S,
     }
     enabled_results = combinator.get_kept_effects(
@@ -1065,7 +1065,7 @@ def test_d5_four_fault_documented_weights_and_enumeration_counts(monkeypatch):
     combinator = FaultCombinator(noisy_circuit)
     logical_analyzer = CliffordLogicalAnalyzer(
         data_indices=circuit.DATA_INDICES,
-        stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+        stabilizer_generators=circuit.STABILIZER_GENERATORS,
         logical_s=circuit.LOGICAL_S,
     )
     kept_effects = combinator.get_kept_effects(

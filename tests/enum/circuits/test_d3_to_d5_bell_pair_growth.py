@@ -55,7 +55,7 @@ def _layout_supports(
             data_coordinates[index]
             for index in range(len(generator))
             if generator[index]
-        ) for generator in layout.STABILIZER_GENERATORS_RESTRICTED[basis])
+        ) for generator in layout.STABILIZER_GENERATORS[basis])
         for basis in ('X', 'Z')
     }
     return frozenset(data_coordinates), generators

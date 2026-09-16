@@ -19,6 +19,6 @@ STABILIZER_GENERATORS_RESTRICTED = {b: {
 def test_stabilizer_generators_restricted(basis, distance3_ancilla6: DoubleCheck):
     set_ = {
         forget_sign(pauli_string) for pauli_string
-        in distance3_ancilla6.STABILIZER_GENERATORS_RESTRICTED[basis]
+        in distance3_ancilla6.STABILIZER_GENERATORS[basis]
     }
     assert set_ == STABILIZER_GENERATORS_RESTRICTED[basis]

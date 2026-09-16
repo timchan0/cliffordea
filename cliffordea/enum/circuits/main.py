@@ -40,8 +40,9 @@ class LogicalMeasurement:
         self.INNER_CIRCUIT = stim.Circuit.from_file(
             circuit_directory / 'inner.stim')
         """The logical-measurement circuit within the two layers of T gates:
-        * The first timeslice of this circuit is an MPP measurement of all data qubits,
-        which the logical H_XY measurement is checked against.
+        * The circuit should contain an MPP measurement on the data qubits
+        at the timeslice they enter the logical measurement circuit;
+        the logical H_XY measurement is checked against this MPP measurement.
         * If the ancilla qubit is used again after measurement,
         the measurement should be MR instead of M (or MRX instead of MX).
         When M/MX/MY is applied to a qubit,
@@ -54,21 +55,18 @@ class LogicalMeasurement:
         self.DATA_INDICES = find_data_indices(inner_circuit=self.INNER_CIRCUIT)
         """The indices of the data qubits in ascending order."""
 
-        self.CIRCUIT = stim.Circuit.from_file(
+        self.FULL_CIRCUIT = stim.Circuit.from_file(
             circuit_directory / 'full.stim')
-        """The full logical-measurement circuit."""
-        self._STABILIZER_GENERATOR_INDICES = find_stabilizer_generators(
-                    circuit=self.CIRCUIT)
+        """The logical-measurement circuit with MPPs before and after,
+        representing the logical observable and the stabilizer generators.
+        """
+        self._STABILIZER_GENERATOR_INDICES = find_stabilizer_generators(circuit=self.FULL_CIRCUIT)
         """Indices of the stabilizer generators."""
         self.STABILIZER_GENERATORS = {basis: tuple(stim.PauliString(
-            basis if index in indices else '_' for index in range(self.CIRCUIT.num_qubits) # type: ignore
-        ) for indices in self._STABILIZER_GENERATOR_INDICES
-        ) for basis in ('X', 'Z')}
-        self.STABILIZER_GENERATORS_RESTRICTED = {basis: tuple(stim.PauliString(
             basis if index in indices else '_' for index in self.DATA_INDICES # type: ignore
         ) for indices in self._STABILIZER_GENERATOR_INDICES
         ) for basis in ('X', 'Z')}
-        """Generators restricted to the 7 data qubits
+        """Generators restricted to the n data qubits
         in the order given by `DATA_INDICES`.
         """
         (self.LOGICAL_X, self.LOGICAL_Z) = tuple(
@@ -77,7 +75,7 @@ class LogicalMeasurement:
                 else '_' for index in range(self.INNER_CIRCUIT.num_qubits)) # type: ignore
             for basis in ('X', 'Z')
         )
-        self.LOGICAL_S = find_logical_s_gate(circuit=self.CIRCUIT)
+        self.LOGICAL_S = find_logical_s_gate(circuit=self.FULL_CIRCUIT)
 
 
 class DoubleCheck(LogicalMeasurement):

@@ -85,7 +85,7 @@ class TestDistance3:
         circuit = circuits.DoubleCheck(ancilla_count=6)
         return class_(
             data_indices=circuit.DATA_INDICES,
-            stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+            stabilizer_generators=circuit.STABILIZER_GENERATORS,
             logical_s=circuit.LOGICAL_S,
         )
 
@@ -120,12 +120,12 @@ class TestDistance3:
         circuit = circuits.DoubleCheck(ancilla_count=6)
         analyzer = CliffordLogicalAnalyzer(
             data_indices=circuit.DATA_INDICES,
-            stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+            stabilizer_generators=circuit.STABILIZER_GENERATORS,
             logical_s=circuit.LOGICAL_S,
         )
         stabilizer_generators = (
-            *circuit.STABILIZER_GENERATORS_RESTRICTED['X'],
-            *circuit.STABILIZER_GENERATORS_RESTRICTED['Z'],
+            *circuit.STABILIZER_GENERATORS['X'],
+            *circuit.STABILIZER_GENERATORS['Z'],
         )
         for index, stabilizer_generator in enumerate(stabilizer_generators):
             assert analyzer.encoder.z_output(index) == stabilizer_generator
@@ -175,12 +175,12 @@ class TestDistance3:
         circuit = circuits.DoubleCheck(ancilla_count=6)
         clifford_analyzer = CliffordLogicalAnalyzer(
             data_indices=circuit.DATA_INDICES,
-            stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+            stabilizer_generators=circuit.STABILIZER_GENERATORS,
             logical_s=circuit.LOGICAL_S,
         )
         pauli_sum_analyzer = SuperpositionLogicalAnalyzer(
             data_indices=circuit.DATA_INDICES,
-            stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+            stabilizer_generators=circuit.STABILIZER_GENERATORS,
             logical_s=circuit.LOGICAL_S,
         )
         effect_mask = pauli_mask(restricted)
@@ -202,7 +202,7 @@ class TestDistance5:
         circuit = circuits.DoubleCheck(distance=5, ancilla_count=19)
         return CliffordLogicalAnalyzer(
             data_indices=circuit.DATA_INDICES,
-            stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+            stabilizer_generators=circuit.STABILIZER_GENERATORS,
             logical_s=circuit.LOGICAL_S,
         )
 
@@ -236,13 +236,13 @@ class TestDistance5:
         circuit = circuits.DoubleCheck(distance=5, ancilla_count=19)
         enabled_analyzer = CliffordLogicalAnalyzer(
             data_indices=circuit.DATA_INDICES,
-            stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+            stabilizer_generators=circuit.STABILIZER_GENERATORS,
             logical_s=circuit.LOGICAL_S,
             precheck_z_stabilizers=True,
         )
         disabled_analyzer = CliffordLogicalAnalyzer(
             data_indices=circuit.DATA_INDICES,
-            stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+            stabilizer_generators=circuit.STABILIZER_GENERATORS,
             logical_s=circuit.LOGICAL_S,
             precheck_z_stabilizers=False,
         )
@@ -266,7 +266,7 @@ def test_factored_transversal_matches_general_path_exhaustively(
     circuit = circuits.DoubleCheck(ancilla_count=6)
     analyzer_arguments = {
         'data_indices': circuit.DATA_INDICES,
-        'stabilizer_generators': circuit.STABILIZER_GENERATORS_RESTRICTED,
+        'stabilizer_generators': circuit.STABILIZER_GENERATORS,
         'logical_s': circuit.LOGICAL_S,
         'precheck_z_stabilizers': precheck_z_stabilizers,
     }
@@ -305,7 +305,7 @@ def test_transversal_structure_cache_respects_maxsize(
     circuit = circuits.DoubleCheck(ancilla_count=6)
     analyzer = CliffordLogicalAnalyzer(
         data_indices=circuit.DATA_INDICES,
-        stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+        stabilizer_generators=circuit.STABILIZER_GENERATORS,
         logical_s=circuit.LOGICAL_S,
         precheck_z_stabilizers=False,
         transversal_structure_cache_maxsize=maxsize,
@@ -333,7 +333,7 @@ def test_z_variants_share_transversal_structure():
     circuit = circuits.DoubleCheck(ancilla_count=6)
     analyzer = CliffordLogicalAnalyzer(
         data_indices=circuit.DATA_INDICES,
-        stabilizer_generators=circuit.STABILIZER_GENERATORS_RESTRICTED,
+        stabilizer_generators=circuit.STABILIZER_GENERATORS,
         logical_s=circuit.LOGICAL_S,
         precheck_z_stabilizers=False,
     )
@@ -370,7 +370,7 @@ def test_inapplicable_factoring_uses_general_path(
     circuit = circuits.DoubleCheck(ancilla_count=6)
     analyzer_arguments = {
         'data_indices': circuit.DATA_INDICES,
-        'stabilizer_generators': circuit.STABILIZER_GENERATORS_RESTRICTED,
+        'stabilizer_generators': circuit.STABILIZER_GENERATORS,
         'logical_s': circuit.LOGICAL_S,
     }
     candidate = CliffordLogicalAnalyzer(
