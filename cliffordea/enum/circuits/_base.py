@@ -41,7 +41,7 @@ def find_stabilizer_generators(circuit: stim.Circuit) -> tuple[tuple[int, ...], 
 
 
 def find_logical_s_gate(circuit: stim.Circuit) -> stim.Circuit:
-    """Return the logical S gate for a double-check circuit.
+    """Return the logical S gate for a logical-measurement circuit.
 
     :param circuit: A logical-Clifford-measurement circuit containing
         a logical S dagger,
