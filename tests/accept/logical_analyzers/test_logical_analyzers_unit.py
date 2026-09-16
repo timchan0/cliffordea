@@ -5,7 +5,6 @@ from cliffordea.accept.logical_analyzers import (
     CliffordLogicalAnalyzer,
     LogicalAnalyzer,
     SuperpositionLogicalAnalyzer,
-    LOGICAL_COEFFICIENTS,
 )
 from cliffordea.accept.probability import (
     pauli_masks_and_j_power,
@@ -54,14 +53,12 @@ class TestCliffordLogicalAnalyzer:
         assert trivial_syndrome_probability(
             bitflip_repetition_code.encoder,
             error,
-            logical_qubit_count=1,
-            logical_coefficients=LOGICAL_COEFFICIENTS['maximally_mixed'],
+            logical_pauli_coefficients={'I': 1.0},
         ) == 0.5
         assert trivial_syndrome_probability(
             bitflip_repetition_code.encoder,
             error,
-            logical_qubit_count=1,
-            logical_coefficients=LOGICAL_COEFFICIENTS['+'],
+            logical_pauli_coefficients={'I': 1.0, 'X': 1.0},
         ) == 1.0
 
 
@@ -76,8 +73,7 @@ class TestCliffordLogicalAnalyzer:
         assert trivial_syndrome_probability(
             bitflip_repetition_code.encoder,
             error,
-            logical_qubit_count=1,
-            logical_coefficients=LOGICAL_COEFFICIENTS['maximally_mixed'],
+            logical_pauli_coefficients={'I': 1.0},
         ) == 0.0
 
 

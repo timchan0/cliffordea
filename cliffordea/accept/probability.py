@@ -6,10 +6,18 @@ from typing import Literal
 
 import stim
 
+from cliffordea.accept.pauli import pauli_mask
 from cliffordea.accept.types import PauliMask
 
 
-LogicalCoefficients = Mapping[int, float]
+LogicalPauliCoefficients = Mapping[str, float]
+"""Sparse Pauli-basis coefficients for a logical density operator.
+
+Each key is an unsigned logical Pauli string whose characters are ordered by
+logical-qubit index.
+"""
+
+PackedLogicalCoefficients = Mapping[PauliMask, float]
 """Sparse Pauli-basis coefficients for a logical density operator.
 
 Each key encodes a phaseless logical Pauli on ``k`` logical qubits. The low
@@ -72,28 +80,30 @@ def trivial_syndrome_probability(
     encoder: stim.Tableau,
     error: stim.Tableau,
     *,
-    logical_qubit_count: int,
-    logical_coefficients: LogicalCoefficients,
+    logical_pauli_coefficients: LogicalPauliCoefficients,
 ) -> float:
     """Return the trivial-syndrome probability after a Clifford error.
 
-    The encoder maps the first ``n - k`` input axes to stabilizer generators
-    and the final ``k`` axes to the chosen logical Pauli frame. Logical Pauli
-    masks place their X support in the low ``k`` bits and Z support in the high
-    ``k`` bits.
-
-    :param encoder: Encoding Clifford ``C`` for the stabilizer code.
+    :param encoder: Encoding Clifford ``C`` for the stabilizer code. Its first
+        ``n - k`` input axes map to stabilizer generators, and its final ``k``
+        input axes map to the chosen logical Pauli frame.
     :param error: Physical Clifford error ``E`` in encoded coordinates.
-    :param logical_qubit_count: Number ``k`` of encoded logical qubits.
-    :param logical_coefficients: Nonzero coefficients in the logical Pauli
-        expansion of the input density operator.
+    :param logical_pauli_coefficients: Nonzero coefficients in the logical
+        Pauli expansion of the input density operator. Each key is an unsigned
+        string over ``I``, ``X``, ``Y``, and ``Z``; its length determines
+        ``k``, and its characters follow logical-qubit index order.
     :return: Probability that every stabilizer measurement is trivial.
     """
+    logical_qubit_count = len(next(iter(logical_pauli_coefficients)))
+    packed_logical_coefficients = {
+        pauli_mask(logical_pauli): coefficient
+        for logical_pauli, coefficient in logical_pauli_coefficients.items()
+    }
     unencoded_error = encoder.inverse() * error * encoder
     return unencoded_trivial_syndrome_probability(
         unencoded_error,
         stabilizer_rank=len(encoder) - logical_qubit_count,
-        logical_coefficients=logical_coefficients,
+        logical_coefficients=packed_logical_coefficients,
     )
 
 
@@ -101,7 +111,7 @@ def unencoded_trivial_syndrome_probability(
     unencoded_error: stim.Tableau,
     *,
     stabilizer_rank: int,
-    logical_coefficients: LogicalCoefficients,
+    logical_coefficients: PackedLogicalCoefficients,
     checked_stabilizer_count: int | None = None,
 ) -> float:
     """Return acceptance for an error already conjugated by the encoder.
@@ -154,7 +164,7 @@ def build_acceptance_structure(
     *,
     columns: Sequence[tuple[int, int, int]],
     phase_masks: Sequence[PauliMask],
-    logical_coefficients: LogicalCoefficients,
+    logical_coefficients: PackedLogicalCoefficients,
     qubit_count: int,
     stabilizer_rank: int,
     logical_qubit_count: int,

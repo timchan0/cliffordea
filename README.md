@@ -39,8 +39,13 @@ pip install -e .
 
 ## Usage
 
-Compute the acceptance probability from the paper's
-`alg:probability_trivial_syndrome` directly:
+Compute the probability that every stabilizer measurement returns a trivial
+syndrome after a physical Clifford error with the trivial-syndrome probability
+algorithm. The encoder's first ``n - k`` input axes specify stabilizer
+generators, while its final ``k`` input axes specify the logical Pauli frame.
+The coefficient map gives the nonzero ``alpha_L`` in
+``rho = 2^-k sum_L alpha_L L``; each key is an unsigned logical Pauli string,
+and its length determines ``k``:
 
 ```python
 from cliffordea.accept import trivial_syndrome_probability
@@ -48,8 +53,7 @@ from cliffordea.accept import trivial_syndrome_probability
 probability = trivial_syndrome_probability(
     encoder,
     error,
-    logical_qubit_count=1,
-    logical_coefficients={0b00: 1.0, 0b01: 1.0},
+    logical_pauli_coefficients={"I": 1.0, "X": 1.0},  # rho = |+><+|
 )
 ```
 
@@ -67,8 +71,7 @@ faults = enum.FaultCombinator(noisy_circuit)
 ```
 
 The enumerator groups equivalent error events into faults by detector signature
-and resultant effect. Enumeration limits are expressed as a maximum fault count,
-matching the terminology used in the paper.
+and resultant effect. Enumeration limits are expressed as a maximum fault count.
 
 A worked fault-enumeration example is available in
 [`demo_notebooks/enum.ipynb`](demo_notebooks/enum.ipynb). The simulation

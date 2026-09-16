@@ -7,7 +7,7 @@ from cliffordea.accept.logical_analyzers import (
 )
 from cliffordea.accept.pauli import LogicalVector, PauliSum
 from cliffordea.accept.probability import (
-    LogicalCoefficients,
+    LogicalPauliCoefficients,
     trivial_syndrome_probability,
 )
 from cliffordea.accept.types import PauliMask, SyndromeMask
@@ -16,7 +16,7 @@ from cliffordea.accept.types import PauliMask, SyndromeMask
 __all__ = [
     "CliffordLogicalAnalyzer",
     "LogicalAnalyzer",
-    "LogicalCoefficients",
+    "LogicalPauliCoefficients",
     "LogicalVector",
     "PauliMask",
     "PauliSum",

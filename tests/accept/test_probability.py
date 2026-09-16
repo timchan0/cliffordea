@@ -1,10 +1,7 @@
 import stim
 
 from cliffordea.accept import trivial_syndrome_probability
-from cliffordea.accept.logical_analyzers import (
-    CliffordLogicalAnalyzer,
-    LOGICAL_COEFFICIENTS,
-)
+from cliffordea.accept.logical_analyzers import CliffordLogicalAnalyzer
 from cliffordea.accept.pauli import pauli_mask
 from cliffordea.enum import circuits
 
@@ -16,8 +13,7 @@ def test_identity_error_is_always_accepted():
     assert trivial_syndrome_probability(
         encoder,
         stim.Tableau(3),
-        logical_qubit_count=2,
-        logical_coefficients={0: 1.0},
+        logical_pauli_coefficients={"II": 1.0},
     ) == 1.0
 
 
@@ -29,8 +25,7 @@ def test_two_logical_qubits_use_the_declared_stabilizer_split():
     assert trivial_syndrome_probability(
         encoder,
         error,
-        logical_qubit_count=2,
-        logical_coefficients={0: 1.0},
+        logical_pauli_coefficients={"II": 1.0},
     ) == 0.5
 
 
@@ -47,6 +42,9 @@ def test_distance_three_example_has_quarter_acceptance():
     assert trivial_syndrome_probability(
         analyzer.encoder,
         error,
-        logical_qubit_count=1,
-        logical_coefficients=LOGICAL_COEFFICIENTS["T"],
+        logical_pauli_coefficients={
+            "I": 1.0,
+            "X": 2**-0.5,
+            "Y": 2**-0.5,
+        },
     ) == 0.25

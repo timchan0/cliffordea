@@ -9,7 +9,7 @@ import stim
 from cliffordea.accept.pauli import PUSH_THROUGH_MAP, PauliSum, tensor_paulis, split_sign
 from cliffordea.accept.probability import (
     AcceptanceStructure,
-    LogicalCoefficients,
+    PackedLogicalCoefficients,
     build_acceptance_structure,
     evaluate_acceptance_structure,
     pauli_masks_and_j_power,
@@ -22,11 +22,17 @@ _PAULI_VALUE_TO_CHAR = ('_', 'X', 'Z', 'Y')
 """Unsigned Pauli character indexed by packed X/Z bits."""
 
 
-_I_STATE_LOGICAL_COEFFICIENTS: LogicalCoefficients = {0b00: 1.0, 0b11: 1.0}
-_MINUS_STATE_LOGICAL_COEFFICIENTS: LogicalCoefficients = {0b00: 1.0, 0b01: -1.0}
+_I_STATE_LOGICAL_COEFFICIENTS: PackedLogicalCoefficients = {
+    0b00: 1.0,
+    0b11: 1.0,
+}
+_MINUS_STATE_LOGICAL_COEFFICIENTS: PackedLogicalCoefficients = {
+    0b00: 1.0,
+    0b01: -1.0,
+}
 
 
-LOGICAL_COEFFICIENTS: dict[str, LogicalCoefficients] = {
+LOGICAL_COEFFICIENTS: dict[str, PackedLogicalCoefficients] = {
     '0': {0b00: 1.0, 0b10: 1.0},
     '1': {0b00: 1.0, 0b10: -1.0},
     '+': {0b00: 1.0, 0b01: 1.0},

@@ -10,6 +10,12 @@ def test_root_api_exposes_only_the_three_topic_modules():
     assert not hasattr(cliffordea, "CliffordLogicalAnalyzer")
 
 
+def test_accept_api_exposes_logical_pauli_coefficients():
+    """The acceptance API publishes its readable logical-state input type."""
+    assert "LogicalPauliCoefficients" in cliffordea.accept.__all__
+    assert hasattr(cliffordea.accept, "LogicalPauliCoefficients")
+
+
 def test_enum_api_uses_current_paper_terminology():
     """The enumeration API exposes only the clean-break terminology."""
     assert "DisjointFaultCombinator" in cliffordea.enum.__all__
