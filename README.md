@@ -66,6 +66,8 @@ noisy_circuit = enum.noise.uniformly_depolarize(
 faults = enum.FaultCombinator(noisy_circuit)
 ```
 
-The tracked analysis notebook is in `demo_notebooks`. The simulation workflow,
-including validation, smoke sampling, production runs, and reference-circuit
-selection, is documented in `cliffordea/sim/README.md`.
+A worked fault-enumeration example is available in
+[`demo_notebooks/enum.ipynb`](demo_notebooks/enum.ipynb). The simulation
+workflow, including validation, smoke sampling, production runs, and
+reference-circuit selection, is documented in
+[`cliffordea/sim/README.md`](cliffordea/sim/README.md).

@@ -97,18 +97,22 @@ are changed.
 
 ### Rule 4: Preserve the S proxy and its noise
 
-The converter preserves all existing noise instructions, measurements,
+These correction rules are based largely on `clifft-paper`'s
+[`convert_s_to_t.py`](https://github.com/unitaryfoundation/clifft-paper/blob/main/magic_state_cultivation/convert_s_to_t.py).
+This converter preserves all existing noise instructions, measurements,
 S/S_DAG layers, observables, and the final logical
-`S_DAG`–`MPP X_L`–`S` construction. In particular, it deliberately does **not**
-copy these transformations from `clifft-paper`'s `convert_s_to_t.py`:
+`S_DAG`–`MPP X_L`–`S` construction. Unlike the reference converter, its scope
+is limited to feedforward and detector healing; it deliberately does **not**
+perform:
 
-- S/S_DAG to T/T_DAG substitution;
-- distance-5 errata gate flips; or
+- conversion from S- to T-state cultivation i.e. S/S_DAG to T/T_DAG substitution;
+- distance-5 gate flips mentioned as an erratum in the original Gidney et al. paper; or
 - final logical-Y measurement wrapping.
 
 T/T_DAG substitution remains the responsibility of `make_variant_text`, after
 the requested physical noise level has been substituted into the Stim-compatible
-corrected proxy.
+corrected proxy. The other transformations, where required, remain separate
+preprocessing steps.
 
 The committed corrected references are:
 
@@ -122,17 +126,15 @@ and explicitly uncorrected filenames distinguish their Sinter task identities.
 
 ## Environment
 
-Run every command through the existing `cliffordea` Conda environment:
+Run commands from the repository root after installing `cliffordea` and its
+dependencies as described in the top-level README:
 
 ```bash
-cd /Users/timchan0/repositories/cliffordea
-conda run --no-capture-output -n cliffordea \
-    python -m cliffordea.sim.run_simulation validate
+python -m cliffordea.sim.run_simulation validate
 ```
 
-No additional installation is required when `symft`, `stim`, `sinter`,
-`cliffordea`, Matplotlib, and pytest are already available. To use ARC H100
-jobs, install CUDA-enabled SymFT and pass `--cuda` to `smoke` or `run`.
+CPU sampling is the portable default. To sample on an NVIDIA GPU, install a
+CUDA-enabled build of SymFT and pass `--cuda` to `smoke` or `run`.
 
 ## Validation and smoke sampling
 
@@ -141,16 +143,14 @@ proxy task without drawing shots. The defaults cover twelve combinations: two
 variants at each of six physical noise strengths.
 
 ```bash
-conda run --no-capture-output -n cliffordea \
-    python -m cliffordea.sim.run_simulation validate
+python -m cliffordea.sim.run_simulation validate
 ```
 
 Exercise the full custom-Sampler and `sinter.collect` path with 100,000
 non-persisted attempts for each variant at `p=0.001`:
 
 ```bash
-conda run --no-capture-output -n cliffordea \
-    python -m cliffordea.sim.run_simulation smoke
+python -m cliffordea.sim.run_simulation smoke
 ```
 
 All three commands accept `--reference PATH`. By default, `circuit_name` is the
@@ -158,8 +158,7 @@ reference filename without its `.stim` suffix; use `--circuit-name LABEL` when
 a stable or more descriptive dataset label is needed:
 
 ```bash
-conda run --no-capture-output -n cliffordea \
-    python -m cliffordea.sim.run_simulation validate \
+python -m cliffordea.sim.run_simulation validate \
     --reference cliffordea/sim/stim_files/another.stim \
     --circuit-name another-cultivation-circuit
 ```
@@ -167,8 +166,7 @@ conda run --no-capture-output -n cliffordea \
 The `validate` command accepts one or more custom physical noise strengths:
 
 ```bash
-conda run --no-capture-output -n cliffordea \
-    python -m cliffordea.sim.run_simulation validate \
+python -m cliffordea.sim.run_simulation validate \
     --noise-levels 0.001 0.004 0.01
 ```
 
@@ -196,15 +194,14 @@ SymFT sampler. It stops each task after 100 logical errors or 1,000,000,000
 attempted shots and limits each persisted SymFT call to 10,000,000 shots:
 
 ```bash
-caffeinate -i conda run --no-capture-output -n cliffordea \
-    python -m cliffordea.sim.run_simulation run \
-    --stats /Users/timchan0/Documents/PhD/Code/Python/cliffordea/Chan2026/results/stats.csv
+python -m cliffordea.sim.run_simulation run \
+    --stats results/stats.csv
 ```
 
-## CUDA on ARC
+## CUDA sampling
 
-After installing CUDA-enabled SymFT and requesting an NVIDIA GPU in an ARC HTC
-job, add `--cuda` to select the GPU backend. First run the GPU smoke check:
+After installing CUDA-enabled SymFT and making an NVIDIA GPU available, add
+`--cuda` to select the GPU backend. First run the GPU smoke check:
 
 ```bash
 python -m cliffordea.sim.run_simulation smoke --cuda
@@ -221,11 +218,10 @@ python -m cliffordea.sim.run_simulation run \
 The limits remain configurable:
 
 ```bash
-caffeinate -i conda run --no-capture-output -n cliffordea \
-    python -m cliffordea.sim.run_simulation run \
+python -m cliffordea.sim.run_simulation run \
     --reference cliffordea/sim/stim_files/another.stim \
     --circuit-name another-cultivation-circuit \
-    --stats /Users/timchan0/Documents/PhD/Code/Python/cliffordea/Chan2026/results/stats.csv \
+    --stats results/stats.csv \
     --noise-levels 0.001 0.004 0.01 \
     --target-errors 100 \
     --max-shots 1000000000 \
@@ -281,6 +277,5 @@ plot_stats = read_plot_stats(
 Run the focused framework tests with:
 
 ```bash
-conda run --no-capture-output -n cliffordea \
-    python -m pytest -q tests/sim
+python -m pytest -q tests/sim
 ```
