@@ -15,9 +15,9 @@ def uniformly_depolarize(
 ):
     """Near-standard circuit depolarizing noise.
 
-    Everything has the same parameter p.
-    Single qubit clifford gates get single qubit depolarization.
-    Two qubit clifford gates get single qubit depolarization.
+    Everything has the same noise level parameter p.
+    Single qubit clifford gates get 1-qubit depolarization.
+    Two qubit clifford gates get 2-qubit depolarization.
     Dissipative gates have their result probabilistically bit flipped (or phase flipped if appropriate).
 
     Non-demolition measurement is treated a bit unusually in that it is the result that is flipped instead of
@@ -25,7 +25,9 @@ def uniformly_depolarize(
 
     Only the qubits that are acted upon at least once are subject to depolarization.
 
-    :param noiseless_circuit: A stim.Circuit without noise.
+    :param noiseless_circuit: A stim.Circuit without noise,
+        which may optionally contain one MPP instruction that defines where the data qubits enter.
+        The data qubits are noiseless before this introductory MPP.
     :param noise_level: A float in [0, 1].
     :param noisy_timeslices: An optional iterable of timeslice indices to apply noise to.
         If unspecified, noise is applied to all timeslices, *except the first and last*.
@@ -36,6 +38,8 @@ def uniformly_depolarize(
     """
     if noisy_timeslices is None:
         noisy_timeslices = range(1, noiseless_circuit.num_ticks)
+
+    data_qubits: set[int] = set()
     if system_qubit_indices is None:
         system_qubit_indices = set()
         for instruction in noiseless_circuit:
@@ -43,6 +47,12 @@ def uniformly_depolarize(
                 for target in instruction.targets_copy():
                     if (val:=target.qubit_value) is not None:
                         system_qubit_indices.add(val)
+                if instruction.name == "MPP":
+                    for target in instruction.targets_copy():
+                        if (val:=target.qubit_value) is not None:
+                            data_qubits.add(val)
+    system_qubit_indices.difference_update(data_qubits)
+
     model = NoiseModel(
         idle_depolarization=noise_level,
         any_clifford_1q_rule=NoiseRule(after={"DEPOLARIZE1": noise_level}),
@@ -57,6 +67,7 @@ def uniformly_depolarize(
             "MRX": NoiseRule(after={"Z_ERROR": noise_level}, flip_result=noise_level),
             "MRY": NoiseRule(after={"X_ERROR": noise_level}, flip_result=noise_level),
             "MR": NoiseRule(after={"X_ERROR": noise_level}, flip_result=noise_level),
+            "MPP": NoiseRule(),
         },
     )
     layers = split_by_ticks(noiseless_circuit)
@@ -70,9 +81,12 @@ def uniformly_depolarize(
         noisy_layers.append(noisy_layer)
         
         for instruction in layer:
-            if isinstance(instruction, stim.CircuitInstruction) and (instruction.name in {"MX", "MY", "M"}):
-                for target in instruction.targets_copy():
-                    if (val:=target.qubit_value) is not None:
-                        system_qubit_indices.remove(val)
+            if isinstance(instruction, stim.CircuitInstruction):
+                if instruction.name in {"MX", "MY", "M"}:
+                    for target in instruction.targets_copy():
+                        if (val:=target.qubit_value) is not None:
+                            system_qubit_indices.remove(val)
+                elif instruction.name == "MPP":
+                    system_qubit_indices.update(data_qubits)
 
     return compose_slices(noisy_layers)
