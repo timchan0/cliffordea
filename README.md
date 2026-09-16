@@ -1,6 +1,12 @@
 # cliffordea (Clifford Error Analysis)
 
-A Python package to analyze Clifford errors in quantum error correction circuits.
+The accompanying Python package for the Clifford-error-propagation paper. Its
+public API is divided by task:
+
+- `cliffordea.accept` computes trivial-syndrome probabilities and analyzes the
+  logical effects of Clifford errors.
+- `cliffordea.enum` enumerates faults in logical-measurement circuits.
+- `cliffordea.sim` runs the Sinter/SymFT Monte Carlo workflow.
 
 ## Local Installation Instructions
 
@@ -33,4 +39,33 @@ pip install -e .
 
 ## Usage
 
-See `demo_notebooks`.
+Compute the acceptance probability from the paper's
+`alg:probability_trivial_syndrome` directly:
+
+```python
+from cliffordea.accept import trivial_syndrome_probability
+
+probability = trivial_syndrome_probability(
+    encoder,
+    error,
+    logical_qubit_count=1,
+    logical_coefficients={0b00: 1.0, 0b01: 1.0},
+)
+```
+
+Construct and enumerate a double-check circuit through `cliffordea.enum`:
+
+```python
+from cliffordea import enum
+
+circuit = enum.circuits.DoubleCheck(ancilla_count=6)
+noisy_circuit = enum.noise.uniformly_depolarize(
+    circuit.INNER_CIRCUIT,
+    noise_level=1e-3,
+)
+faults = enum.FaultCombinator(noisy_circuit)
+```
+
+The tracked analysis notebook is in `demo_notebooks`. The simulation workflow,
+including validation, smoke sampling, production runs, and reference-circuit
+selection, is documented in `cliffordea/sim/README.md`.
