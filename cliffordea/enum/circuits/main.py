@@ -31,22 +31,22 @@ class DoubleCheck:
 
         (3, 6, 0):
             This is the original distance-3 circuit.
-        (3, 7, 0)
-
         (3, 6, 2)
 
         (3, 6, 3)
 
         (3, 6, 5)
 
-        (15, 19, 0):
+        (3, 7, 0)
+
+        (5, 19, 0):
             This is the original distance-5 circuit.
-        (15, 19, 3):
+        (5, 19, 3):
             This circuit has fault distance 4.
             The way this was designed was as follows:
             the unflagged version has 3 malignant 3-fault configurations.
             Each flag in this circuit detects exactly one of these configurations.
-        (15, 19, 13):
+        (5, 19, 13):
             This circuit has fault distance 5.
             The way this was designed was as follows:
             Start with the 18-flag circuit,
@@ -54,7 +54,7 @@ class DoubleCheck:
             delay the X-parity folding of the three horizontal branches of the tree
             by 1 tick (this can be done in the original circuit too),
             then minimize the flag lifespans as much as possible.
-        (15, 19, 18):
+        (5, 19, 18):
             This circuit has fault distance 5.
             The way this was designed was as follows:
             once the X parity to be measured is positioned into a spanning tree,
