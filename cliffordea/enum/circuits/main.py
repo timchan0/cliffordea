@@ -88,14 +88,14 @@ class DoubleCheck(LogicalMeasurement):
     * ``(3, 1, 0)``
     * ``(3, 2, 0)``
     * ``(3, 3, 0)``
-    * ``(3, 4, 0)``
+    * ``(3, 4, 0)`` is the circuit used in experimental MSC [Rosenfeld2026].
     * ``(3, 5, 0)``
-    * ``(3, 6, 0)`` is the original distance-three circuit.
+    * ``(3, 6, 0)`` is the original distance-three circuit [Gidney2024].
     * ``(3, 6, 2)``
     * ``(3, 6, 3)``
     * ``(3, 6, 5)``
     * ``(3, 7, 0)``
-    * ``(5, 19, 0)`` is the original distance-five circuit.
+    * ``(5, 19, 0)`` is the original distance-five circuit [Gidney2024].
     * ``(5, 19, 3)`` has fault distance four. The unflagged version has three
       malignant 3-fault configurations, and each flag detects exactly one
       of these configurations.
