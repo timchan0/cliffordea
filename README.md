@@ -1,9 +1,9 @@
 # cliffordea (Clifford Error Analysis)
 
-`cliffordea` is the Python package accompanying
-*Diagnosing and Restoring the Degraded Fault Distance of Magic State
-Cultivation* by Tim Chan, Armands Strikis, Zhu Sun, and Zhenyu Cai. It
-contains the implementation of the paper's trivial-syndrome probability
+`cliffordea` is the Python package accompanying the paper
+[Diagnosing and Restoring the Degraded Fault Distance of Magic State
+Cultivation](https://arxiv.org/abs/2609.17706).
+It contains the implementation of the paper's trivial-syndrome probability
 algorithm, exact low-fault-count enumeration of logical-measurement circuits,
 and the Sinter/SymFT Monte Carlo workflow.
 
@@ -54,7 +54,7 @@ platform-specific SymFT installation.
 This complete example defines a three-qubit encoding frame with one stabilizer
 degree of freedom and two logical degrees of freedom.
 Applying a Hadamard to the stabilizer degree of freedom gives a
-trivial-syndrome probability of one half:
+trivial-syndrome probability of 1/2:
 
 ```python
 import stim
@@ -152,16 +152,16 @@ Each module guide also gives its focused test command.
 
 ## Citation
 
-When using this code, cite the accompanying paper and identify the version of
-the code used. Until arXiv citation metadata is added, the source repository
-can be cited as:
-
-```bibtex
-@software{Chan2026cliffordea,
-  author = {Tim Chan},
-  title = {cliffordea: Clifford Error Analysis},
-  year = {2026},
-  url = {https://github.com/timchan0/cliffordea}
+Please cite the accompanying paper:
+```latex
+@misc{chan2026diagnosingrestoringdegradedfault,
+      title={Diagnosing and Restoring the Degraded Fault Distance of Magic State Cultivation}, 
+      author={Tim Chan and Armands Strikis and Zhu Sun and Zhenyu Cai},
+      year={2026},
+      eprint={2609.17706},
+      archivePrefix={arXiv},
+      primaryClass={quant-ph},
+      url={https://arxiv.org/abs/2609.17706}, 
 }
 ```
 
