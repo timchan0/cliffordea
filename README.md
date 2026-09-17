@@ -157,10 +157,3 @@ Please cite the accompanying paper:
       url={https://arxiv.org/abs/2609.17706},
 }
 ```
-
-## License
-
-This repository does not currently include a license file. Until one is added,
-the source remains under the default copyright restrictions; public
-availability alone does not grant permission to copy, modify, or redistribute
-it.

@@ -3,6 +3,7 @@ name = "cliffordea"
 version = "0.18.11"
 description = "A Python package to analyze Clifford errors in quantum error correction circuits."
 authors = [{name="Tim Chan", email="timwlc@icloud.com"}]
+license = "MIT"
 dependencies = [
     "ipykernel",
     "ipywidgets",
