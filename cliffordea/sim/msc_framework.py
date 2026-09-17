@@ -187,7 +187,7 @@ def make_variant_text(
 ) -> str:
     """Create one in-memory noisy S- or T-state circuit.
 
-    :param reference_text: Authoritative S-state circuit at noise 0.001.
+    :param reference_text: S-state reference circuit at noise 0.001.
     :param noise_level: Replacement physical noise strength.
     :param variant: State variant, either ``"S"`` or ``"T"``.
     :return: Transformed SymFT circuit text.
@@ -291,7 +291,7 @@ def validate_all_variants(
 ) -> list[dict[str, Any]]:
     """Validate every requested gate/noise configuration.
 
-    :param reference_text: Authoritative S-state circuit at noise 0.001.
+    :param reference_text: S-state reference circuit at noise 0.001.
     :param noise_levels: Physical noise strengths to validate.
     :param variants: State variants to validate.
     :return: Metadata rows in ascending-noise canonical-variant order.
@@ -314,7 +314,7 @@ def validate_all_variants(
 def _make_proxy_circuit(reference_text: str, noise_level: float) -> stim.Circuit:
     """Create the Stim-compatible S circuit used to identify Sinter tasks.
 
-    :param reference_text: Authoritative S-state circuit at noise 0.001.
+    :param reference_text: S-state reference circuit at noise 0.001.
     :param noise_level: Physical noise strength of the proxy circuit.
     :return: Clifford S circuit accepted by Stim.
     """
@@ -333,7 +333,7 @@ def build_tasks(
     The task circuit is the Stim-compatible S circuit. The custom sampler uses
     the task metadata to construct and sample the actual S or T circuit.
 
-    :param reference_text: Authoritative S-state circuit at noise 0.001.
+    :param reference_text: S-state reference circuit at noise 0.001.
     :param circuit_name: Human-readable reference-circuit identifier.
     :param noise_levels: Physical noise strengths to sample.
     :param cuda: Whether tasks identify CUDA-backed SymFT sampling.
@@ -667,7 +667,7 @@ class SymftSinterSampler(sinter.Sampler):
         """Initialize the factory shared with Sinter's worker process.
 
         :param self: Sampler factory being initialized.
-        :param reference_text: Authoritative S-state circuit text.
+        :param reference_text: S-state reference circuit text.
         :param call_shots: Maximum attempted shots per SymFT call.
         :param seed: Initial stream identifier, or None to use system entropy.
         :param cuda: Whether to compile SymFT's CUDA counts backend.
@@ -725,7 +725,7 @@ def collect_stats(
 ) -> list[sinter.TaskStats]:
     """Collect or resume selected S/T points through Sinter.
 
-    :param reference_path: Authoritative S-state reference circuit.
+    :param reference_path: S-state reference circuit.
     :param stats_path: Shared Sinter save-and-resume CSV.
     :param circuit_name: Human-readable reference-circuit identifier.
     :param target_errors: Logical-error stopping target per task.
@@ -786,7 +786,7 @@ def smoke_sample(
 ) -> None:
     """Run a small non-persisted Sinter collection at noise 0.001.
 
-    :param reference_path: Authoritative S-state reference circuit.
+    :param reference_path: S-state reference circuit.
     :param shots: Attempted shots for each state variant.
     :param circuit_name: Human-readable reference-circuit identifier.
     :param cuda: Whether to run the CUDA counts backend.

@@ -44,7 +44,7 @@ the affected detectors.
 
 The converter raises `RuntimeError` if these checks fail or if the detector
 profile indicates that the correction was already applied. `REPEAT` blocks
-are not supported and raise `NotImplementedError`; the committed cultivation
+are not supported and raise `NotImplementedError`; the bundled cultivation
 references do not contain them.
 
 ## Rule 2: Add Bell-growth feedforward
@@ -90,8 +90,8 @@ targets are changed.
 
 The converter preserves all existing noise instructions, measurements,
 S/S_DAG layers, observables, and the final logical
-`S_DAG`–`MPP X_L`–`S` construction. Unlike converter from `clifft-paper`, its
-scope is limited to feedforward and detector healing; it deliberately does
+`S_DAG`–`MPP X_L`–`S` construction. Unlike the converter from `clifft-paper`,
+its scope is limited to feedforward and detector healing; it does
 **not** perform:
 
 - conversion from S- to T-state cultivation, meaning S/S_DAG to T/T_DAG
@@ -105,9 +105,9 @@ the requested physical noise level has been substituted into the
 Stim-compatible corrected proxy. The other transformations, where required,
 remain separate preprocessing steps.
 
-## Committed references
+## Bundled references
 
-The committed corrected references are:
+The bundled corrected references are:
 
 - `d5a19_inject+cultivate.stim`, generated from
   `d5a19_inject+cultivate_uncorrected.stim`; and
@@ -116,10 +116,10 @@ The committed corrected references are:
 
 Corrected and explicitly uncorrected filename stems distinguish their Sinter
 `circuit_name` values and therefore their task identities. Corresponding
-`d5a19f13` corrected and uncorrected references are also committed for the
+`d5a19f13` corrected and uncorrected references are also included for the
 flagged distance-five circuit.
 
-## Public API and tests
+## Usage and tests
 
 ```python
 import stim

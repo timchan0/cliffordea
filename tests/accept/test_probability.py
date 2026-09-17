@@ -18,7 +18,7 @@ def test_identity_error_is_always_accepted():
 
 
 def test_two_logical_qubits_use_the_declared_stabilizer_split():
-    """The public algorithm supports a code with more than one logical qubit."""
+    """The probability function supports more than one logical qubit."""
     encoder = stim.Tableau(3)
     error = stim.Tableau.from_named_gate("H") + stim.Tableau(2)
 
@@ -30,7 +30,7 @@ def test_two_logical_qubits_use_the_declared_stabilizer_split():
 
 
 def test_distance_three_example_has_quarter_acceptance():
-    """The standalone paper algorithm reproduces the known D3 probability."""
+    """The probability function reproduces the known distance-three value."""
     circuit = circuits.DoubleCheck(ancilla_count=6)
     analyzer = CliffordLogicalAnalyzer(
         data_indices=circuit.DATA_INDICES,

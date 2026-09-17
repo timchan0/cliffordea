@@ -18,7 +18,6 @@ from cliffordea.enum.combinators._base import (
 class DisjointFaultCombinator(BaseDisjointCombinator):
     """Group disjoint error events by signature, effect, and location.
 
-    Extends `BaseDisjointCombinator`.
     Finds undetected fault combinations first by iterating through all
     detector-signature combinations and recording which ones XOR to zero.
     Each signature corresponds to a set of error locations,

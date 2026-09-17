@@ -4,7 +4,7 @@ import cliffordea
 
 
 def test_root_api_exposes_only_the_three_topic_modules():
-    """The clean-break root API names only accept, enum, and sim."""
+    """The package root keeps analysis objects in their topic modules."""
     assert cliffordea.__all__ == ["accept", "enum", "sim"]
     assert not hasattr(cliffordea, "FaultCombinator")
     assert not hasattr(cliffordea, "CliffordLogicalAnalyzer")
@@ -16,8 +16,8 @@ def test_accept_api_exposes_logical_pauli_coefficients():
     assert hasattr(cliffordea.accept, "LogicalPauliCoefficients")
 
 
-def test_enum_api_uses_current_paper_terminology():
-    """The enumeration API exposes only the clean-break terminology."""
+def test_enum_api_uses_fault_and_detector_signature_terminology():
+    """The enumeration API consistently names faults and detector signatures."""
     assert "DisjointFaultCombinator" in cliffordea.enum.__all__
     assert hasattr(cliffordea.enum, "DisjointFaultCombinator")
     assert not hasattr(cliffordea.enum, "FaultCombinatorExclusive")

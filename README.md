@@ -9,20 +9,13 @@ and the Sinter/SymFT Monte Carlo workflow.
 
 ## Choose a task
 
-The public API is divided by the kind of analysis being performed:
+Choose the guide that matches the analysis to perform:
 
 | Task | Module | Guide |
 | --- | --- | --- |
 | Calculate acceptance probabilities and logical effects of Clifford errors | `cliffordea.accept` | [`cliffordea/accept/README.md`](cliffordea/accept/README.md) |
 | Enumerate faults in logical-measurement circuits | `cliffordea.enum` | [`cliffordea/enum/README.md`](cliffordea/enum/README.md) |
 | Run the Sinter/SymFT cultivation simulations | `cliffordea.sim` | [`cliffordea/sim/README.md`](cliffordea/sim/README.md) |
-
-The root package exposes these three topic modules and no individual analysis
-classes:
-
-```python
-from cliffordea import accept, enum, sim
-```
 
 ## Installation
 
@@ -127,7 +120,7 @@ production samples.
 
 ## Reproducing the paper analyses
 
-| Paper component | Implementation or entry point | Verification |
+| Paper component | Code | Check |
 | --- | --- | --- |
 | Trivial-syndrome probability algorithm | `cliffordea.accept.trivial_syndrome_probability` | `python -m pytest -q tests/accept/test_probability.py` |
 | Clifford-error acceptance and logical fidelity during enumeration | `cliffordea.accept.CliffordLogicalAnalyzer` | `python -m pytest -q tests/accept/logical_analyzers` |
@@ -153,15 +146,15 @@ Each module guide also gives its focused test command.
 ## Citation
 
 Please cite the accompanying paper:
-```latex
+```bibtex
 @misc{chan2026diagnosingrestoringdegradedfault,
-      title={Diagnosing and Restoring the Degraded Fault Distance of Magic State Cultivation}, 
+      title={Diagnosing and Restoring the Degraded Fault Distance of Magic State Cultivation},
       author={Tim Chan and Armands Strikis and Zhu Sun and Zhenyu Cai},
       year={2026},
       eprint={2609.17706},
       archivePrefix={arXiv},
       primaryClass={quant-ph},
-      url={https://arxiv.org/abs/2609.17706}, 
+      url={https://arxiv.org/abs/2609.17706},
 }
 ```
 

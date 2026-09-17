@@ -101,8 +101,6 @@ def _iter_undetected_configurations(
 class FaultCombinator(Combinator):
     """Group faults by detector signature then resultant effect,
     where all faults are independent and effects are pure Pauli sums.
-
-    Extends `Combinator`.
     """
     
     def __init__(self, noisy_circuit, print_progress=False):
@@ -375,7 +373,8 @@ class FaultCombinator(Combinator):
     @cached_property
     def index_to_events(self):
         """A map from fault index to the set of error events it represents.
-        Not used for computation, just for introspection.
+
+        This mapping supports inspection and visualization of canonical faults.
         """
         map_: defaultdict[int, set[ErrorEvent]] = defaultdict(set)
         error_events = (

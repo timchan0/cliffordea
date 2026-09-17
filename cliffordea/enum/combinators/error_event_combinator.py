@@ -19,7 +19,6 @@ from cliffordea.enum.combinators._base import error_event_count
 class ErrorEventCombinator(BaseDisjointCombinator):
     """Group all error events in a noisy circuit by their error location.
 
-    Extends `BaseDisjointCombinator`.
     Finds undetected fault combinations by brute force
     i.e. iterating through all fault combinations
     and recording which ones have zero detector signature.

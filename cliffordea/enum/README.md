@@ -93,7 +93,7 @@ distance only within the enumerated circuit and checked range.
 
 ## Circuits and noise
 
-The `enum.circuits` module loads committed Stim circuits and derives their data
+The `enum.circuits` module loads bundled Stim circuits and derives their data
 qubits, stabilizer generators, logical operators, and transversal logical-S
 implementation. It provides:
 

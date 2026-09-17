@@ -123,15 +123,15 @@ def test_index_to_events_cache_is_excluded_from_pickle():
     )
 
 
-def test_construction_avoids_legacy_event_analysis(monkeypatch):
+def test_construction_uses_packed_event_analysis(monkeypatch):
     """Construct a combinator without decoding masks to arrays and strings."""
-    legacy_method = Mock(side_effect=AssertionError(
-        'Legacy event analysis was unexpectedly called.',
+    unpacked_method = Mock(side_effect=AssertionError(
+        'Unpacked event analysis was unexpectedly called.',
     ))
     monkeypatch.setattr(
         CultivationCircuit,
         'get_signature_and_effect',
-        legacy_method,
+        unpacked_method,
     )
     combinator = FaultCombinator(stim.Circuit("""
         R 0 1
@@ -144,7 +144,7 @@ def test_construction_avoids_legacy_event_analysis(monkeypatch):
         DETECTOR rec[-1]
     """))
 
-    legacy_method.assert_not_called()
+    unpacked_method.assert_not_called()
     assert combinator.fault_count > 0
 
 
@@ -477,11 +477,7 @@ def test_logical_analysis_cache_sizes_have_identical_results(maxsize: int | None
 
 
 def test_fault_combinator_exposes_only_mask_native_kept_effect_enumeration():
-    """The obsolete kept-string API is removed in favor of packed effects.
-
-    The former two-step methods should not remain on either collaborating
-    class after the intentional breaking API change.
-    """
+    """Kept-effect enumeration exposes packed effects through one method."""
     assert not hasattr(FaultCombinator, "get_undetected_configurations")
     assert not hasattr(FaultCombinator, "get_kept_strings")
     assert hasattr(FaultCombinator, "get_kept_effects")

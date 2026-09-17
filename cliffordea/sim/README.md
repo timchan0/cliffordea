@@ -6,7 +6,7 @@ cultivation, postselects every detector, and measures observable 0 on accepted
 shots. The default reference is distance 3, and compatible distance-5
 references can be selected explicitly.
 
-The default authoritative **S-state** reference is
+The default **S-state** reference is
 `cliffordea/sim/stim_files/d3a6_inject+cultivate_p1e-3.stim`.
 Another compatible S reference can be selected on the command line. Reference
 circuits may have any number of qubits, measurements, detectors, and
@@ -19,11 +19,11 @@ and `0.01`.
 
 Distance-five Bell growth leaves a Pauli frame that must be resolved before an
 S/S_DAG proxy can be converted into a deterministic T/T_DAG circuit. The
-public `correct_d5_cultivation_circuit` function adds the required classical
+`correct_d5_cultivation_circuit` function adds the required classical
 feedforward and heals detectors that cross the correction boundary.
 
 The coordinate-based validation rules, exact feedforward table, detector
-healing, deliberately excluded transformations, and committed corrected
+healing, transformations outside its scope, and bundled corrected
 references are documented in the
 [distance-five correction specification](d5-correction.md).
 
@@ -56,9 +56,10 @@ non-persisted attempts for each variant at `p=0.001`:
 python -m cliffordea.sim.run_simulation smoke
 ```
 
-All three commands accept `--reference PATH`. By default, `circuit_name` is the
-reference filename without its `.stim` suffix; use `--circuit-name LABEL` when
-a stable or more descriptive dataset label is needed:
+The `validate`, `smoke`, and `run` commands accept `--reference PATH`. By
+default, `circuit_name` is the reference filename without its `.stim` suffix;
+use `--circuit-name LABEL` when a stable or more descriptive dataset label is
+needed:
 
 ```bash
 python -m cliffordea.sim.run_simulation validate \
@@ -146,7 +147,7 @@ compatible unselected points already present in the shared CSV are retained.
 `sinter.collect` appends checkpoints and uses strong task IDs to aggregate and
 resume counts. Every new invocation uses fresh entropy-derived SymFT streams by
 default, including a later top-up of an existing CSV. The `custom_counts` CSV
-column is deliberately empty. Do not run two writers against the same resume
+column is empty. Do not run two writers against the same resume
 file concurrently.
 
 Task metadata records `schema_version=4`, `decoder_version`, `noise_level`,

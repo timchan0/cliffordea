@@ -7,7 +7,7 @@ logical analyzers used by `cliffordea.enum` to classify accepted fault effects.
 
 ## Trivial-syndrome probability
 
-The main standalone entry point is:
+Import the probability function with:
 
 ```python
 from cliffordea.accept import trivial_syndrome_probability
@@ -77,8 +77,8 @@ zero tensored with the maximally mixed state on logical qubit one.
 
 ## Connection to the paper algorithm
 
-`trivial_syndrome_probability` is the public implementation of
-`alg:probability_trivial_syndrome` in the companion paper. The implementation:
+`trivial_syndrome_probability` implements the trivial-syndrome probability
+algorithm described in the companion paper. It:
 
 1. conjugates the physical error into the unencoded frame as `C^dag E C`;
 2. transforms the unencoded stabilizer generators;
@@ -87,18 +87,17 @@ zero tensored with the maximally mixed state on logical qubit one.
 5. adds the logical Pauli contributions before applying the rank-dependent
    power-of-two prefactor.
 
-The paper gives the mathematical derivation. The code
-path begins in
-[`probability.py`](probability.py), while
+The paper gives the mathematical derivation. The implementation is in
+[`probability.py`](probability.py), and
 [`tests/accept/test_probability.py`](../../tests/accept/test_probability.py)
 contains identity, multiple-logical-qubit, and distance-three regression cases.
 
 ## Logical analyzers used during enumeration
 
 The analyzer classes answer a related, more specialized question: for a Pauli
-effect immediately before the second layer of T gates in the double check, what is the
-subsequent stabilizer-postselection probability and conditional logical
-fidelity?
+effect immediately before the second layer of T gates in the double check,
+what is the subsequent stabilizer-postselection probability and conditional
+logical fidelity?
 
 - `CliffordLogicalAnalyzer` uses the stabilizer-overlap algorithm and is the
   analyzer used for the paper's enumerations.
@@ -107,7 +106,7 @@ fidelity?
   cross-checking.
 - `LogicalAnalyzer` is their abstract interface.
 
-A typical analyzer for a committed double-check circuit is constructed as:
+A typical analyzer for a bundled double-check circuit is constructed as:
 
 ```python
 from cliffordea import accept, enum
@@ -130,11 +129,11 @@ complete workflow.
 
 `PauliSum`, `LogicalVector`, `PauliMask`, and `SyndromeMask` are lower-level
 building blocks exposed for analyzer development and result inspection. They
-are not needed for the standalone probability function.
+are not needed for the probability function.
 
 ## Scope
 
-- The standalone algorithm accepts a Clifford error represented by a
+- The probability function accepts a Clifford error represented by a
   `stim.Tableau`; it does not model a probabilistic mixture of errors in one
   call.
 - The coefficient map represents a valid logical density operator supplied by

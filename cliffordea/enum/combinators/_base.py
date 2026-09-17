@@ -26,10 +26,7 @@ class Combinator(abc.ABC):
 
 
 class BaseDisjointCombinator(Combinator):
-    """Group events in a noisy circuit where some events are disjoint.
-    
-    Extends `Combinator`.
-    """
+    """Group events in a noisy circuit where some events are disjoint."""
 
     def get_undetected_configurations(
             self,

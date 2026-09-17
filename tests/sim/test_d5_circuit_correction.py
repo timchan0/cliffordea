@@ -176,11 +176,11 @@ def _replace_instruction(
 
 
 @pytest.mark.parametrize(("source_name", "corrected_name"), REFERENCE_PAIRS)
-def test_committed_references_equal_fresh_correction(
+def test_bundled_references_equal_fresh_correction(
     source_name: str,
     corrected_name: str,
 ) -> None:
-    """Each committed corrected reference is reproducible from its source.
+    """Each bundled corrected reference is reproducible from its source.
 
     :param source_name: Uncorrected source-circuit basename.
     :param corrected_name: Corrected output-circuit basename.
