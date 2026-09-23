@@ -107,17 +107,19 @@ remain separate preprocessing steps.
 
 ## Bundled references
 
-The bundled corrected references are:
+The bundled corrected distance-five references comprise the unflagged
+`d5a19` and 13-flag `d5a19f13` families, each in its original three-round and
+four-round `r4` forms. The four-round forms already contain the feedforward and
+detector healing described above.
 
-- `d5a19_inject+cultivate.stim`, generated from
-  `d5a19_inject+cultivate_uncorrected.stim`; and
-- `d5a19_inject+cultivate_p1e-3.stim`, generated from
-  `d5a19_inject+cultivate_uncorrected_p1e-3.stim`.
-
+For the three-round families, explicit `_uncorrected` source circuits are kept
+beside their corrected counterparts in both noiseless and `_p1e-3` forms.
 Corrected and explicitly uncorrected filename stems distinguish their Sinter
-`circuit_name` values and therefore their task identities. Corresponding
-`d5a19f13` corrected and uncorrected references are also included for the
-flagged distance-five circuit.
+`circuit_name` values and therefore their task identities. Uncorrected `r4`
+sources are not bundled.
+
+The [bundled Stim circuit catalogue](stim_files/README.md) lists every file and
+explains the round, flag, correction, and noise suffixes.
 
 ## Usage and tests
 

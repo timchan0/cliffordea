@@ -8,6 +8,8 @@ references can be selected explicitly.
 
 The default **S-state** reference is
 `cliffordea/sim/stim_files/d3a6_inject+cultivate_p1e-3.stim`.
+The [bundled Stim circuit catalogue](stim_files/README.md) lists every supplied
+reference and explains the filename notation and protocol variants.
 Another compatible S reference can be selected on the command line. Reference
 circuits may have any number of qubits, measurements, detectors, and
 observables, but must define observable 0. T/T_DAG circuit text is made in

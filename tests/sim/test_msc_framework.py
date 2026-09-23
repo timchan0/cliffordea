@@ -226,17 +226,21 @@ def test_s_reference_generates_exact_existing_t_and_s_circuits() -> None:
         "d3a6f2_inject+cultivate_p1e-3.stim",
         "d5a19_inject+cultivate_p1e-3.stim",
         "d5a19f13_inject+cultivate_p1e-3.stim",
+        "d5a19r4_inject+cultivate_p1e-3.stim",
+        "d5a19r4f13_inject+cultivate_p1e-3.stim",
     ),
 )
+@pytest.mark.parametrize("variant", ("T", "S"))
 def test_noiseless_t_variant_detectors_are_deterministic(
     filename: str,
+    variant: str,
 ) -> None:
     """All noiseless T-state shots must agree on every raw detector parity."""
     reference_path = REFERENCE_PATH.with_name(filename)
     t_circuit_text = make_variant_text(
-        reference_path.read_text(encoding="utf-8"),
-        0.0,
-        "T",
+        reference_text=reference_path.read_text(encoding="utf-8"),
+        noise_level=0.0,
+        variant=variant,
     )
 
     detector_samples = symft.Circuit(t_circuit_text).sample_detectors(
