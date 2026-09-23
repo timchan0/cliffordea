@@ -26,7 +26,7 @@ probabilistically.
 
 ## Complete enumeration workflow
 
-The following example analyzes the original distance-three double check
+The following example analyzes the original distance-3 double check
 through two faults for both S- and T-state cultivation:
 
 ```python
@@ -129,12 +129,12 @@ used for correctness checks. They do not replace
 `FaultCombinator.visualize_fault_configurations` inserts selected fault events
 into a copy of the circuit and produces Stim diagrams. The worked notebook
 uses it to display the four malignant two-fault configurations of the original
-distance-three double check:
+distance-3 double check:
 
 [`demo_notebooks/enum.ipynb`](../../demo_notebooks/enum.ipynb)
 
 The notebook also demonstrates contribution summaries, logical-error-rate
-curves, and configuration inspection for the distance-three and distance-five
+curves, and configuration inspection for the distance-3 and distance-5
 circuits.
 
 ## Scope

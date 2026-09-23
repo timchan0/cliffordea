@@ -76,7 +76,7 @@ def test_logical_measurement_defaults(
         ancilla_count,
         flag_count,
 ):
-    """Each method defaults to an available distance-three circuit.
+    """Each method defaults to an available distance-3 circuit.
 
     :param circuit_type: Concrete logical-measurement class under test.
     :param circuit_parent: Directory containing that measurement family.

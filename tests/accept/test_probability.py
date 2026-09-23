@@ -30,7 +30,7 @@ def test_two_logical_qubits_use_the_declared_stabilizer_split():
 
 
 def test_distance_three_example_has_quarter_acceptance():
-    """The probability function reproduces the known distance-three value."""
+    """The probability function reproduces the known distance-3 value."""
     circuit = circuits.DoubleCheck(ancilla_count=6)
     analyzer = CliffordLogicalAnalyzer(
         data_indices=circuit.DATA_INDICES,

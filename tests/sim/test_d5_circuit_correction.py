@@ -1,4 +1,4 @@
-"""Tests for coordinate-based distance-five cultivation correction."""
+"""Tests for coordinate-based distance-5 cultivation correction."""
 
 from __future__ import annotations
 from collections.abc import Sequence
@@ -396,7 +396,7 @@ def test_correction_rejects_sensitive_structural_drift() -> None:
 
     with pytest.raises(RuntimeError, match="Bell-growth layout"):
         correct_d5_cultivation_circuit(changed_growth)
-    with pytest.raises(RuntimeError, match="incompatible first distance-five"):
+    with pytest.raises(RuntimeError, match="incompatible first distance-5"):
         correct_d5_cultivation_circuit(changed_x_check)
     with pytest.raises(RuntimeError, match="missing required coordinates"):
         correct_d5_cultivation_circuit(changed_coordinate)

@@ -7,8 +7,8 @@ T-state circuits in memory by replacing those gates with `T` and `T_DAG`.
 
 For commands that run these circuits, see the
 [Sinter/SymFT simulation guide](../README.md). The classical feedforward and
-detector changes in the corrected distance-five circuits are specified in the
-[distance-five correction document](../d5-correction.md).
+detector changes in the corrected distance-5 circuits are specified in the
+[distance-5 correction document](../d5-correction.md).
 
 ## Filename notation
 
@@ -17,13 +17,13 @@ The filenames follow
 
 - `d` gives the colour-code distance.
 - `a` gives the number of ancilla qubits in the final double check.
-- `r4` identifies distance-five circuits with four distance-five colour-code
-  stabiliser measurement rounds between the distance-three and distance-five
+- `r4` identifies distance-5 circuits with four distance-5 colour-code
+  stabiliser measurement rounds between the distance-3 and distance-5
   double checks. Distance-five names without `r4` use three rounds.
 - `f` gives the number of added Z-flag qubits in the final double check.
 - `inject+cultivate` indicates that injection and cultivation are included but
   escape is not.
-- `_uncorrected` identifies a distance-five source circuit before the
+- `_uncorrected` identifies a distance-5 source circuit before the
   Bell-growth feedforward and detector healing are applied.
 - `_p1e-3` identifies a noisy S-state reference at physical noise strength
   $p=10^{-3}$. The simulation framework replaces this value in memory with
@@ -55,12 +55,12 @@ bundled circuit defines logical observable 0.
 | `d5a19r4f13_inject+cultivate.stim` | Distance 5, formal four-round schedule | 13 | 4 | Yes | None | Noiseless corrected four-round Z-flagged reference |
 | `d5a19r4f13_inject+cultivate_p1e-3.stim` | Distance 5, formal four-round schedule | 13 | 4 | Yes | $p=10^{-3}$ | Corrected four-round Z-flagged simulation template |
 
-## Three- and four-round distance-five circuits
+## Three- and four-round distance-5 circuits
 
-The original distance-five source circuit uses three distance-five stabiliser
+The original distance-5 source circuit uses three distance-5 stabiliser
 measurement rounds and was intentionally designed to have fault distance 4.
-The `r4` circuits add a fourth round between the distance-three and
-distance-five double checks, as required by the formal fault-distance-5 S-state
+The `r4` circuits add a fourth round between the distance-3 and
+distance-5 double checks, as required by the formal fault-distance-5 S-state
 cultivation protocol. Each `r4` circuit otherwise corresponds to the circuit
 with the same name after removing `r4`.
 

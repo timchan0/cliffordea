@@ -1,4 +1,4 @@
-"""Correct distance-five cultivation proxies for T-compatible sampling.
+"""Correct distance-5 cultivation proxies for T-compatible sampling.
 
 See ``sim/README.md`` under "Distance-five corrected reference"
 for the transformation rules and their rationale.
@@ -160,7 +160,7 @@ def circuit_instructions(
         operation = circuit[index]
         if isinstance(operation, stim.CircuitRepeatBlock):
             raise NotImplementedError(
-                "distance-five correction does not support REPEAT blocks"
+                "distance-5 correction does not support REPEAT blocks"
             )
         instructions.append(operation)
     return tuple(instructions)
@@ -186,7 +186,7 @@ def coordinate_maps(
         qubit = instruction.targets_copy()[0].value
         if coordinate in qubit_by_coordinate:
             raise RuntimeError(
-                f"distance-five correction found duplicate coordinate {coordinate}"
+                f"distance-5 correction found duplicate coordinate {coordinate}"
             )
         coordinate_by_qubit[qubit] = coordinate
         qubit_by_coordinate[coordinate] = qubit
@@ -194,7 +194,7 @@ def coordinate_maps(
     missing = sorted(_REQUIRED_COORDS - qubit_by_coordinate.keys())
     if missing:
         raise RuntimeError(
-            "distance-five correction is missing required coordinates: "
+            "distance-5 correction is missing required coordinates: "
             f"{missing!r}"
         )
     return coordinate_by_qubit, qubit_by_coordinate
@@ -219,7 +219,7 @@ def _instruction_coordinates(
         )
     except KeyError as error:
         raise RuntimeError(
-            "distance-five correction encountered a target without coordinates: "
+            "distance-5 correction encountered a target without coordinates: "
             f"qubit {error.args[0]}"
         ) from error
 
@@ -234,7 +234,7 @@ def _find_landmarks(
     :param coordinate_by_qubit: Spatial coordinate for each declared qubit.
     :return: Index of the pre-growth X-check measurement.
     :return: Index of the Bell-growth measurement.
-    :return: Index of the first distance-five Z-check measurement.
+    :return: Index of the first distance-5 Z-check measurement.
     :return: Index of the closing tick after that syndrome round.
     :raises RuntimeError: If the expected landmark sequence is absent.
     """
@@ -247,7 +247,7 @@ def _find_landmarks(
     ]
     if len(pre_growth_indices) != 1:
         raise RuntimeError(
-            "distance-five correction could not uniquely locate the "
+            "distance-5 correction could not uniquely locate the "
             "pre-growth X-check"
         )
     pre_growth_index = pre_growth_indices[0]
@@ -262,7 +262,7 @@ def _find_landmarks(
     ]
     if len(bell_growth_indices) != 1:
         raise RuntimeError(
-            "distance-five correction could not uniquely locate the "
+            "distance-5 correction could not uniquely locate the "
             "Bell-growth measurement"
         )
     bell_growth_index = bell_growth_indices[0]
@@ -280,8 +280,8 @@ def _find_landmarks(
     )
     if first_d5_index is None:
         raise RuntimeError(
-            "distance-five correction could not locate the first "
-            "distance-five Z-check measurement"
+            "distance-5 correction could not locate the first "
+            "distance-5 Z-check measurement"
         )
     first_d5_x_index = first_d5_index + 1
     if (
@@ -294,8 +294,8 @@ def _find_landmarks(
         != _FIRST_D5_X_CHECK_COORDS
     ):
         raise RuntimeError(
-            "distance-five correction found an incompatible first "
-            "distance-five X-check measurement"
+            "distance-5 correction found an incompatible first "
+            "distance-5 X-check measurement"
         )
 
     closing_tick_index = next(
@@ -308,8 +308,8 @@ def _find_landmarks(
     )
     if closing_tick_index is None:
         raise RuntimeError(
-            "distance-five correction found no closing tick after the first "
-            "distance-five syndrome round"
+            "distance-5 correction found no closing tick after the first "
+            "distance-5 syndrome round"
         )
     return (
         pre_growth_index,
@@ -359,7 +359,7 @@ def _growth_signature(
     :param instructions: Flattened circuit instructions in execution order.
     :param coordinate_by_qubit: Spatial coordinate for each declared qubit.
     :param start: Inclusive index of the pre-growth landmark.
-    :param stop: Inclusive index of the first distance-five closing tick.
+    :param stop: Inclusive index of the first distance-5 closing tick.
     :return: SHA-256 digest of the coordinate-normalized growth structure.
     """
     window = stim.Circuit()
@@ -390,7 +390,7 @@ def _source_measurement_indices(
 
     :param instructions: Flattened circuit instructions in execution order.
     :param coordinate_by_qubit: Spatial coordinate for each declared qubit.
-    :param first_d5_index: Index of the first distance-five M instruction.
+    :param first_d5_index: Index of the first distance-5 M instruction.
     :return: Absolute measurement index for each feedforward source.
     """
     measurement_count = sum(
@@ -474,7 +474,7 @@ def _validate_detector_profile(
     )
     if profile != _EXPECTED_DETECTOR_SOURCE_PROFILE:
         raise RuntimeError(
-            "distance-five correction found an incompatible detector-source "
+            "distance-5 correction found an incompatible detector-source "
             "profile; the circuit may already be corrected"
         )
 
@@ -574,7 +574,7 @@ def correct_d5_cultivation_circuit(
     )
     if signature != _EXPECTED_GROWTH_SIGNATURE_SHA256:
         raise RuntimeError(
-            "distance-five correction found an incompatible coordinate-based "
+            "distance-5 correction found an incompatible coordinate-based "
             "Bell-growth layout"
         )
 

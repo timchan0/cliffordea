@@ -70,7 +70,7 @@ logical-state conventions and for the connection to the paper's algorithm.
 
 ### Fault enumeration
 
-Construct a distance-three double check, add the paper's circuit-level noise
+Construct a distance-3 double check, add the paper's circuit-level noise
 model, group elementary error events into canonical faults, and enumerate the
 effects kept after circuit detection and final stabilizer postselection:
 

@@ -27,7 +27,7 @@ feedforward and heals detectors that cross the correction boundary.
 The coordinate-based validation rules, exact feedforward table, detector
 healing, transformations outside its scope, and bundled corrected
 references are documented in the
-[distance-five correction specification](d5-correction.md).
+[distance-5 correction specification](d5-correction.md).
 
 ## Environment
 

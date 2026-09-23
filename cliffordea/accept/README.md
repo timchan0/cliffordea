@@ -90,7 +90,7 @@ algorithm described in the companion paper. It:
 The paper gives the mathematical derivation. The implementation is in
 [`probability.py`](probability.py), and
 [`tests/accept/test_probability.py`](../../tests/accept/test_probability.py)
-contains identity, multiple-logical-qubit, and distance-three regression cases.
+contains identity, multiple-logical-qubit, and distance-3 regression cases.
 
 ## Logical analyzers used during enumeration
 

@@ -8,7 +8,7 @@ dataset semantics, see the [Sinter/SymFT simulation guide](README.md).
 
 ## Why the correction is required
 
-The distance-five Bell-growth circuit needs active feedforward before its
+The distance-5 Bell-growth circuit needs active feedforward before its
 S/S_DAG proxy can be converted into a deterministic T/T_DAG circuit. Bell
 growth leaves seven first-round check results that control a Pauli frame. An S
 circuit can carry that frame without changing its later Clifford evolution,
@@ -30,7 +30,7 @@ Before modifying the circuit, the converter verifies:
 
 - every required coordinate exists exactly once;
 - the coordinate-normalized Bell-growth window has the expected structure;
-- the first distance-five Z- and X-syndrome measurements have the expected
+- the first distance-5 Z- and X-syndrome measurements have the expected
   target coordinates and order; and
 - detectors referencing the feedforward sources have the expected spatial and
   measurement-dependency profile.
@@ -49,7 +49,7 @@ references do not contain them.
 
 ## Rule 2: Add Bell-growth feedforward
 
-Immediately after the closing `TICK` of the first distance-five syndrome
+Immediately after the closing `TICK` of the first distance-5 syndrome
 round, the converter emits these 17 classically controlled operations. `M`
 denotes a Z-basis measurement and `MX` an X-basis measurement. Coordinates
 identify the measured source and quantum target; each classical control is
@@ -96,7 +96,7 @@ its scope is limited to feedforward and detector healing; it does
 
 - conversion from S- to T-state cultivation, meaning S/S_DAG to T/T_DAG
   substitution;
-- distance-five gate flips mentioned as an erratum in the original Gidney et
+- distance-5 gate flips mentioned as an erratum in the original Gidney et
   al. paper; or
 - final logical-Y measurement wrapping.
 
@@ -107,7 +107,7 @@ remain separate preprocessing steps.
 
 ## Bundled references
 
-The bundled corrected distance-five references comprise the unflagged
+The bundled corrected distance-5 references comprise the unflagged
 `d5a19` and 13-flag `d5a19f13` families, each in its original three-round and
 four-round `r4` forms. The four-round forms already contain the feedforward and
 detector healing described above.
